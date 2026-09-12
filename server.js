@@ -31,7 +31,7 @@ function apiURL(req) {
   } catch (_) { return null; }
 }
 
-app.get('/healthz', (req, res) => res.status(200).json({ ok: true, version: '2.50-web' }));
+app.get('/healthz', (req, res) => res.status(200).json({ ok: true, version: '2.51-web-test' }));
 
 app.use('/__api', express.raw({ type: '*/*', limit: '2mb' }), async (req, res) => {
   const u = apiURL(req);

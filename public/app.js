@@ -3,7 +3,7 @@
 const $ = id => document.getElementById(id);
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
 const L = (...a) => { try { console.log('[SETH]', ...a); } catch (e) {} };
-window.SETH_APP_VER = 'v2.50-web';
+window.SETH_APP_VER = 'v2.51-web-test';
 // 低調版本號填入登入頁(需提醒用戶才會注意；用戶截圖回報時帶上版本→我們知道他裝的是不是最新)
 try { document.addEventListener('DOMContentLoaded', function () { document.querySelectorAll('.seth-ver').forEach(function (el) { el.textContent = window.SETH_APP_VER; }); }); } catch (e) {}
 let session = null;
@@ -320,6 +320,22 @@ function __fitNum(el,text,base){if(!el)return;el.textContent=text;el.style.white
 var __lastSpoilerSig='',__rsgFreeActive=false,__rsgFreeFinal=null,__rsgFreeMaxSpins=0;setInterval(function(){var e=eng(),p=pan(),r=null,fg=0,pnl=0,isRSG=!!window.__thorEngine;try{if(p&&p.spoilerWin){var q=p.spoilerWin;r=q.totalWin!=null?q.totalWin:(q.totalWinnings!=null?q.totalWinnings:(q.cumWin!=null?q.cumWin:null));fg=q.fg||q.freeGameCount||q.spins||0}else if(isRSG){if(e&&e.spoiler){var q2=e.spoiler,rr=q2.totalWin!=null?q2.totalWin:(q2.totalWinnings!=null?q2.totalWinnings:(q2.cumWin!=null?q2.cumWin:(q2.win!=null?q2.win:null))),ff=Number(q2.fg||q2.freeGameCount||q2.spins||0);__rsgFreeActive=true;__rsgFreeMaxSpins=Math.max(__rsgFreeMaxSpins,isFinite(ff)?ff:0);if(rr!=null&&isFinite(Number(rr)))__rsgFreeFinal={score:Number(rr),fg:__rsgFreeMaxSpins}}else if(__rsgFreeActive){__rsgFreeActive=false;if(__rsgFreeFinal){r=__rsgFreeFinal.score;fg=__rsgFreeFinal.fg}__rsgFreeFinal=null;__rsgFreeMaxSpins=0}}else if(e&&e.spoiler){var q3=e.spoiler;r=q3.totalWin!=null?q3.totalWin:(q3.totalWinnings!=null?q3.totalWinnings:(q3.cumWin!=null?q3.cumWin:(q3.win!=null?q3.win:null)));fg=q3.fg||q3.freeGameCount||q3.spins||0}pnl=(e&&e.pnl!=null)?e.pnl:((p&&p.pnl!=null)?p.pnl:0)}catch(x){}if(spoil&&r!=null&&isFinite(Number(r))){var sig=String(r)+'|'+String(fg);if(sig!==__lastSpoilerSig){__lastSpoilerSig=sig;toast(r,fg)}}if(!spoil){__lastSpoilerSig='';__rsgFreeActive=false;__rsgFreeFinal=null;__rsgFreeMaxSpins=0}var ps=(+pnl||0),txt=(ps>=0?'+':'')+ps.toFixed(2);__fitNum(document.getElementById('scPnl'),txt,11);__fitNum(document.getElementById('scGuardPnl'),txt,17);var old=legacyRoot();if(old){old.style.removeProperty('left');old.style.removeProperty('top');old.style.removeProperty('opacity');old.style.removeProperty('pointer-events')}} ,500);
 })();`;
 
+// Web 版：遊戲保持官方直連，APK v2.50 的完整面板掛在外層頁面。
+// 資料/控制只有在取得對應引擎事件時才會生效，不再使用簡化假工具列。
+function mountScarabWebOverlay(gameCode) {
+  if (!(window.Capacitor && window.Capacitor.getPlatform && window.Capacitor.getPlatform() === 'web')) return;
+  try {
+    window.__unmountScarabWebOverlay();
+    window.__SC_GAME_CODE = String(gameCode || '');
+    window.__scarabHeartUI = false;
+    (0, eval)(SCARAB_OVERLAY_SRC);
+  } catch (e) { L('Web 完整懸浮面板建立失敗', e && e.message); }
+}
+window.__unmountScarabWebOverlay = function () {
+  try { const x = document.getElementById('scarab-heart-ui'); if (x) x.remove(); } catch (_) {}
+  window.__scarabHeartUI = false;
+};
+
 // iOS game-window compatibility patch.  It only corrects viewport/selection
 // state and colours; the existing spoiler, FREE AUTO, stop-profit/loss and
 // machine-control layouts remain owned by the original engine.
@@ -484,6 +500,7 @@ function openGameRSG(lobbyUrl, gameId) {
   const ref = opener.open(lobbyUrl, '_blank', iabOpts);
   if (!ref || !ref.addEventListener) { L('RSG IAB ref 無 addEventListener'); $('err').textContent = '無法開遊戲視窗'; return; }
   $('loginView').classList.add('hide');
+  mountScarabWebOverlay('rsg-' + String(gameId));
   unlockOri();   // RSG 不固定方向，依實際遊戲版型自動切換
 
   let navigated = false;
@@ -573,6 +590,7 @@ function openGame(url, room, scoreMap, machineNumHint, boardName, boardList, tar
     : 'location=no,zoom=no,hidden=no,toolbar=yes,hardwareback=yes';   // Android:維持頂部工具列+實體返回鍵
   const ref = opener.open(url, '_blank', iabOpts);
   if (!ref || !ref.addEventListener) { L('IAB ref 無 addEventListener！注入不可行'); $('err2').textContent = '無法開遊戲視窗（IAB 未就緒）'; return; }
+  mountScarabWebOverlay((session && session.game) || '');
   let recommendedAutoEnter = false;
   $('roomView').classList.add('hide');   // ★ iOS:IAB(toolbar) 沒蓋到底部安全區會露出選房頁殘存→開遊戲就主動藏；Android 一併乾淨。還原由 handleCmd 回選房/回主畫面 remove('hide')
   if(ATG_LANDSCAPE.has((session&&session.game)||'')){unlockOri();lockLandscape();}else{unlockOri();}   // 已確認橫式遊戲固定橫向，其餘跟隨遊戲→恢復跟隨感應器，玩家橫放即可轉橫（配合引擎內「請橫放」提示）；修「第二次進房卡直向」
