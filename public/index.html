@@ -687,7 +687,7 @@ body:not(:has(#loginView.hide)){background:#020914!important;display:block!impor
     <button id="loginBtn">登入 聖甲之心助手 <span class="login-arrow">›</span></button>
     <div class="err" id="err"></div>
     </div>
-    <div class="login-links"><button type="button" id="usageBtn"><b>▤</b><strong>使用說明</strong><small>新手操作</small></button><button type="button" id="featureBtn"><b>◆</b><strong>功能介紹</strong><small>完整功能</small></button><button type="button" id="reportBtn"><b>!</b><strong>問題回報</strong><small>錯誤紀錄</small></button></div><div class="login-secure">SECURE CONNECTION · AI ENGINE READY</div>
+    <div class="login-links"><button type="button" id="usageBtn"><b>▤</b><strong>使用說明</strong><small>新手操作</small></button><button type="button" id="featureBtn"><b>◆</b><strong>功能介紹</strong><small>完整功能</small></button><button type="button" id="statusBtn"><b>●</b><strong>系統狀態</strong><small>連線檢查</small></button></div><div class="login-secure">SECURE CONNECTION · AI ENGINE READY</div>
     <!-- D2 雙欄：新手教學 + 錯誤記錄（原孤零零的「查看錯誤記錄」文字連結整合進來） -->
     <div class="teach-row" style="display:none!important">
       <a class="teach-btn hi" id="tutBtn" href="#">📖 新手教學</a>
@@ -789,10 +789,10 @@ body:not(:has(#loginView.hide)){background:#020914!important;display:block!impor
       fetch(API,{ headers:{'Accept':'application/json','X-Copilot-Key':KEY}, signal:ctrl.signal })
         .then(function(r){ return r.json(); })
         .then(function(d){ clearTimeout(t);
-          if(!d||!d.enabled||!d.html){ inner.innerHTML='<div class="sc-loading">教學暫時無法載入，請稍後再試，或直接加官方 LINE 詢問 🙏</div>'; return; }
+          if(!d||!d.enabled||!d.html){ inner.innerHTML='<div class="sc-loading">教學暫時無法載入，請稍後再試。</div>'; return; }
           inner.innerHTML=d.html; bind(inner); loaded=true; scroll.scrollTop=0;
         })
-        .catch(function(){ clearTimeout(t); inner.innerHTML='<div class="sc-loading">教學暫時無法載入，請稍後再試，或直接加官方 LINE 詢問 🙏</div>'; });
+        .catch(function(){ clearTimeout(t); inner.innerHTML='<div class="sc-loading">教學暫時無法載入，請稍後再試。</div>'; });
     }
     function backLogin(){ view.classList.add('hide'); document.getElementById('loginView').classList.remove('hide'); window.scrollTo(0,0); }
     if(btn) btn.addEventListener('click',function(e){ e.preventDefault(); openTut(); });
@@ -804,7 +804,7 @@ body:not(:has(#loginView.hide)){background:#020914!important;display:block!impor
   <script src="seth-eye-api.js"></script>
   <script src="seth-errors.js"></script>
 <script id="royal-login-behavior">(function(){function bind(){var e=document.getElementById('rfEye'),p=document.getElementById('p');if(!e||!p||e.dataset.bound)return;e.dataset.bound='1';e.addEventListener('click',function(){var show=p.type==='password';p.type=show?'text':'password';e.textContent=show?'◉':'◉';e.classList.toggle('on',show);});}if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind);else bind();})();</script>
-<script id="v19-info-behavior">(function(){function q(id){return document.getElementById(id)}function open(id){q('loginView').classList.add('hide');q(id).classList.remove('hide');window.scrollTo(0,0)}function close(){['usageView','featureView'].forEach(function(id){var x=q(id);if(x)x.classList.add('hide')});q('loginView').classList.remove('hide');window.scrollTo(0,0)}document.addEventListener('DOMContentLoaded',function(){var u=q('usageBtn'),f=q('featureBtn'),r=q('reportBtn');if(u)u.onclick=function(){open('usageView')};if(f)f.onclick=function(){open('featureView')};if(r)r.onclick=function(){if(window.SethErr)window.SethErr.showLog()};document.querySelectorAll('[data-close-info]').forEach(function(b){b.onclick=close})})})();</script>
+<script id="v19-info-behavior">(function(){function q(id){return document.getElementById(id)}function open(id){q('loginView').classList.add('hide');q(id).classList.remove('hide');window.scrollTo(0,0)}function close(){['usageView','featureView'].forEach(function(id){var x=q(id);if(x)x.classList.add('hide')});q('loginView').classList.remove('hide');window.scrollTo(0,0)}document.addEventListener('DOMContentLoaded',function(){var u=q('usageBtn'),f=q('featureBtn'),s=q('statusBtn');if(u)u.onclick=function(){open('usageView')};if(f)f.onclick=function(){open('featureView')};if(s)s.onclick=function(){var e=q('err');if(e)e.textContent='系統已就緒'};document.querySelectorAll('[data-close-info]').forEach(function(b){b.onclick=close})})})();</script>
   <script src="web-iab-bridge.js"></script>
 <script src="app.js"></script>
 

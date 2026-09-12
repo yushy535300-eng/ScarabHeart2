@@ -31,7 +31,7 @@ function apiURL(req) {
   } catch (_) { return null; }
 }
 
-app.get('/healthz', (req, res) => res.status(200).json({ ok: true, version: '2.48' }));
+app.get('/healthz', (req, res) => res.status(200).json({ ok: true, version: '2.50-web' }));
 
 app.use('/__api', express.raw({ type: '*/*', limit: '2mb' }), async (req, res) => {
   const u = apiURL(req);
@@ -124,6 +124,8 @@ app.use('/__game/:sid/*', express.raw({ type: '*/*', limit: '8mb' }), async (req
     if (/text\/html|javascript|text\/css/.test(type)) {
       let body = bytes.toString('utf8'), prefix = '/__game/' + sid;
       body = body.replaceAll(s.origin, prefix);
+      body = body.replace(/\b(src|href|action)=(['"])\/(?!\/|__game\/)/gi, (m, a, q) => a + '=' + q + prefix + '/');
+      if (/text\/css/.test(type)) body = body.replace(/url\((['"]?)\/(?!\/|__game\/)/gi, 'url($1' + prefix + '/');
       if (/text\/html/.test(type)) {
         const boot = '<script>window.__SCARAB_ORIGINAL_URL=' + JSON.stringify(finalURL.href) + ';(function(){var N=window.WebSocket;window.WebSocket=function(u,p){try{var x=new URL(u,window.__SCARAB_ORIGINAL_URL);if(/^wss?:$/.test(x.protocol)){var q=(location.protocol==="https:"?"wss:":"ws:")+"//"+location.host+"/__socket/' + sid + '?url="+encodeURIComponent(x.href);return p?new N(q,p):new N(q)}}catch(e){}return p?new N(u,p):new N(u)};window.WebSocket.prototype=N.prototype})();<\/script>';
         const head = '<head><base href="' + prefix + '/"><meta name="viewport" content="width=device-width,height=device-height,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"><style>html,body{margin:0!important;width:100%!important;height:100%!important;overflow:hidden!important;overscroll-behavior:none!important}</style>' + boot;

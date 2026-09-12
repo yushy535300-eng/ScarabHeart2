@@ -1,5 +1,4 @@
-// ===== 聖甲之心 · 錯誤回報系統 =====
-// 目標：用戶只看到「白話說明」，我們拿到「診斷碼＋完整記錄」。
+// ===== 聖甲之心 · 本機錯誤記錄 =====
 //   ① 每個錯誤 → 生成診斷碼 E<HTTP>-<步驟>-<唯一碼>，並存進本機最近 20 筆記錄
 //   ② 用戶可開「錯誤記錄」詳情卡，一張截圖就含全部資訊(時間/帳號/娛樂城/步驟/技術細節)
 //   ③ 之後接後端：詳情卡多一顆「回報客服」自動上傳 + TG 通知（API 規格另交接）
@@ -9,14 +8,14 @@
   // HTTP / 錯誤 → 用戶看的白話（真實狀況，不露代碼）
   function human(status, raw) {
     raw = raw || '';
-    if (status === 403) return '此帳號目前無法登入，可能被娛樂城暫時鎖定，請聯繫客服協助';
+    if (status === 403) return '此帳號目前無法登入，請確認站台與帳號權限';
     if (status === 401 || status === 422 || status === 400) return '帳號或密碼錯誤，請重新確認';
-    if (status === 404) return '找不到資料，請稍後再試或聯繫客服';
+    if (status === 404) return '找不到資料，請稍後再試';
     if (status === 429) return '操作太頻繁，請等 30 秒再試一次';
     if (status >= 500) return '伺服器忙碌中，請稍後再試';
     if (/逾時|timeout|timed out|WS ?逾時/i.test(raw)) return '連線逾時，網路不太穩，請檢查網路後重試';
     if (/network|failed to fetch|WS ?錯誤|connect|斷|離線|offline/i.test(raw)) return '網路連線異常，請檢查網路後重試';
-    return raw || '發生未預期的問題，請截圖診斷碼聯繫客服';
+    return raw || '發生未預期的問題，請記下診斷碼';
   }
 
   function code(status, stepKey) {
@@ -91,7 +90,7 @@
       + '<div style="display:flex;align-items:center;gap:8px"><span style="font-size:16px;font-weight:800;color:#e8c878">錯誤記錄</span>'
       + '<span style="font-size:12px;color:#9c8a66">最近 ' + arr.length + ' 筆</span>'
       + '<button id="sethErrClose" style="margin-left:auto;width:30px;height:30px;border-radius:8px;background:#2a2018;border:1px solid #5a4a2a;color:#c9b890;font-size:15px;font-weight:800">✕</button></div>'
-      + '<div style="font-size:11.5px;color:#7a6a48;margin-top:6px;line-height:1.5">把這頁<b style="color:#e8c878">截圖</b>給客服，或點下方「複製全部」貼給客服即可。</div></div>';
+      + '<div style="font-size:11.5px;color:#7a6a48;margin-top:6px;line-height:1.5">可保留這頁截圖，或點下方複製診斷資料。</div></div>';
     var body = '<div style="padding:12px 16px">';
     if (!arr.length) {
       body += '<div style="color:#7a6a48;font-size:13px;text-align:center;padding:24px 0">目前沒有錯誤記錄 🎉</div>';
@@ -107,18 +106,13 @@
     }
     body += '</div>';
     var foot = '<div style="position:sticky;bottom:0;background:#1a140d;padding:10px 16px 16px;border-top:1px solid #3a3020;display:flex;gap:10px">'
-      + '<button id="sethErrCopy" style="flex:1;min-height:46px;border:0;border-radius:11px;background:linear-gradient(180deg,#e8c878,#c79a3e);color:#2a1e08;font-size:14px;font-weight:800">📋 複製全部</button>'
-      + '<button id="sethErrLine" style="flex:1;min-height:46px;border:0;border-radius:11px;background:linear-gradient(180deg,#06c755,#04a548);color:#fff;font-size:14px;font-weight:800">聯繫客服 LINE</button></div>';
+      + '<button id="sethErrCopy" style="flex:1;min-height:46px;border:0;border-radius:11px;background:linear-gradient(180deg,#e8c878,#c79a3e);color:#2a1e08;font-size:14px;font-weight:800">📋 複製全部</button></div>';
     box.innerHTML = head + body + foot; mask.appendChild(box); document.body.appendChild(mask);
     document.getElementById('sethErrClose').onclick = function () { mask.remove(); };
     mask.onclick = function (e) { if (e.target === mask) mask.remove(); };
     document.getElementById('sethErrCopy').onclick = function (e) {
       var ok = copy(allText()); e.target.textContent = ok ? '✅ 已複製' : '請長按上方文字複製';
       setTimeout(function () { e.target.textContent = '📋 複製全部'; }, 1600);
-    };
-    var lineUrl = window.SETH_LINE || 'https://lin.ee/2d6eepFU';
-    document.getElementById('sethErrLine').onclick = function () {
-      try { (window.cordova && window.cordova.InAppBrowser ? window.cordova.InAppBrowser : window).open(lineUrl, '_system'); } catch (e) { try { window.open(lineUrl, '_blank'); } catch (_) {} }
     };
   }
 

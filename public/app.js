@@ -3,7 +3,7 @@
 const $ = id => document.getElementById(id);
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
 const L = (...a) => { try { console.log('[SETH]', ...a); } catch (e) {} };
-window.SETH_APP_VER = 'v2.48';   // Final desktop login + TZ/game transport fixes
+window.SETH_APP_VER = 'v2.50-web';
 // 低調版本號填入登入頁(需提醒用戶才會注意；用戶截圖回報時帶上版本→我們知道他裝的是不是最新)
 try { document.addEventListener('DOMContentLoaded', function () { document.querySelectorAll('.seth-ver').forEach(function (el) { el.textContent = window.SETH_APP_VER; }); }); } catch (e) {}
 let session = null;
@@ -133,8 +133,8 @@ async function loadAnnouncement() {
 }
 try { loadAnnouncement(); } catch (e) {}
 
-const SETH_LINE = 'https://lin.ee/2d6eepFU';   // 聖甲之心客服 LINE（API 失敗也會回 lineUrl，優先用回的）
-window.SETH_LINE = SETH_LINE;   // 給錯誤記錄卡「聯繫客服」用
+const SETH_LINE = '';
+window.SETH_LINE = '';
 // 錯誤顯示：白話訊息 + 可點診斷碼(開錯誤記錄卡)；ctx 帶帳號/娛樂城/遊戲
 function errCtx() { return { account: (session && session.account) || ($('u') && $('u').value.trim()) || '', base: ($('base') && $('base').value) || '', game: ($('game') && $('game').value) || '' }; }
 function showErrInto(elId, info) { const el = $(elId); if (!el || !info) return; el.innerHTML = '<span style="color:#ff8c8c">' + info.human + '</span> <a href="#" onclick="SethErr.showLog();return false;" style="color:#9c8a66;text-decoration:underline;font-size:12px;white-space:nowrap">診斷碼 ' + info.code + '</a>'; }
@@ -144,7 +144,7 @@ function showErrInto(elId, info) { const el = $(elId); if (!el || !info) return;
 async function memberGate() {
   if (!SethEyeAPI.token) {
     let j; try { j = await SethEyeAPI.login(session.account, session.password); } catch (e) { j = null; }
-    if (!j || !j.token) { showLineDialog((j && j.message) || '無法驗證聖甲之心資格，請聯繫客服', (j && j.lineUrl) || SETH_LINE); return false; }
+    if (!j || !j.token) { showLineDialog((j && j.message) || '無法驗證聖甲之心資格'); return false; }
   }
   let el; try { el = await SethEyeAPI.eligibility(); } catch (e) { el = null; }
   if (!el || !el.eligible) { showLineDialog('請聯繫聖甲之心客服開通功能', (el && el.lineUrl) || SETH_LINE); return false; }
@@ -152,7 +152,7 @@ async function memberGate() {
   return true;
 }
 
-// 訊息彈窗 + 一顆「聯繫客服 LINE」按鈕（資格不符 / 密碼錯誤共用）
+// 單純訊息彈窗；Web 公開版不放任何聯繫方式。
 function showLineDialog(message, lineUrl) {
   const old = document.getElementById('cpModal'); if (old) old.remove();
   const mask = document.createElement('div'); mask.id = 'cpModal';
@@ -162,9 +162,7 @@ function showLineDialog(message, lineUrl) {
   const row = document.createElement('div'); row.style.cssText = 'display:flex;gap:10px';
   const close = document.createElement('button'); close.textContent = '關閉'; close.style.cssText = 'flex:1;min-height:46px;border:1px solid #5a4a2a;border-radius:11px;background:#2a2018;color:#c9b890;font-size:15px;font-weight:700';
   close.onclick = () => mask.remove();
-  const line = document.createElement('button'); line.textContent = '聯繫客服 LINE'; line.style.cssText = 'flex:1.3;min-height:46px;border:0;border-radius:11px;background:linear-gradient(180deg,#06c755,#04a548);color:#fff;font-size:15px;font-weight:800';
-  line.onclick = () => { try { (window.cordova && window.cordova.InAppBrowser ? window.cordova.InAppBrowser : window).open(lineUrl, '_system'); } catch (e) { try { window.open(lineUrl, '_blank'); } catch (_) {} } mask.remove(); };
-  row.appendChild(close); row.appendChild(line); box.appendChild(row); mask.appendChild(box); document.body.appendChild(mask);
+  row.appendChild(close); box.appendChild(row); mask.appendChild(box); document.body.appendChild(mask);
 }
 
 // 更新選房頁金幣/銀幣餘額（會員登入後 / 買通行證後）
@@ -446,14 +444,14 @@ async function rsgGate() {
     // ①聖甲之心助手會員登入(同金盈匯帳密、bindLogin 已在 login() 建帳本)
     if (!SethEyeAPI.token) {
       let j; try { j = await SethEyeAPI.login(session.account, session.password); } catch (e) { j = null; }
-      if (!j || !j.token) { showLineDialog((j && j.message) || '無法驗證聖甲之心資格，請聯繫客服', (j && j.lineUrl) || SETH_LINE); return false; }
+      if (!j || !j.token) { showLineDialog((j && j.message) || '無法驗證聖甲之心資格'); return false; }
     }
     // ②eligibility 帶 game=thor(後端分辨雷神、查白名單代理線)
     let el; try { el = await SethEyeAPI.eligibility('thor'); } catch (e) { el = null; }
     L('RSG eligibility', JSON.stringify(el));
     if (!el || !el.eligible) { showLineDialog((el && el.reason) || '請聯繫聖甲之心客服開通功能', (el && el.lineUrl) || SETH_LINE); return false; }
     return true;
-  } catch (e) { L('rsgGate err', e && e.message); showLineDialog('資格驗證失敗，請聯繫客服', SETH_LINE); return false; }
+  } catch (e) { L('rsgGate err', e && e.message); showLineDialog('資格驗證失敗，請稍後重試'); return false; }
 }
 
 // ══ 雷神二代（RSG）進場鏈 ══════════════════════════════════════════════
@@ -464,7 +462,8 @@ async function enterGameRSG() {
   L('RSG 進場：打 /api/v2/game/RSG/login gameId=' + gameId);
   // 打 RSG login 拿大廳URL(token 過期自動重登再試，同 ATG 進房的保護)
   const fetchLobby = async (tok) => {
-    const j = await postJson(session.base + '/api/v2/game/RSG/login', { game_return_url: session.base, game_kind: '', game_type: '', game_device: 'Mobile' }, tok);
+    const webDesktop = window.Capacitor && window.Capacitor.getPlatform && window.Capacitor.getPlatform() === 'web' && window.matchMedia('(min-width:900px)').matches;
+    const j = await postJson(session.base + '/api/v2/game/RSG/login', { game_return_url: session.base, game_kind: 'SLOT', game_type: '', game_device: webDesktop ? 'Desktop' : 'Mobile', game_money: '' }, tok);
     return j && j.data && j.data.game_url;
   };
   let lobbyUrl = await fetchLobby(session.token);
@@ -755,7 +754,7 @@ function onUnlockPremium() {
       $('err2').textContent = '解鎖中…';
       try {
         // 沒登入聖甲之心助手會員 → 用娛樂城同帳密自動登
-        if (!SethEyeAPI.token) { let j; try { j = await SethEyeAPI.login(session.account, session.password); } catch (e) {} if (!j || !j.token) { $('err2').textContent = ''; showLineDialog((j && j.message) || '無法驗證聖甲之心資格，請聯繫客服', (j && j.lineUrl) || SETH_LINE); return; } }
+        if (!SethEyeAPI.token) { let j; try { j = await SethEyeAPI.login(session.account, session.password); } catch (e) {} if (!j || !j.token) { $('err2').textContent = ''; showLineDialog((j && j.message) || '無法驗證聖甲之心資格'); return; } }
         const r = await SethEyeAPI.buyPass('gold');   // 金牌榜扣金幣（銀牌另做）
         if (r && (r.success || r.alreadyActive)) {
           $('err2').textContent = r.alreadyActive ? '✅ 通行證已開通中' : '✅ 解鎖成功，10 分鐘內可看完整精品榜';

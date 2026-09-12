@@ -1,6 +1,6 @@
 {
   "name": "scarabheart-web-render",
-  "version": "2.48.0",
+  "version": "2.50.0",
   "private": true,
   "engines": { "node": ">=20" },
   "scripts": { "start": "node server.js", "check": "node --check server.js && node --check public/web-iab-bridge.js && node --check public/app.js" },
