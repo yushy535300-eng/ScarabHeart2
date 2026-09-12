@@ -3,7 +3,7 @@
 const $ = id => document.getElementById(id);
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
 const L = (...a) => { try { console.log('[SETH]', ...a); } catch (e) {} };
-window.SETH_APP_VER = 'v2.45';   // ATG immediate display + fullscreen injection (white-screen fix)
+window.SETH_APP_VER = 'v2.47';   // Desktop artwork + same-origin board API proxy
 // 低調版本號填入登入頁(需提醒用戶才會注意；用戶截圖回報時帶上版本→我們知道他裝的是不是最新)
 try { document.addEventListener('DOMContentLoaded', function () { document.querySelectorAll('.seth-ver').forEach(function (el) { el.textContent = window.SETH_APP_VER; }); }); } catch (e) {}
 let session = null;

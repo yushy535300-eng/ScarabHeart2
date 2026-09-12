@@ -3,6 +3,21 @@
    a same-origin, full-screen proxy frame so engine injection remains available. */
 (function () {
   'use strict';
+  var nativeFetch = window.fetch.bind(window);
+
+  function needsApiProxy(raw) {
+    try {
+      var u = new URL(raw, location.href), h = u.hostname.toLowerCase();
+      return u.origin !== location.origin &&
+        (h === 'seth-eye.com' || /\.seth-eye\.com$/.test(h) || h === 'tz6868.cc' || /\.tz6868\.cc$/.test(h));
+    } catch (_) { return false; }
+  }
+
+  window.fetch = function (input, init) {
+    var raw = typeof input === 'string' ? input : (input && input.url) || '';
+    if (needsApiProxy(raw)) return nativeFetch('/__api?url=' + encodeURIComponent(new URL(raw, location.href).href), init);
+    return nativeFetch(input, init);
+  };
   var layer, frame, closeButton;
 
   function ensureLayer() {

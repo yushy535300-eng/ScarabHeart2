@@ -1002,6 +1002,71 @@ body:not(:has(#loginView.hide)){overflow:hidden!important;background:#020914!imp
 </script>
 </body>
 </html>
+<style id="scarab-web-responsive-v247">
+/* Mobile remains the approved iPhone layout. Desktop is composed independently. */
+@media (min-width:900px){
+  html,body{min-width:900px!important;background:#020813!important}
+  body:not(:has(#loginView.hide)){overflow:hidden!important}
+
+  #loginView{
+    position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;min-height:680px!important;
+    background:#020813 url('media/desktop-login-bg-v247.png') center center/cover no-repeat!important;
+    overflow:hidden!important
+  }
+  #loginView:before{
+    content:""!important;display:block!important;position:absolute!important;inset:-7%!important;
+    background:linear-gradient(90deg,transparent 0 45%,rgba(1,7,14,.16) 55%,rgba(1,7,14,.72) 100%)!important;
+    opacity:1!important;filter:none!important;pointer-events:none!important
+  }
+  #loginView:after{
+    content:""!important;display:block!important;position:absolute!important;inset:0!important;
+    background:linear-gradient(90deg,rgba(1,7,14,.08) 0%,rgba(1,7,14,.18) 42%,rgba(1,7,14,.93) 59%,rgba(1,7,14,.72) 100%)!important;
+    pointer-events:none!important
+  }
+  #loginView>img.logo{display:block!important;position:absolute!important;left:14%!important;top:21%!important;width:150px!important;height:150px!important;margin:0!important;border-radius:38px!important;z-index:4!important}
+  #loginView>h1{display:block!important;position:absolute!important;left:6%!important;top:43%!important;width:36%!important;margin:0!important;color:#f3d06b!important;font-size:clamp(32px,3vw,56px)!important;letter-spacing:.16em!important;text-align:center!important;z-index:4!important;text-shadow:0 4px 24px #000!important}
+  #loginView>p.sub{display:block!important;position:absolute!important;left:6%!important;top:51%!important;width:36%!important;margin:0!important;text-align:center!important;z-index:4!important}
+  #loginView>p.sub:after{font-size:14px!important;letter-spacing:.34em!important;color:#d3b968!important}
+
+  #loginView>.royal-login-panel{
+    position:absolute!important;left:auto!important;right:7.5%!important;top:50%!important;transform:translateY(-50%)!important;
+    width:min(43vw,610px)!important;height:430px!important;margin:0!important;padding:48px 48px 38px!important;
+    background:linear-gradient(155deg,rgba(5,28,50,.97),rgba(2,12,24,.985))!important;
+    border:1px solid rgba(232,193,91,.68)!important;clip-path:polygon(18px 0,calc(100% - 18px) 0,100% 18px,100% calc(100% - 18px),calc(100% - 18px) 100%,18px 100%,0 calc(100% - 18px),0 18px)!important;
+    box-shadow:0 28px 90px rgba(0,0,0,.58),inset 0 0 36px rgba(15,126,196,.10)!important;z-index:10!important
+  }
+  #loginView>.royal-login-panel:before{content:"帳號登入"!important;display:block!important;position:static!important;width:auto!important;height:auto!important;margin:0 0 28px!important;background:transparent!important;color:#f0ce6c!important;font-size:23px!important;letter-spacing:.18em!important;text-align:left!important}
+  #loginView .royal-field{position:relative!important;left:auto!important;top:auto!important;width:100%!important;height:62px!important;margin:0 0 16px!important;border-radius:10px!important}
+  #loginView .royal-field:nth-of-type(1),#loginView .royal-field:nth-of-type(2){top:auto!important}
+  #loginView .rf-icon{width:72px!important;flex:0 0 72px!important}
+  #loginView #u,#loginView #p{font-size:18px!important;padding:0 18px!important}
+  #loginView .login-options{position:relative!important;left:auto!important;top:auto!important;width:100%!important;height:34px!important;margin:0 0 18px!important;font-size:14px!important}
+  #loginView #loginBtn{position:relative!important;left:auto!important;top:auto!important;width:100%!important;height:66px!important;min-height:66px!important;margin:0!important;background:linear-gradient(180deg,#16bdf5,#0868c7 55%,#064b99)!important;color:#fff0b2!important;font-size:20px!important;letter-spacing:.18em!important;clip-path:polygon(6% 0,94% 0,100% 50%,94% 100%,6% 100%,0 50%)!important}
+  #loginView #loginBtn .login-arrow{display:inline!important}
+  #loginView #err{top:auto!important;bottom:8px!important;font-size:12px!important}
+  #loginView>.login-links{position:absolute!important;left:auto!important;right:7.5%!important;top:calc(50% + 235px)!important;width:min(43vw,610px)!important;height:86px!important;margin:0!important;gap:12px!important;z-index:11!important;background:transparent!important}
+  #loginView>.login-links button{padding:10px!important;border-radius:10px!important;clip-path:none!important}
+  #loginView>.login-links button b{font-size:22px!important}#loginView>.login-links button strong{font-size:13px!important}#loginView>.login-links button small{font-size:9px!important}
+  #loginView>#platformPicker{right:7.5%!important;top:34px!important;width:240px!important;height:48px!important;font-size:13px!important}
+  #loginView>#platformMenu{right:7.5%!important;top:86px!important;width:240px!important}
+
+  #gameCenterView,#roomView{width:min(1180px,calc(100vw - 64px))!important;max-width:1180px!important;margin:32px auto!important;border-radius:24px!important}
+  #gameCenterView{padding:28px!important}
+  #gameCenterView .scgc-games{grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:15px!important}
+  #gameCenterView #gcGames.rsg-grid{grid-template-columns:repeat(5,minmax(0,1fr))!important;gap:12px!important}
+  #gameCenterView .scgc-game,#gameCenterView #gcGames.rsg-grid .scgc-game{height:auto!important;min-height:168px!important}
+  #gameCenterView .premiumProviders .gcProvider{height:112px!important;min-height:112px!important}
+
+  #roomView{padding:26px 30px 32px!important}
+  #roomView #boardTabs{gap:12px!important;margin:18px 0!important}
+  #roomView #boardTabs .btab{min-height:56px!important;font-size:14px!important}
+  #roomView #recommend{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:12px!important}
+  #roomView .scarab-room-card{margin:0!important;min-height:92px!important}
+  #roomView>label,#roomView>#room,#roomView>#enterBtn,#roomView>#skipBtn,#roomView>#logoutBtn,#roomView>#err2,#roomView>.hint,#roomView>div:last-child{width:min(760px,100%)!important;margin-left:auto!important;margin-right:auto!important}
+  #roomView>#room{height:58px!important;font-size:20px!important}
+  #roomView>#enterBtn,#roomView>#skipBtn,#roomView>#logoutBtn{min-height:58px!important}
+}
+</style>
 <style id="v21-fullscreen-fix">
 /* v2.1 — full-screen 1:1 artwork; no duplicate visual controls. */
 html,body{width:100%!important;height:100%!important;min-height:100%!important;margin:0!important;padding:0!important;background:#020914!important;overflow-x:hidden!important}

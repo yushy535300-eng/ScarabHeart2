@@ -17,6 +17,44 @@ function allowed(u) {
     /(^|\.)royalgaming[\w-]*\.com$/.test(h);
 }
 
+function apiAllowed(u) {
+  if (u.protocol !== 'https:') return false;
+  const h = u.hostname.toLowerCase();
+  return h === 'seth-eye.com' || h.endsWith('.seth-eye.com') ||
+    h === 'tz6868.cc' || h.endsWith('.tz6868.cc');
+}
+
+function apiURL(req) {
+  try {
+    const u = new URL(String(req.query.url || ''));
+    return apiAllowed(u) ? u : null;
+  } catch (_) { return null; }
+}
+
+app.get('/healthz', (req, res) => res.status(200).json({ ok: true, version: '2.47' }));
+
+const apiProxy = createProxyMiddleware({
+  target: 'https://seth-eye.com', changeOrigin: true, secure: true,
+  router: req => { const u = apiURL(req); return u ? u.origin : 'https://seth-eye.com'; },
+  pathRewrite: (p, req) => { const u = apiURL(req); return u ? u.pathname + u.search : '/'; },
+  on: {
+    proxyReq: (proxyReq, req) => {
+      const u = apiURL(req); if (!u) return proxyReq.destroy();
+      proxyReq.setHeader('origin', u.origin);
+      proxyReq.setHeader('referer', u.origin + '/');
+    },
+    proxyRes: (proxyRes) => {
+      delete proxyRes.headers['access-control-allow-origin'];
+      delete proxyRes.headers['content-security-policy'];
+    }
+  }
+});
+
+app.use('/__api', (req, res, next) => {
+  if (!apiURL(req)) return res.status(403).json({ ok: false, error: 'API host is not allowed' });
+  next();
+}, apiProxy);
+
 function session(req) { return sessions.get(req.params.sid); }
 function proxyPrefix(req) { return '/__game/' + req.params.sid; }
 function originalURL(req) {
