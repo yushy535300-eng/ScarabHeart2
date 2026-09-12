@@ -3,7 +3,7 @@
 const $ = id => document.getElementById(id);
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
 const L = (...a) => { try { console.log('[SETH]', ...a); } catch (e) {} };
-window.SETH_APP_VER = 'v2.47';   // Desktop artwork + same-origin board API proxy
+window.SETH_APP_VER = 'v2.48';   // Final desktop login + TZ/game transport fixes
 // 低調版本號填入登入頁(需提醒用戶才會注意；用戶截圖回報時帶上版本→我們知道他裝的是不是最新)
 try { document.addEventListener('DOMContentLoaded', function () { document.querySelectorAll('.seth-ver').forEach(function (el) { el.textContent = window.SETH_APP_VER; }); }); } catch (e) {}
 let session = null;
@@ -57,7 +57,10 @@ async function postJson(url, body, token) {
     return res && res.data;
   }
   const r = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
-  return r.json();
+  const text = await r.text();
+  let data; try { data = JSON.parse(text); } catch (_) { throw new Error('TZ 服務回傳格式錯誤（HTTP ' + r.status + '）'); }
+  if (!r.ok && !(data && data.message)) throw new Error('TZ 伺服器回應 ' + r.status);
+  return data;
 }
 
 // WS 換直連遊戲網址（同桌面 directGameUrl，改用瀏覽器 WebSocket）

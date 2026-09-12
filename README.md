@@ -1,4 +1,4 @@
-# ScarabHeart Web v2.47
+# ScarabHeart Web v2.48
 
 可直接上傳 GitHub 並連接 Render 的網頁版本。
 

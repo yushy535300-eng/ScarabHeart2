@@ -18,6 +18,20 @@
     if (needsApiProxy(raw)) return nativeFetch('/__api?url=' + encodeURIComponent(new URL(raw, location.href).href), init);
     return nativeFetch(input, init);
   };
+
+  var NativeWebSocket = window.WebSocket;
+  window.WebSocket = function (url, protocols) {
+    try {
+      var u = new URL(url, location.href), h = u.hostname.toLowerCase();
+      if (h === 'godeebxp.com' || /\.godeebxp\.com$/.test(h)) {
+        var proxied = (location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + '/__socket/web?url=' + encodeURIComponent(u.href);
+        return protocols ? new NativeWebSocket(proxied, protocols) : new NativeWebSocket(proxied);
+      }
+    } catch (_) {}
+    return protocols ? new NativeWebSocket(url, protocols) : new NativeWebSocket(url);
+  };
+  window.WebSocket.prototype = NativeWebSocket.prototype;
+  ['CONNECTING','OPEN','CLOSING','CLOSED'].forEach(function (k) { try { window.WebSocket[k] = NativeWebSocket[k]; } catch (_) {} });
   var layer, frame, closeButton;
 
   function ensureLayer() {
