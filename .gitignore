@@ -1,7 +1,4 @@
 node_modules/
-npm-debug.log*
-*.har
-*.apk
-*.zip
 .env
-.DS_Store
+*.log
+*.har

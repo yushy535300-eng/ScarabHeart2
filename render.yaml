@@ -3,7 +3,7 @@ services:
     name: scarabheart-web
     runtime: node
     plan: free
-    buildCommand: npm install
+    buildCommand: npm install && npm run build:extension
     startCommand: npm start
     healthCheckPath: /healthz
     autoDeploy: true

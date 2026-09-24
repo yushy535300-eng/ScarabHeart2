@@ -35,7 +35,7 @@ function apiURL(req) {
   } catch (_) { return null; }
 }
 
-app.get('/healthz', (req, res) => res.status(200).json({ ok: true, version: '2.51-real-engine' }));
+app.get('/healthz', (req, res) => res.status(200).json({ ok: true, version: '2.52-official-game-extension' }));
 
 app.use('/__api', express.raw({ type: '*/*', limit: '2mb' }), async (req, res) => {
   const u = apiURL(req);

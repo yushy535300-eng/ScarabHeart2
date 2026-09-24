@@ -1,11 +1,12 @@
-# ScarabHeart2 Web v2.51（正式功能版）
+# ScarabHeart2 Web v2.52（電腦網站可用版）
 
-這是可部署到 Render 的網站原始檔，不是 APK。網站會在同網域代理遊戲頁面，讓遊戲內的浮動面板可以真正呼叫已注入的 ATG／RSG 引擎。
+這是可部署到 Render 的網站原始檔，不是 APK。電腦版登入頁採「左側大型聖甲蟲、右側登入面板」；手機仍使用原本直式登入。遊戲改用官方網址開啟，不再透過會卡 ATG Logo 的 Render 遊戲反向代理。
 
 ## 已接上的功能
 
 - TZ／OFA 原登入與遊戲選擇流程
-- 遊戲頁、XHR／Fetch、Cookie 與 WebSocket 同網域代理
+- TZ／OFA 帳密成功後直接進入遊戲中心；會員後端冷啟動不再誤判為 TZ 登入失敗
+- 官方遊戲頁由隨包附上的 Chrome 擴充功能注入完整 ATG／RSG 引擎
 - 遊戲內浮動面板真正呼叫引擎，不用假的按鈕狀態冒充成功
 - AUTO START／STOP、FREE 自動、停利停損、訊號與機台功能
 - 速度控制會先確認引擎接受倍率；未支援時會顯示失敗，不會假亮
@@ -26,7 +27,7 @@
 現有 Web Service 可使用：
 
 - Runtime：Node
-- Build Command：`npm install`
+- Build Command：`npm install && npm run build:extension`
 - Start Command：`npm start`
 - Health Check Path：`/healthz`
 - Node：20 以上
@@ -35,16 +36,28 @@
 
 `https://你的網址.onrender.com/healthz`
 
-看到 `{"ok":true,"version":"2.51-real-engine"}` 就代表新版伺服器已上線。Render 免費方案休眠後第一次開啟可能需要約 30～60 秒。
+看到 `{"ok":true,"version":"2.52-official-game-extension"}` 就代表新版伺服器已上線。Render 免費方案休眠後第一次開啟可能需要約 30～60 秒。
+
+## 電腦瀏覽器只需安裝一次
+
+Chrome 因同源安全限制，不允許網站直接修改第三方官方遊戲頁。因此先依照 `extension/README.txt` 安裝 ZIP 內附的擴充功能：
+
+1. Chrome 開啟 `chrome://extensions`。
+2. 開啟右上角「開發人員模式」。
+3. 按「載入未封裝項目」。
+4. 選擇解壓後的 `extension` 資料夾。
+5. 回網站重新整理、登入並開遊戲。
+
+網站本身上傳到 GitHub／Render；`extension` 資料夾則由要使用懸浮功能的電腦載入。手機瀏覽器不能安裝這個 Chrome 擴充功能，手機若要遊戲內注入仍應使用原 APK。
 
 ## 實機測試順序
 
 1. 用自己的 TZ／OFA 測試帳號登入。
-2. 選遊戲並進入真實遊戲頁。
+2. 選遊戲並進入真實官方遊戲頁（新分頁）。
 3. 浮動面板的速度頁應顯示「遊戲引擎已連線」。
 4. 點 2X；只有引擎成功接受時才會顯示「引擎已套用 2X」。
 5. 點 AUTO START，再用 STOP 停止。
 6. 開啟劇透後先跑普通旋轉，普通旋轉不應出現結果。
 7. 實際購買免遊；遊戲伺服器回傳後，「本輪免遊最終結果」才會更新。
 
-遊戲商如果日後更換網域、Socket 協定或遊戲內節點名稱，對應引擎可能需要跟著更新；面板會保留失敗狀態，方便分辨是引擎未連線，而不是假裝功能已啟用。
+遊戲商如果日後更換網域、Socket 協定或遊戲內節點名稱，擴充功能的網域清單或對應引擎可能需要跟著更新；面板會保留失敗狀態，方便分辨是引擎未連線，而不是假裝功能已啟用。

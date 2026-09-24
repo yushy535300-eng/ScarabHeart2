@@ -148,6 +148,9 @@ function showErrInto(elId, info) { const el = $(elId); if (!el || !info) return;
 // ★ 使用資格兩關（按「進房」時打）：①聖甲之心助手會員登入 — 用娛樂城同一組帳密自動登入(前端已保證兩邊密碼一致、不另跳窗)
 //   ②eligibility 即時檢查。任一關失敗 → 顯示純站內訊息，不連到外部聯繫頁。
 async function memberGate() {
+  if (!SethEyeAPI.token && window.__scarabBindPromise) {
+    try { await window.__scarabBindPromise; } catch (_) {}
+  }
   if (!SethEyeAPI.token) {
     let j; try { j = await SethEyeAPI.login(session.account, session.password); } catch (e) { j = null; }
     if (!j || !j.token) { showMessageDialog((j && j.message) || '無法驗證聖甲之心資格'); return false; }
@@ -461,7 +464,7 @@ async function enterGame(mode) {
     let scoreMap = null;
     if (mode === 'auto') scoreMap = await fetchRoomScores(session.game, session.base);   // 自動選房：先拉聖甲之心助手綜合分數（未接到→null→引擎退回遊戲內得分率）
     openGame(target, room, scoreMap, machineNumHint, boardName, boardList, targetKind);
-  } catch (e) { L('進入失敗', e && e.message); showErrInto('err2', window.SethErr ? SethErr.handle('ENTER', e, errCtx()) : { human: (e.message || '進入失敗'), code: '-' }); }
+  } catch (e) { try{if(window.ScarabWebLauncher)window.ScarabWebLauncher.cancelReserve();}catch(_){} L('進入失敗', e && e.message); showErrInto('err2', window.SethErr ? SethErr.handle('ENTER', e, errCtx()) : { human: (e.message || '進入失敗'), code: '-' }); }
   finally { btns.forEach(b => b.disabled = false); if (active) active.textContent = activeOrig; }
 }
 
@@ -469,6 +472,9 @@ async function enterGame(mode) {
 // 雷神引擎無引擎內資格檢查(賽特是引擎內做)→進場前在 app.js 擋。通過才進遊戲，不通過顯示站內提示。
 async function rsgGate() {
   try {
+    if (!SethEyeAPI.token && window.__scarabBindPromise) {
+      try { await window.__scarabBindPromise; } catch (_) {}
+    }
     // ①聖甲之心助手會員登入(同金盈匯帳密、bindLogin 已在 login() 建帳本)
     if (!SethEyeAPI.token) {
       let j; try { j = await SethEyeAPI.login(session.account, session.password); } catch (e) { j = null; }
@@ -509,6 +515,22 @@ function openGameRSG(lobbyUrl, gameId) {
   const isIOS = !!(window.Capacitor && window.Capacitor.getPlatform && window.Capacitor.getPlatform() === 'ios');
   const iabOpts = isIOS ? 'location=no,zoom=no,hidden=no,toolbar=no'
                         : 'location=no,zoom=no,hidden=no,toolbar=yes,hardwareback=yes';
+  // 帶 SETH_API/KEY/ACCOUNT → 雷神引擎「餘額不足跳存款彈窗」用(同賽特)。
+  const cfg = { MUTE: true, DEBUG: true, SPEED: 1, UI: 'none', GAME_ID: String(gameId),
+    SETH_API: SethEyeAPI.CFG.API_BASE, SETH_KEY: SethEyeAPI.CFG.COPILOT_KEY, SETH_ACCOUNT: (session && session.account) || '',
+    AGENT_MODE: false };
+
+  // 電腦網站不能跨網域 eval 官方遊戲 iframe。改開官方網址，交給隨包附上的
+  // Chrome 擴充功能在官方頁面的 MAIN world 注入完整雷神引擎。
+  if (window.ScarabWebLauncher && window.ScarabWebLauncher.isWeb) {
+    $('loginView').classList.add('hide');
+    $('roomView').classList.add('hide');
+    $('gameCenterView').classList.remove('hide');
+    scarabProvider = 'RSG'; renderScarabGames();
+    window.ScarabWebLauncher.open(lobbyUrl, { kind: 'rsg', gameId: String(gameId), cfg: cfg });
+    return;
+  }
+
   const ref = opener.open(lobbyUrl, '_blank', iabOpts);
   if (!ref || !ref.addEventListener) { L('RSG IAB ref 無 addEventListener'); $('err').textContent = '無法開遊戲視窗'; return; }
   $('loginView').classList.add('hide');
@@ -526,10 +548,6 @@ function openGameRSG(lobbyUrl, gameId) {
     "var nx=String(d.nextpage||'');location.href=/^https?:/i.test(nx)?('/__game/open?url='+encodeURIComponent(nx)):((window.__SCARAB_PROXY_PREFIX||location.origin)+nx);}).catch(function(e){});},500);}catch(e){}})();";
 
   // 遊戲頁：注入雷神引擎(overlay UI)
-  // 帶 SETH_API/KEY/ACCOUNT → 雷神引擎「餘額不足跳存款彈窗」用(同賽特)。
-  const cfg = { MUTE: true, DEBUG: true, SPEED: 1, UI: 'none', GAME_ID: String(gameId),
-    SETH_API: SethEyeAPI.CFG.API_BASE, SETH_KEY: SethEyeAPI.CFG.COPILOT_KEY, SETH_ACCOUNT: (session && session.account) || '',
-    AGENT_MODE: false };  // 正式模式：雷神引擎使用真實會員與儲值流程
   const RSG_STABILITY_SRC = `;(function(){if(window.__scarabRsgStable)return;window.__scarabRsgStable=1;function wake(){try{window.focus();document.documentElement.style.minHeight='100%';document.body.style.minHeight='100%';window.dispatchEvent(new Event('resize'));}catch(e){}}document.addEventListener('visibilitychange',function(){if(!document.hidden)setTimeout(wake,60)});window.addEventListener('focus',wake);window.addEventListener('pageshow',wake);window.addEventListener('orientationchange',function(){setTimeout(wake,120);setTimeout(wake,420)});setInterval(function(){if(!document.hidden)wake()},4000);})();`;
   const engineCode = window.THOR_ENGINE_SRC + "\n;if(!window.__thorBooted){window.__thorBooted=true;try{thorEngine(" + JSON.stringify(cfg) + ");console.log('[THOR] engine() called');}catch(_e){console.log('[THOR] engine err '+(_e&&_e.message));}}" + "\n;window.__SC_GAME_CODE=" + JSON.stringify('rsg-' + String(gameId)) + ";" + SCARAB_OVERLAY_SRC + SCARAB_IOS_GAME_FIX_SRC + RSG_STABILITY_SRC;
 
@@ -600,17 +618,26 @@ function openGame(url, room, scoreMap, machineNumHint, boardName, boardList, tar
   const iabOpts = isIOS
     ? 'location=no,zoom=no,hidden=no,toolbar=no,scarabatg=yes'         // iOS:真正全螢幕＋ATG standalone 模式，不觸發中央上滑提示
     : 'location=no,zoom=no,hidden=no,toolbar=yes,hardwareback=yes';   // Android:維持頂部工具列+實體返回鍵
-  const ref = opener.open(url, '_blank', iabOpts);
-  if (!ref || !ref.addEventListener) { L('IAB ref 無 addEventListener！注入不可行'); $('err2').textContent = '無法開遊戲視窗（IAB 未就緒）'; return; }
-  mountScarabWebOverlay((session && session.game) || '');
   let recommendedAutoEnter = false;
-  $('roomView').classList.add('hide');   // ★ iOS:IAB(toolbar) 沒蓋到底部安全區會露出選房頁殘存→開遊戲就主動藏；Android 一併乾淨。還原由 handleCmd 回選房/回主畫面 remove('hide')
-  if(ATG_LANDSCAPE.has((session&&session.game)||'')){unlockOri();lockLandscape();}else{unlockOri();}   // 已確認橫式遊戲固定橫向，其餘跟隨遊戲→恢復跟隨感應器，玩家橫放即可轉橫（配合引擎內「請橫放」提示）；修「第二次進房卡直向」
   const cfg = { TARGET: String(room), TARGET_KIND: targetKind || null, MACHINENUM: String(machineNumHint || ''), MUTE: true, DEBUG: true, TAKE_PROFIT: 0, STOP_LOSS: 0, SPEED: 1, UI: 'none', NO_SHIFT: true, SCORE_MAP: scoreMap || null, BOARD_NAME: boardName || '', BOARD_LIST: boardList || null, GOOD_ROOMS: ((_boards&&_boards.composite)||[]).filter(c=>c&&c.machineNum!=null).slice(0,3).map(c=>({roomId:c.roomId,machineNum:c.machineNum,rtp:c.rtp!=null?c.rtp:c.todayRtp,bet:c.bet!=null?c.bet:c.todayBet,profit:c.profit!=null?c.profit:c.todayPnl})),
     // ★ 資格攔截：引擎在遊戲頁直接查 eligibility，僅傳 API/token 與攔截區設定。
     SETH_API: SethEyeAPI.CFG.API_BASE, SETH_KEY: SethEyeAPI.CFG.COPILOT_KEY, SETH_TOKEN: SethEyeAPI.token || '', AGENT_MODE: false,
     SETH_ACCOUNT: (session && session.account) || '', GAME_CODE: (session && session.game) || $('game').value || '', APP_VER: window.SETH_APP_VER || '',   // ★eligibility 被擋時記錄用(帳號/遊戲/版本)
     ELIG: { spin: { l: 47.1, t: 36.2, w: 52.9, h: 63.8 }, free: { l: 0.0, t: 59.6, w: 30.3, h: 40.4 } } };
+
+  // 電腦網站版：直接開官方遊戲，完整引擎由隨包附上的 Chrome 擴充功能注入。
+  // 不再使用會卡在 ATG Logo 的 Render 遊戲反向代理。
+  if (window.ScarabWebLauncher && window.ScarabWebLauncher.isWeb) {
+    $('err2').textContent = '遊戲已在新分頁開啟；此頁可保留作為選房頁。';
+    window.ScarabWebLauncher.open(url, { kind: 'atg', gameCode: cfg.GAME_CODE, cfg: cfg });
+    return;
+  }
+
+  const ref = opener.open(url, '_blank', iabOpts);
+  if (!ref || !ref.addEventListener) { L('IAB ref 無 addEventListener！注入不可行'); $('err2').textContent = '無法開遊戲視窗（IAB 未就緒）'; return; }
+  mountScarabWebOverlay((session && session.game) || '');
+  $('roomView').classList.add('hide');   // ★ iOS:IAB(toolbar) 沒蓋到底部安全區會露出選房頁殘存→開遊戲就主動藏；Android 一併乾淨。還原由 handleCmd 回選房/回主畫面 remove('hide')
+  if(ATG_LANDSCAPE.has((session&&session.game)||'')){unlockOri();lockLandscape();}else{unlockOri();}   // 已確認橫式遊戲固定橫向，其餘跟隨遊戲→恢復跟隨感應器，玩家橫放即可轉橫（配合引擎內「請橫放」提示）；修「第二次進房卡直向」
   const code = "console.log('[SETH] inject start');" + window.SETH_ENGINE_SRC + "\n;if(!window.__sethBooted){window.__sethBooted=true;try{engine(" + JSON.stringify(cfg) + ");console.log('[SETH] engine() called');}catch(_e){console.log('[SETH] engine err '+(_e&&_e.message));}}" + "\n;window.__SC_GOOD_ROOMS=" + JSON.stringify(cfg.GOOD_ROOMS||[]) + ";window.__SC_GAME_CODE=" + JSON.stringify(cfg.GAME_CODE||'') + ";" + SCARAB_OVERLAY_SRC + SCARAB_IOS_GAME_FIX_SRC + SCARAB_ATG_NO_SWIPE_GUIDE_SRC;
   const tryInject = (u) => {
     L('loadstop url=' + (u || '').slice(0, 70));
@@ -746,7 +773,7 @@ function onPickRoom(c, k) {
   const bn = (BOARD_META[k] && BOARD_META[k].name) || '';
   showConfirm(
     '你選擇的是 : <b style="color:#f0d68a;font-size:19px">#' + String(mnum).padStart(4, '0') + '</b><br>進入此房進行遊戲嗎？',
-    () => { $('err2').textContent = ''; pendingPick = { roomId: c.roomId, machineNum: mnum, board: k, boardName: bn }; $('room').value = mnum; enterGame('pick'); },
+    () => { reserveWebGameTab(); $('err2').textContent = ''; pendingPick = { roomId: c.roomId, machineNum: mnum, board: k, boardName: bn }; $('room').value = mnum; enterGame('pick'); },
     '確認進入'
   );
 }
@@ -848,8 +875,9 @@ async function selectScarabGame(game){
   if(isRSG(game)){
     const item=(SCARAB_GAMES.RSG||[]).find(x=>x[0]===game)||[game,game];
     showConfirm('即將進入「'+item[1]+'」', async function(){
+      reserveWebGameTab();
       $('gameCenterView').classList.add('hide');
-      try{const gateOk=await rsgGate();if(!gateOk){$('gameCenterView').classList.remove('hide');return;}await enterGameRSG();}catch(e){$('gameCenterView').classList.remove('hide');$('err').textContent=(e&&e.message)||'RSG 進入失敗';setTimeout(()=>window.scrollTo(0,scarabGameCenterScrollY),0);}
+      try{const gateOk=await rsgGate();if(!gateOk){try{if(window.ScarabWebLauncher)window.ScarabWebLauncher.cancelReserve();}catch(_){}$('gameCenterView').classList.remove('hide');return;}await enterGameRSG();}catch(e){try{if(window.ScarabWebLauncher)window.ScarabWebLauncher.cancelReserve();}catch(_){}$('gameCenterView').classList.remove('hide');$('err').textContent=(e&&e.message)||'RSG 進入失敗';setTimeout(()=>window.scrollTo(0,scarabGameCenterScrollY),0);}
     }, '確認進入');
   }else{
     $('gameCenterView').classList.add('hide');lockPortrait();
@@ -871,8 +899,14 @@ async function scarabLogin(){
   try{const base=(loginPlatform==='OFA'?'https://www.ofa1188.net':'https://www.tz6868.cc'),u=$('u').value.trim(),p=$('p').value;if(!u||!p)throw new Error('請輸入 '+loginPlatform+' 帳號與密碼');
   const j=await postJson(base+'/api/v1/login',{username:u,password:p,device_id:deviceId()});const token=j&&j.data&&j.data.token;if(!token)throw new Error((j&&j.message)||'帳號或密碼錯誤');
   session={base,token,account:u,password:p,game:null,platform:loginPlatform};if($('r').checked)localStorage.setItem('seth_creds',JSON.stringify({base,u}));else localStorage.removeItem('seth_creds');
-  const member=await SethEyeAPI.bindLogin(u);if(!member||!member.token)throw new Error('會員資料驗證失敗，請稍後重試');
-  showGameCenter();refreshCoins();}
+  // TZ/OFA 帳密驗證成功就先進遊戲中心。會員後端在背景喚醒／綁定；
+  // Render 冷啟動或短暫故障不再被誤判成「TZ 登入失敗」。受限功能仍會在使用當下做資格檢查。
+  showGameCenter();refreshCoins();
+  window.__scarabBindPromise=Promise.resolve().then(function(){return SethEyeAPI.bindLogin(u);});
+  window.__scarabBindPromise.then(function(member){
+    if(!member||!member.token)L('會員背景綁定未完成，將於使用功能時重試');
+    else refreshCoins();
+  }).catch(function(e){L('會員背景綁定失敗（不阻擋娛樂城登入）',e&&e.message);});}
   catch(e){session=null;$('err').textContent=(e&&e.message)||'連線失敗';}finally{$('loginBtn').disabled=false;$('loginBtn').textContent='登入 聖甲之心助手';}}
 document.querySelectorAll('.gcProvider').forEach(function(b){b.onclick=function(){scarabProvider=b.dataset.p;renderScarabGames();window.scrollTo(0,0);};});
 if($('gcLogout'))$('gcLogout').onclick=function(){session=null;$('gameCenterView').classList.add('hide');$('loginView').classList.remove('hide');};
@@ -882,11 +916,33 @@ document.querySelectorAll('#platformMenu [data-platform]').forEach(function(b){b
 $('loginBtn').onclick = scarabLogin;
 $('p').addEventListener('keydown', e => { if (e.key === 'Enter') scarabLogin(); });
 ['u','p'].forEach(function(id){var el=$(id);if(el)el.addEventListener('input',function(){if($('err'))$('err').textContent='';});});
-$('enterBtn').onclick = () => enterGame();
-if ($('skipBtn')) $('skipBtn').onclick = () => enterGame('manual');
+function reserveWebGameTab(){try{if(window.ScarabWebLauncher&&window.ScarabWebLauncher.isWeb)window.ScarabWebLauncher.reserve();}catch(e){}}
+$('enterBtn').onclick = () => { reserveWebGameTab(); enterGame(); };
+if ($('skipBtn')) $('skipBtn').onclick = () => { reserveWebGameTab(); enterGame('manual'); };
 if ($('refreshBtn')) $('refreshBtn').onclick = async () => { const b = $('refreshBtn'); b.disabled = true; b.textContent = '↻ 刷新中'; try { await loadRecommended(); refreshCoins(); } catch (e) {} b.disabled = false; b.textContent = '↻ 刷新'; };
 // 「自動選房·挑得分率最高空台」按鈕已移除（榜單數據夠強，不需遊戲內得分率自動選）
 $('logoutBtn').onclick = () => { session = null; try { SethEyeAPI.logout(); } catch (e) {} lockPortrait(); const cb = $('coinBal'); if (cb) cb.innerHTML = coinHtml(null, null); $('roomView').classList.add('hide'); $('loginView').classList.remove('hide'); };
+
+// 官方遊戲分頁中的懸浮面板用 postMessage 把「回大廳／回選房／儲值」送回網站。
+window.addEventListener('scarab:web-command', function(e){
+  const u=String(e&&e.detail&&e.detail.url||'');if(!u)return;
+  if(/__thorcmd__\/home/.test(u)){
+    lockPortrait();$('loginView').classList.add('hide');$('roomView').classList.add('hide');$('gameCenterView').classList.remove('hide');scarabProvider='RSG';renderScarabGames();return;
+  }
+  if(/__sethcmd__\/pick/.test(u)){
+    try{const q=new URL(u),ri=q.searchParams.get('ri')||'',mn=q.searchParams.get('mn')||'',c=((_boards&&_boards.composite)||[]).find(x=>String(x.roomId||'')===String(ri)||String(x.machineNum||'')===String(mn));if(c){pendingPick={roomId:c.roomId,machineNum:c.machineNum,board:'composite',boardName:'綜合分數'};$('room').value=String(c.machineNum||mn);}}catch(_){}
+    lockPortrait();$('loginView').classList.add('hide');$('gameCenterView').classList.add('hide');$('roomView').classList.remove('hide');$('err2').textContent='已帶回推薦機台，請確認後再進入。';return;
+  }
+  if(/__sethcmd__\/rooms/.test(u)){
+    lockPortrait();$('loginView').classList.add('hide');$('gameCenterView').classList.add('hide');$('roomView').classList.remove('hide');loadRecommended();return;
+  }
+  if(/__sethcmd__\/home/.test(u)){
+    lockPortrait();$('loginView').classList.add('hide');$('roomView').classList.add('hide');$('gameCenterView').classList.remove('hide');scarabProvider='ATG';renderScarabGames();return;
+  }
+  if(/__(?:seth|thor)cmd__\/deposit/.test(u)){
+    lockPortrait();openDepositWithLogin();
+  }
+});
 L('app.js 載入完成, cordova=' + (typeof window.cordova) + ' IAB=' + (!!(window.cordova && window.cordova.InAppBrowser)));
 
 try{document.addEventListener('deviceready',function(){lockPortrait();},{once:true});window.addEventListener('load',function(){setTimeout(lockPortrait,120);},{once:true});}catch(e){}
