@@ -2,10 +2,16 @@
   "name": "scarabheart-web-render",
   "version": "2.51.0",
   "private": true,
-  "engines": { "node": ">=20" },
-  "scripts": { "start": "node server.js", "check": "node --check server.js && node --check public/web-iab-bridge.js && node --check public/app.js" },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "check": "node --check server.js && node --check public/web-iab-bridge.js && node --check public/app.js"
+  },
   "dependencies": {
     "express": "4.21.2",
-    "http-proxy-middleware": "3.0.5"
+    "https-proxy-agent": "7.0.6",
+    "ws": "8.18.3"
   }
 }

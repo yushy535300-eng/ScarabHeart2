@@ -105,8 +105,6 @@
   .sc-carousel .cnt{ position:absolute; top:8px; right:10px; background:rgba(0,0,0,.5); color:#e8c878; font-size:11px; padding:2px 8px; border-radius:10px; }
   .sc-foot{ padding:16px 22px 20px; text-align:center; border-top:1px solid rgba(122,92,42,.35); }
   .sc-foot p{ font-size:13px; color:#9c8a66; margin-bottom:10px; }
-  .sc-line-btn{ display:inline-block; padding:11px 30px; border-radius:12px; font-size:15px; font-weight:800;
-    background:linear-gradient(180deg,#06C755,#04a544); color:#fff; text-decoration:none; }
   .sc-loading{ padding:40px 22px; text-align:center; color:#9c8a66; font-size:14px; }
 
 /* v1.9 bottom utility cards + local guide surfaces */
@@ -357,7 +355,7 @@ conic-gradient(from 0deg,transparent 0 8%,rgba(223,182,80,.13) 8.5% 9%,transpare
 #loginView .login-links{display:grid!important;grid-template-columns:repeat(3,1fr)!important;gap:9px!important;margin:8px 0 0!important;color:#e9c86f!important}
 #loginView .login-links i{display:none!important}
 #loginView .login-links span{min-height:46px!important;display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;gap:1px!important;border:1px solid rgba(229,189,86,.42)!important;border-radius:8px!important;background:linear-gradient(180deg,rgba(5,31,55,.78),rgba(2,15,28,.84))!important;font-size:9px!important;letter-spacing:.5px!important;box-shadow:inset 0 0 18px rgba(24,139,215,.05)!important}
-#loginView .login-links span:nth-of-type(1):before{content:"LINE";font-size:7px;color:#f3da91;border:1px solid #d7b35d;border-radius:999px;padding:0 4px;margin-bottom:2px}
+#loginView .login-links span:nth-of-type(1):before{content:"";font-size:7px;color:#f3da91;border:1px solid #d7b35d;border-radius:999px;padding:0 4px;margin-bottom:2px}
 #loginView .login-links span:nth-of-type(2):before{content:"▤";font-size:15px;line-height:15px;color:#f0cf73}
 #loginView .login-links span:nth-of-type(3):before{content:"▥";font-size:15px;line-height:15px;color:#f0cf73}
 #loginView .login-secure{text-align:center!important;margin-top:8px!important;color:#54748c!important;font-size:6.7px!important;letter-spacing:1.45px!important}
@@ -755,12 +753,11 @@ body:not(:has(#loginView.hide)){background:#020914!important;display:block!impor
   </div>
 
 <div class="info-view hide" id="usageView"><div class="info-shell"><div class="info-head"><button class="info-back" data-close-info>‹</button><div><h2>使用說明</h2><div class="info-sub">SCARAB HEART · QUICK START</div></div></div><div class="info-step"><b>STEP 01｜登入助手</b><p>輸入帳號與密碼，可選擇記住帳號，再點擊「登入 聖甲之心助手」。</p></div><div class="info-step"><b>STEP 02｜選擇遊戲</b><p>登入後進入遊戲中心，選擇遊戲來源，再選擇要進入的電子遊戲。</p></div><div class="info-step"><b>STEP 03｜機台分析</b><p>選擇支援的遊戲後進入機台分析，查看目前機台／房間資訊，再選擇想進入的房間。</p></div><div class="info-step"><b>STEP 04｜確認進入</b><p>確認目前選擇的遊戲與房間資料，再進入遊戲。</p></div><div class="info-step"><b>STEP 05｜遊戲內輔助</b><p>進入遊戲後使用既有輔助面板，可操作 AUTO、速度、劇透分數等現有功能。</p></div><div class="info-step"><b>STEP 06｜離開遊戲</b><p>退出遊戲後返回遊戲中心，可重新選擇遊戲來源或其他遊戲。</p></div><div class="info-note">操作提醒：首次使用建議先從正常速度開始；遊戲載入期間避免連續重複點擊；切換遊戲時先返回遊戲中心再重新選擇。</div></div></div>
-<div class="info-view hide" id="featureView"><div class="info-shell"><div class="info-head"><button class="info-back" data-close-info>‹</button><div><h2>功能介紹</h2><div class="info-sub">SCARAB HEART · SYSTEM FEATURES</div></div></div><div class="info-feature"><b>遊戲支援</b><p>支援程式目前提供的電子遊戲，可從遊戲中心直接選擇並進入。</p></div><div class="info-feature"><b>遊戲來源支援</b><p>依不同遊戲來源自動進入對應流程，不將特定遊戲商作為主要分類說明。</p></div><div class="info-feature"><b>機台分析</b><p>選擇遊戲後進入機台分析流程，整理目前可用的機台／房間資訊。</p></div><div class="info-feature"><b>智能選房</b><p>依支援遊戲提供選房與進入確認。</p></div><div class="info-feature"><b>遊戲確認</b><p>進入遊戲前顯示目前選擇資訊，降低選錯遊戲或房間的情況。</p></div><div class="info-feature"><b>遊戲內輔助</b><p>保留既有懸浮輔助工具，可使用 AUTO、速度控制、劇透分數等現有功能。</p></div><div class="info-feature"><b>速度控制</b><p>提供 1X / 2X / 4X / 8X / 16X / MAX；MAX 代表程式目前可執行的最快穩定速度。</p></div><div class="info-feature"><b>AUTO 控制</b><p>由遊戲內輔助面板控制自動功能 START／STOP。</p></div><div class="info-feature"><b>劇透分數</b><p>顯示目前程式取得的劇透分數資訊。</p></div><div class="info-note">所有分析資訊僅作為輔助顯示，實際遊戲結果以遊戲平台為準。</div></div></div>
-  <script>window.AGENT_MODE=true;/* ⚠️2026-08-15臨時測試版:用OFA測、避開儲值彈窗。測完務必移除此行還原正式版 */</script>
+<div class="info-view hide" id="featureView"><div class="info-shell"><div class="info-head"><button class="info-back" data-close-info>‹</button><div><h2>功能介紹</h2><div class="info-sub">SCARAB HEART · SYSTEM FEATURES</div></div></div><div class="info-feature"><b>遊戲支援</b><p>支援程式目前提供的電子遊戲，可從遊戲中心直接選擇並進入。</p></div><div class="info-feature"><b>遊戲來源支援</b><p>依不同遊戲來源自動進入對應流程，不將特定遊戲商作為主要分類說明。</p></div><div class="info-feature"><b>機台分析</b><p>選擇遊戲後進入機台分析流程，整理目前可用的機台／房間資訊。</p></div><div class="info-feature"><b>智能選房</b><p>依支援遊戲提供選房與進入確認。</p></div><div class="info-feature"><b>遊戲確認</b><p>進入遊戲前顯示目前選擇資訊，降低選錯遊戲或房間的情況。</p></div><div class="info-feature"><b>遊戲內輔助</b><p>保留既有懸浮輔助工具，可使用 AUTO、速度控制、劇透分數等現有功能。</p></div><div class="info-feature"><b>速度控制</b><p>一般支援 1X / 2X / 4X / 8X；指定 ATG 遊戲另提供 16X / MAX。只有引擎接受倍率後才會顯示套用成功。</p></div><div class="info-feature"><b>AUTO 控制</b><p>由遊戲內輔助面板直接呼叫遊戲引擎的 START／STOP。</p></div><div class="info-feature"><b>劇透分數</b><p>只在購買免遊後顯示遊戲伺服器回傳的整輪最終結果，普通旋轉不顯示。</p></div><div class="info-note">所有分析資訊僅作為輔助顯示，實際遊戲結果以遊戲平台為準。</div></div></div>
+  <script>window.AGENT_MODE=false;/* 正式網站：使用真實會員、金幣、通行證與資格 API。 */</script>
   <script>
   (function(){
     var API='https://seth-eye.com/api/copilot/tutorial';
-    var KEY='cpk_f36916e3355b89a0af85111ea0aa208a59b732de68e8b21c';
     var view=document.getElementById('tutorialView'), inner=document.getElementById('scInner'),
         scroll=document.getElementById('tutScroll'), back=document.getElementById('tutBack'), btn=document.getElementById('tutBtn');
     var loaded=false;
@@ -786,7 +783,8 @@ body:not(:has(#loginView.hide)){background:#020914!important;display:block!impor
       scroll.scrollTop=0; window.scrollTo(0,0);
       if(loaded) return;
       var ctrl=new AbortController(), t=setTimeout(function(){ctrl.abort();},8000);
-      fetch(API,{ headers:{'Accept':'application/json','X-Copilot-Key':KEY}, signal:ctrl.signal })
+      var key=(window.SethEyeAPI&&SethEyeAPI.CFG&&SethEyeAPI.CFG.COPILOT_KEY)||'';
+      fetch(API,{ headers:{'Accept':'application/json','X-Copilot-Key':key}, signal:ctrl.signal })
         .then(function(r){ return r.json(); })
         .then(function(d){ clearTimeout(t);
           if(!d||!d.enabled||!d.html){ inner.innerHTML='<div class="sc-loading">教學暫時無法載入，請稍後再試。</div>'; return; }
@@ -804,7 +802,7 @@ body:not(:has(#loginView.hide)){background:#020914!important;display:block!impor
   <script src="seth-eye-api.js"></script>
   <script src="seth-errors.js"></script>
 <script id="royal-login-behavior">(function(){function bind(){var e=document.getElementById('rfEye'),p=document.getElementById('p');if(!e||!p||e.dataset.bound)return;e.dataset.bound='1';e.addEventListener('click',function(){var show=p.type==='password';p.type=show?'text':'password';e.textContent=show?'◉':'◉';e.classList.toggle('on',show);});}if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind);else bind();})();</script>
-<script id="v19-info-behavior">(function(){function q(id){return document.getElementById(id)}function open(id){q('loginView').classList.add('hide');q(id).classList.remove('hide');window.scrollTo(0,0)}function close(){['usageView','featureView'].forEach(function(id){var x=q(id);if(x)x.classList.add('hide')});q('loginView').classList.remove('hide');window.scrollTo(0,0)}document.addEventListener('DOMContentLoaded',function(){var u=q('usageBtn'),f=q('featureBtn'),s=q('statusBtn');if(u)u.onclick=function(){open('usageView')};if(f)f.onclick=function(){open('featureView')};if(s)s.onclick=function(){var e=q('err');if(e)e.textContent='系統已就緒'};document.querySelectorAll('[data-close-info]').forEach(function(b){b.onclick=close})})})();</script>
+<script id="v19-info-behavior">(function(){function q(id){return document.getElementById(id)}function open(id){q('loginView').classList.add('hide');q(id).classList.remove('hide');window.scrollTo(0,0)}function close(){['usageView','featureView'].forEach(function(id){var x=q(id);if(x)x.classList.add('hide')});q('loginView').classList.remove('hide');window.scrollTo(0,0)}document.addEventListener('DOMContentLoaded',function(){var u=q('usageBtn'),f=q('featureBtn'),s=q('statusBtn');if(u)u.onclick=function(){open('usageView')};if(f)f.onclick=function(){open('featureView')};if(s)s.onclick=async function(){var e=q('err');if(e)e.textContent='連線檢查中…';try{var r=await fetch('/healthz',{cache:'no-store'}),j=await r.json();if(!r.ok||!j.ok)throw new Error('health');if(e)e.textContent='系統連線正常 · '+(j.version||'ready')}catch(_){if(e)e.textContent='系統連線異常，請稍後重試'}};document.querySelectorAll('[data-close-info]').forEach(function(b){b.onclick=close})})})();</script>
   <script src="web-iab-bridge.js"></script>
 <script src="app.js"></script>
 
@@ -1127,7 +1125,7 @@ body:not(:has(#loginView.hide)){overflow:hidden!important}
 #loginView #loginBtn{position:absolute!important;left:4.0%!important;top:67.0%!important;width:92%!important;height:20.5%!important;min-height:0!important;margin:0!important;padding:0!important;border:0!important;background:transparent!important;color:transparent!important;text-shadow:none!important;box-shadow:none!important;clip-path:none!important;font-size:0!important;z-index:6!important}
 #loginView #loginBtn .login-arrow{display:none!important}
 #loginView #err{position:absolute!important;left:8%!important;top:88.4%!important;width:84%!important;margin:0!important;text-align:center!important;color:#ff7f7f!important;font-size:10px!important;z-index:8!important}
-/* Replace the artwork's old LINE / status cards with the requested three functional cards. */
+/* Replace the artwork's old utility cards with the requested three functional cards. */
 #loginView .login-links{position:absolute!important;left:13.4%!important;top:75.9%!important;width:73.2%!important;height:10.7%!important;margin:0!important;padding:0!important;display:grid!important;grid-template-columns:repeat(3,1fr)!important;gap:4.5%!important;z-index:7!important}
 #loginView .login-links button{width:100%!important;height:100%!important;min-height:0!important;margin:0!important;padding:8% 3%!important;border:1px solid rgba(239,199,100,.78)!important;border-radius:0!important;background:linear-gradient(180deg,rgba(5,28,49,.995),rgba(2,13,25,.995))!important;color:#f4d57b!important;clip-path:polygon(10% 0,90% 0,100% 13%,100% 87%,90% 100%,10% 100%,0 87%,0 13%)!important;box-shadow:inset 0 0 18px rgba(29,147,216,.13)!important;display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;gap:2px!important}
 #loginView .login-links button b{font-size:clamp(17px,4vw,23px)!important;line-height:1!important;color:#f5d16d!important}#loginView .login-links button strong{font-size:clamp(9px,2.6vw,13px)!important;line-height:1.15!important;letter-spacing:.4px!important;white-space:nowrap!important}#loginView .login-links button small{font-size:clamp(7px,1.8vw,9px)!important;line-height:1.1!important;color:#9db1c0!important;white-space:nowrap!important}
@@ -1340,4 +1338,3 @@ html,body{overflow-x:hidden!important}
 #gameCenterView .scgc-online{font-size:clamp(8px,2.4vw,10px)!important;padding-left:clamp(6px,2vw,9px)!important;padding-right:clamp(6px,2vw,9px)!important}
 @media(max-width:360px){#gameCenterView .scgc-head{gap:4px!important}#gameCenterView .scgc-head>div:first-child{gap:6px!important}#gameCenterView .scgc-head img{width:40px!important;height:40px!important}#gameCenterView .gc-status{gap:3px!important}}
 </style>
-<link rel="stylesheet" href="desktop-v248.css">

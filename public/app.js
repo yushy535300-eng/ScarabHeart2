@@ -3,7 +3,7 @@
 const $ = id => document.getElementById(id);
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
 const L = (...a) => { try { console.log('[SETH]', ...a); } catch (e) {} };
-window.SETH_APP_VER = 'v2.51-web-test';
+window.SETH_APP_VER = 'v2.51-real-engine';
 // 低調版本號填入登入頁(需提醒用戶才會注意；用戶截圖回報時帶上版本→我們知道他裝的是不是最新)
 try { document.addEventListener('DOMContentLoaded', function () { document.querySelectorAll('.seth-ver').forEach(function (el) { el.textContent = window.SETH_APP_VER; }); }); } catch (e) {}
 let session = null;
@@ -91,6 +91,14 @@ function directGameUrl(gt, code) {
 
 // ★登入頁公告：獨立載入、逐欄位判空、圖片載入失敗自動隱藏。整段 try/catch 包死——
 //   公告有任何狀況（抓不到/欄位缺/圖裂）都只是「不顯示那部分」，登入功能永遠不受影響。
+function safeAnnouncementUrl(raw) {
+  try {
+    const u = new URL(String(raw || '').trim());
+    const h = u.hostname.toLowerCase();
+    if (u.protocol !== 'https:' || h === 'lin.ee' || h.endsWith('.lin.ee') || h === 'line.me' || h.endsWith('.line.me') || h === 'line-apps.com' || h.endsWith('.line-apps.com')) return '';
+    return u.href;
+  } catch (_) { return ''; }
+}
 async function loadAnnouncement() {
   try {
     if (!window.SethEyeAPI || !SethEyeAPI.announcement) return;
@@ -104,23 +112,23 @@ async function loadAnnouncement() {
     // 按鈕（要有文字 + https 連結才顯示）
     const btn = $('announceBtn');
     if (btn) {
-      const bt = (a.buttonText || '').trim(), bu = (a.buttonUrl || '').trim();
-      if (bt && /^https:\/\//i.test(bu)) { btn.textContent = bt; btn.href = bu; btn.classList.remove('hide'); }
+      const bt = (a.buttonText || '').trim(), bu = safeAnnouncementUrl(a.buttonUrl);
+      if (bt && bu) { btn.textContent = bt; btn.href = bu; btn.classList.remove('hide'); }
       else btn.classList.add('hide');
     }
     // 圖片（載入成功才顯示；裂圖 onerror 自動隱藏，不留破圖）
     const img = $('announceImg');
     if (img) {
-      const url = (a.imageUrl || '').trim();
-      if (url && /^https:\/\//i.test(url)) {
+      const url = safeAnnouncementUrl(a.imageUrl);
+      if (url) {
         // ★圖片 onload 是非同步的：純圖片公告(title/text 空)時，下面 hasContent 檢查會在圖載完前就跑→
         //   公告區 box 被判 false 藏起來→圖明明載好卻看不到(2026-08-04 修)。onload 時一併顯示 box。
         img.onload = function () { img.classList.remove('hide'); if (box) box.classList.remove('hide'); };
         img.onerror = function () { img.classList.add('hide'); L('公告圖載入失敗、已隱藏'); };
         img.src = url;
         // ★imageLink 有值 → 整張圖可點、開該連結（圖本身當 CTA）；無值則純圖片不可點
-        const link = (a.imageLink || '').trim();
-        if (link && /^https:\/\//i.test(link)) {
+        const link = safeAnnouncementUrl(a.imageLink);
+        if (link) {
           img.style.cursor = 'pointer';
           img.onclick = function () { try { window.open(link, '_system'); } catch (e) { try { window.open(link, '_blank'); } catch (_) {} } };
         } else { img.style.cursor = ''; img.onclick = null; }
@@ -133,36 +141,34 @@ async function loadAnnouncement() {
 }
 try { loadAnnouncement(); } catch (e) {}
 
-const SETH_LINE = '';
-window.SETH_LINE = '';
 // 錯誤顯示：白話訊息 + 可點診斷碼(開錯誤記錄卡)；ctx 帶帳號/娛樂城/遊戲
 function errCtx() { return { account: (session && session.account) || ($('u') && $('u').value.trim()) || '', base: ($('base') && $('base').value) || '', game: ($('game') && $('game').value) || '' }; }
 function showErrInto(elId, info) { const el = $(elId); if (!el || !info) return; el.innerHTML = '<span style="color:#ff8c8c">' + info.human + '</span> <a href="#" onclick="SethErr.showLog();return false;" style="color:#9c8a66;text-decoration:underline;font-size:12px;white-space:nowrap">診斷碼 ' + info.code + '</a>'; }
 
 // ★ 使用資格兩關（按「進房」時打）：①聖甲之心助手會員登入 — 用娛樂城同一組帳密自動登入(前端已保證兩邊密碼一致、不另跳窗)
-//   ②eligibility 即時檢查。任一關失敗 → 跳 LINE 彈窗連客服。
+//   ②eligibility 即時檢查。任一關失敗 → 顯示純站內訊息，不連到外部聯繫頁。
 async function memberGate() {
   if (!SethEyeAPI.token) {
     let j; try { j = await SethEyeAPI.login(session.account, session.password); } catch (e) { j = null; }
-    if (!j || !j.token) { showLineDialog((j && j.message) || '無法驗證聖甲之心資格'); return false; }
+    if (!j || !j.token) { showMessageDialog((j && j.message) || '無法驗證聖甲之心資格'); return false; }
   }
   let el; try { el = await SethEyeAPI.eligibility(); } catch (e) { el = null; }
-  if (!el || !el.eligible) { showLineDialog('請聯繫聖甲之心客服開通功能', (el && el.lineUrl) || SETH_LINE); return false; }
+  if (!el || !el.eligible) { showMessageDialog('此帳號目前無使用資格\n請完成轉線後再重新登入。'); return false; }
   refreshCoins();   // 順便更新選房頁金幣/銀幣餘額
   return true;
 }
 
 // 單純訊息彈窗；Web 公開版不放任何聯繫方式。
-function showLineDialog(message, lineUrl) {
+function showMessageDialog(message) {
   const old = document.getElementById('cpModal'); if (old) old.remove();
   const mask = document.createElement('div'); mask.id = 'cpModal';
   mask.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.62);display:flex;align-items:center;justify-content:center;z-index:9999;padding:26px';
   const box = document.createElement('div'); box.style.cssText = 'background:#1a140d;border:1px solid #6b5630;border-radius:16px;padding:24px 20px 18px;max-width:330px;width:100%;text-align:center;box-shadow:0 14px 44px rgba(0,0,0,.55)';
-  box.innerHTML = '<div style="font-size:15px;color:#f5e6c8;line-height:1.85;margin-bottom:18px;word-break:keep-all">' + message + '</div>';
+  const messageEl = document.createElement('div'); messageEl.textContent = String(message || ''); messageEl.style.cssText = 'font-size:15px;color:#f5e6c8;line-height:1.85;margin-bottom:18px;word-break:keep-all;white-space:pre-line';
   const row = document.createElement('div'); row.style.cssText = 'display:flex;gap:10px';
   const close = document.createElement('button'); close.textContent = '關閉'; close.style.cssText = 'flex:1;min-height:46px;border:1px solid #5a4a2a;border-radius:11px;background:#2a2018;color:#c9b890;font-size:15px;font-weight:700';
   close.onclick = () => mask.remove();
-  row.appendChild(close); box.appendChild(row); mask.appendChild(box); document.body.appendChild(mask);
+  row.appendChild(close); box.appendChild(messageEl); box.appendChild(row); mask.appendChild(box); document.body.appendChild(mask);
 }
 
 // 更新選房頁金幣/銀幣餘額（會員登入後 / 買通行證後）
@@ -195,8 +201,8 @@ async function login() {
     const j = await postJson(base + '/api/v1/login', { username: u, password: p, device_id: deviceId() });
     const token = j && j.data && j.data.token;
     if (!token) {
-      // ②-b 娛樂城登入失敗（金盈匯密碼錯）→ 外掛自己跳「金盈匯密碼錯誤」+ LINE（OFA 測試入口走一般錯誤）
-      if (/gw1688/.test(base)) { $('loginBtn').disabled = false; $('loginBtn').textContent = '登入'; showLineDialog('金盈匯密碼錯誤，請聯繫聖甲之心客服', SETH_LINE); return; }
+      // ②-b 娛樂城登入失敗（金盈匯密碼錯）→ 顯示站內錯誤訊息（OFA 測試入口走一般錯誤）
+      if (/gw1688/.test(base)) { $('loginBtn').disabled = false; $('loginBtn').textContent = '登入'; showMessageDialog('金盈匯密碼錯誤，請重新確認'); return; }
       throw new Error((j && j.message) || '帳號或密碼錯誤');
     }
     session = { base, token, account: u, password: p, game: $('game').value };   // account/password=金盈匯帳密(聖甲之心助手會員登入同帳密)
@@ -209,7 +215,7 @@ async function login() {
     if (isRSG(session.game)) {
       L('RSG 分流：game=' + session.game + ' gameId=' + rsgGameId(session.game) + ' → 資格閘→直接進遊戲');
       // ★雷神資格閘(Phase 3)：雷神引擎沒有引擎內資格檢查(賽特是引擎內做)→進場前在 app.js 擋。
-      //   ①聖甲之心助手會員登入(同帳密) ②eligibility 帶 game=thor 讓後端分辨。任一關失敗→跳 LINE 客服、不進遊戲。
+      //   ①聖甲之心助手會員登入(同帳密) ②eligibility 帶 game=thor 讓後端分辨。任一關失敗→站內提示、不進遊戲。
       const gateOk = await rsgGate();
       if (gateOk) { try { await enterGameRSG(); } catch (e) { L('RSG 進場失敗', e && e.message); showErrInto('err', window.SethErr ? SethErr.handle('ENTER', e, errCtx()) : { human: (e.message || '進入失敗'), code: '-' }); } }
     } else {
@@ -238,7 +244,7 @@ host.innerHTML='\
     <button data-tab="free" aria-label="free"><span class="shIcon"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="m16 4 10 9-10 15L6 13z"/><path d="M6 13h20"/><path d="m11 13 5-9 5 9"/><path d="m11 13 5 15 5-15"/></svg></span></button>\
     <button data-tab="room" aria-label="room"><span class="shIcon"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 13 16 5l11 8"/><path d="M8 12v14h16V12"/><path d="M13 26v-8h6v8"/><path d="M3.5 20h5"/><path d="m6 17-3 3 3 3"/></svg></span></button>\
   </div>\
-  <div class="scPane scSpeedPane" data-pane="speed"><div class="scTitle">速度控制</div><div class="scGrid" id="scSpeedGrid"><button data-sp="1" class="on">1X</button><button data-sp="2">2X</button><button data-sp="4">4X</button><button data-sp="8">8X</button><button data-sp="16">16X</button><button data-sp="max">MAX</button></div></div>\
+  <div class="scPane scSpeedPane" data-pane="speed"><div class="scTitle">速度控制</div><div class="scGrid" id="scSpeedGrid"><button data-sp="1" class="on">1X</button><button data-sp="2">2X</button><button data-sp="4">4X</button><button data-sp="8">8X</button><button data-sp="16">16X</button><button data-sp="max">MAX</button></div><div id="scSpeedState" class="scEngineState">偵測遊戲引擎中…</div></div>\
   <div class="scPane" data-pane="guard">\
     <div class="scPaneHead"><div><b>停利停損</b><small>達到條件自動停止</small></div><button id="scGuard" class="scToggle">OFF</button></div>\
     <div class="scInfo"><span>本場輸贏</span><b id="scGuardPnl">+0.00</b></div>\
@@ -252,7 +258,8 @@ host.innerHTML='\
   </div>\
   <div class="scPane" data-pane="free">\
     <div class="scPaneHead"><div><b>FREE 自動</b><small>自動開始與跳過</small></div><button id="scFree" class="scToggle">OFF</button></div>\
-    <div class="scPaneHead"><div><b>劇透分數</b><small>僅伺服器已有結果時顯示</small></div><button id="scSpoil" class="scToggle">OFF</button></div>\
+    <div class="scPaneHead"><div><b>劇透分數</b><small>只顯示購買免遊後的伺服器結果</small></div><button id="scSpoil" class="scToggle">OFF</button></div>\
+    <div id="scSpoilerResult" class="scSpoilerResult"><small>本輪免遊最終結果</small><b>等待購買免遊</b><span></span></div>\
   </div>\
   <div class="scPane" data-pane="room"><div class="scTitle">機台控制</div><button id="scRoom" class="scSub">重新選擇機台</button><button id="scHome" class="scSub">返回遊戲中心</button></div>\
 </div>';
@@ -272,6 +279,7 @@ var st=document.createElement('style');st.textContent='\
 #scarab-heart-ui .scGrid{grid-template-columns:repeat(2,1fr)!important}\
 .scPrimary,.scSub,.scRow button,.scGrid button{width:100%;min-height:40px;border-radius:12px;border:1px solid #294a62;background:#081725;color:#dff4ff;font-weight:800;margin:0}.scSub{margin-top:7px}.scGrid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}.scGrid button.on{background:linear-gradient(135deg,#54e7ff,#6079ff);color:#03111d;border-color:transparent}.scInfo{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 3px;border-bottom:1px solid #173247;font-size:12px}.scInfo span{color:#7895aa}.scInfo b{font-size:17px;color:#f2fbff}.scToggle{min-width:62px;height:34px;min-height:0;margin:0;border-radius:999px;border:1px solid #3b5365;background:#111b24;color:#9aabb7;font-weight:900;box-shadow:none}.scToggle.on{background:linear-gradient(135deg,#178dff,#38c8ff);color:#fff;border-color:#65d8ff;box-shadow:0 0 12px rgba(36,174,255,.38)}#scPnl,#scGuardPnl{white-space:nowrap!important;overflow:visible!important;text-overflow:clip!important}#scPnl{color:#eefaff!important}.scPaneHead>div>b{color:#edf7ff!important}.scPaneHead>div>small{color:#6f8ca1!important}.scInfo>span{color:#7895aa!important}\
 .scGoodPane{width:268px!important;padding:11px!important}.scGoodRooms{margin-top:5px}.scGoodRow{padding:8px 2px;border-bottom:1px solid #173247}.scGoodTop{display:flex;align-items:center;gap:6px;font-size:11px}.scGoodTop b{font-size:12px;color:#f3fbff}.scGoodTop .rtp{margin-left:auto;color:#65dcff;font-weight:900}.scGoodSub{display:flex;align-items:center;gap:5px;margin-top:4px;color:#7f9caf;font-size:9px}.scGoodSub button{margin-left:auto;width:auto!important;min-height:26px!important;padding:0 10px;border-radius:8px;border:1px solid #3b6078;background:#0b2132;color:#dff7ff;font-weight:900}.scGoodEmpty{padding:14px 4px;text-align:center;color:#7895aa;font-size:10px}.scField{display:block;margin-top:10px}.scField span{display:block;color:#7d99ad;font-size:10px;margin:0 0 5px 2px}.scField input{width:100%;height:44px;border-radius:11px;border:1px solid #294c64;background:#06131f;color:#f4fbff;padding:0 12px;font-size:17px}.scRow{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:9px}.scSymbols{margin-top:8px}.scSym{display:grid;grid-template-columns:34px 1fr 34px 34px;align-items:center;gap:6px;padding:5px 0}.scSym .ico{width:32px;height:32px;border-radius:9px;background:#091b2b;border:1px solid #294a62;display:flex;align-items:center;justify-content:center;font-size:9px;color:#8db0c7}.scSym b{text-align:center}.scSym button{height:32px;min-height:0;margin:0;border-radius:8px;border:1px solid #294a62;background:#081725;color:#d7efff;font-weight:900}\
+.scEngineState{margin-top:9px;padding:7px 9px;border:1px solid #294a62;border-radius:9px;background:#06131f;color:#7f9caf;font-size:9px;line-height:1.35}.scEngineState.ok{border-color:#287e6a;color:#66e8b5}.scEngineState.err{border-color:#7b3940;color:#ff8a93}.scSpoilerResult{margin-top:10px;padding:11px;border:1px solid #294a62;border-radius:12px;background:#06131f;text-align:center}.scSpoilerResult small{display:block;color:#7895aa;font-size:9px}.scSpoilerResult b{display:block;margin-top:5px;color:#8aa0af;font-size:14px}.scSpoilerResult span{display:block;margin-top:3px;color:#7f9caf;font-size:9px}.scSpoilerResult.ready{border-color:#4adfff;box-shadow:0 0 15px rgba(61,211,255,.12)}.scSpoilerResult.ready b{color:#ff6565;font-size:26px;text-shadow:0 0 12px rgba(255,72,72,.22)}\
 #shToast{display:none!important;position:fixed;z-index:2147483647;min-width:230px;max-width:340px;padding:11px 16px 13px;border-radius:18px;background:linear-gradient(145deg,rgba(4,16,29,.98),rgba(2,7,15,.99));border:1px solid #4adfff;box-shadow:0 22px 65px #000d,0 0 24px rgba(61,211,255,.13);color:#eefaff;text-align:center;clip-path:polygon(12px 0,100% 0,100% calc(100% - 12px),calc(100% - 12px) 100%,0 100%,0 12px)}#shToast.show{display:block}#shToast .t{font-size:10px;letter-spacing:1.2px;color:#83a5b9}#shToast .score{font-size:31px;line-height:1.05;font-weight:1000;color:#ff3b3b;text-shadow:0 0 14px rgba(255,59,59,.32);margin-top:5px}#shToast .score small{font-size:13px;margin-left:3px;color:#ff6b6b}#shToast .fg{font-size:11px;color:#d5e8f3;margin-top:5px}\
 .shLegacyNotice{background:linear-gradient(145deg,rgba(4,17,31,.975),rgba(2,8,16,.99))!important;border:1px solid #48dfff!important;border-radius:18px!important;box-shadow:0 24px 70px #000d,0 0 26px rgba(57,205,255,.12)!important;color:#eefaff!important;backdrop-filter:blur(10px)!important;clip-path:polygon(14px 0,100% 0,100% calc(100% - 14px),calc(100% - 14px) 100%,0 100%,0 14px)!important}.shLegacyNotice *{border-color:#29506a!important}.shLegacyNotice button{background:linear-gradient(135deg,#55e7ff,#6177ff)!important;color:#03111e!important;border:0!important;border-radius:12px!important;font-weight:900!important}.shLegacyNotice button+button{background:#071522!important;color:#cce5f4!important;border:1px solid #2b4c63!important}.shLegacyNotice .shTarget,.shLegacyNotice strong,.shLegacyNotice b{color:#f3fbff!important}.shLegacyNotice.shFree *{font-size:12px!important}.shLegacyNotice.shFree b,.shLegacyNotice.shFree strong{color:inherit!important;font-size:inherit!important}.shLegacyNotice.shFree .score{color:#ff3b3b!important;font-size:24px!important}.shLegacyNotice.shFree .score small{color:#ff6b6b!important}\
 \
@@ -291,7 +299,9 @@ function eng(){return window.__sethEngine||window.__thorEngine||null}function pa
 function legacyRoot(){return document.getElementById('seth-ui')||document.querySelector('.seth-ui')}
 function legacyClick(re){var r=legacyRoot();if(!r)return false;var els=[].slice.call(r.querySelectorAll('button,div,span'));var x=els.find(function(n){return re.test((n.textContent||'').trim())});if(x){try{x.click();return true}catch(e){}}return false}
 function setToggle(btn,on){btn.classList.toggle('on',on);btn.textContent=on?'ON':'OFF'}
-function toast(score,fg){var t=document.getElementById('shToast');if(!t){t=document.createElement('div');t.id='shToast';t.innerHTML='<div class="t">本輪免遊預計開</div><div class="score"></div><div class="fg"></div>';document.body.appendChild(t)}var n=Number(score),shown=isFinite(n)?(Math.round(n*100)/100).toLocaleString():String(score);t.querySelector('.score').innerHTML=shown+'<small>分</small>';t.querySelector('.fg').textContent=fg?String(fg)+' 次免遊':'';var r=document.getElementById('scarab-heart-ui').getBoundingClientRect();var tw=Math.min(340,Math.max(230,t.offsetWidth||260));var x=Math.min(innerWidth-tw-10,Math.max(10,r.right+10));t.style.left=x+'px';t.style.top=Math.max(10,Math.min(innerHeight-120,r.top))+'px';t.classList.add('show');clearTimeout(toast._t);toast._shownAt=Date.now();toast._t=setTimeout(function(){t.classList.remove('show')},8000)}
+function goCmd(url){if(window.__SCARAB_PROXY_PREFIX&&window.parent&&window.parent!==window){try{window.parent.postMessage({__scarabCommand:true,url:url},location.origin);return}catch(e){}}location.href=url}
+function toast(score,fg){var t=document.getElementById('scSpoilerResult');if(!t)return;var n=Number(score),shown=isFinite(n)?(Math.round(n*100)/100).toLocaleString():String(score);t.classList.add('ready');t.querySelector('b').textContent=shown+' 分';t.querySelector('span').textContent=fg?String(fg)+' 次免遊｜伺服器已回傳':'伺服器已回傳'}
+function resetSpoilerResult(){var t=document.getElementById('scSpoilerResult');if(!t)return;t.classList.remove('ready');t.querySelector('b').textContent='等待購買免遊';t.querySelector('span').textContent='';}
 function brandTree(root){if(!root)return;try{var w=document.createTreeWalker(root,NodeFilter.SHOW_TEXT),n,a=[];while(n=w.nextNode())a.push(n);a.forEach(function(x){var v=x.nodeValue||'',nv=v.replace(/聖甲之心助手助手/g,'聖甲之心助手').replace(/聖甲之心助手/g,'聖甲之心助手').replace(/聖甲之心助手/g,'聖甲之心助手').replace(/聖甲之心助手/g,'聖甲之心助手').replace(/聖甲之心助手/g,'聖甲之心助手');nv=nv.replace(/⚙\s*/g,'').replace(/正在帶你進房，?定位機台中，?請稍後…?/g,'定位機台中…').replace(/自動翻頁定位中，?請稍後…?/g,'自動搜尋機台中…').replace(/你挑選的是\s*#(\d+)/g,'機台 #$1');if(nv!==v)x.nodeValue=nv})}catch(e){}}
 var noticeRe=/(機台\s*#|定位機台|自動搜尋機台|自動翻頁|這房有人了|幫你換|已進入遊戲\s*#|本輪免遊預計開|免遊預計|自動運作中|定位\s*#)/;
 function isGameSurfaceNode(el){if(!el||el.nodeType!==1)return false;try{if(el.id==='GameWrapper'||el.id==='GameDiv'||el.id==='Cocos3dGameContainer'||el.id==='GameCanvas')return true;if(el.closest&&el.closest('#GameWrapper,#GameDiv,#Cocos3dGameContainer'))return true;if(el.querySelector&&el.querySelector('#GameCanvas,#GameWrapper,#Cocos3dGameContainer'))return true;var r=el.getBoundingClientRect();if(r.width>=innerWidth*.82&&r.height>=innerHeight*.82)return true;}catch(e){}return false}
@@ -303,27 +313,29 @@ function placePane(p){if(!p)return;var rr=root.getBoundingClientRect();var w=Mat
 document.querySelectorAll('.scNav button').forEach(function(b){b.onclick=function(){var was=b.classList.contains('on');document.querySelectorAll('.scNav button').forEach(function(x){x.classList.remove('on')});document.querySelectorAll('.scPane').forEach(function(x){x.classList.remove('on')});if(!was){b.classList.add('on');var pane=document.querySelector('.scPane[data-pane="'+b.dataset.tab+'"]');if(pane){pane.classList.add('on');placePane(pane)}}}});
 document.addEventListener('pointerdown',function(ev){var pane=document.querySelector('.scPane.on');if(!pane)return;if(root.contains(ev.target))return;pane.classList.remove('on');document.querySelectorAll('.scNav button[data-tab]').forEach(function(x){x.classList.remove('on')});},true);
 window.addEventListener('resize',function(){var p=document.querySelector('.scPane.on');if(p)placePane(p)});
-var __scarabGame=String(window.__SC_GAME_CODE||'');var __scarabSpecialSpeed=/^(golden-seth|egyptian-mythology|tiger-princess)$/.test(__scarabGame);document.querySelectorAll('[data-sp=\"16\"],[data-sp=\"max\"]').forEach(function(x){x.style.display=__scarabSpecialSpeed?'':'none'});var __scarabSpeed='1';function setSpeedVisual(active){var key=typeof active==='string'?active:(active&&active.dataset?active.dataset.sp:'1');__scarabSpeed=key||'1';document.querySelectorAll('[data-sp]').forEach(function(x){var yes=String(x.dataset.sp)===String(__scarabSpeed);x.classList.toggle('on',yes);x.classList.toggle('speedActive',yes);x.setAttribute('aria-pressed',yes?'true':'false');});}setSpeedVisual('1');document.querySelectorAll('[data-sp]').forEach(function(b){b.onclick=function(ev){if(ev){ev.preventDefault();ev.stopPropagation();}var key=b.dataset.sp,v=key==='max'?999:+key,e=eng();try{if(e&&typeof e.setSpeed==='function')e.setSpeed(v);else if(e&&typeof e.setTurbo==='function')e.setTurbo(v>1)}catch(x){}setSpeedVisual(key);setTimeout(function(){setSpeedVisual(key)},0);setTimeout(function(){setSpeedVisual(key)},120);};});
+var __scarabGame=String(window.__SC_GAME_CODE||'');var __scarabSpecialSpeed=/^(golden-seth|egyptian-mythology|tiger-princess)$/.test(__scarabGame);document.querySelectorAll('[data-sp=\"16\"],[data-sp=\"max\"]').forEach(function(x){x.style.display=__scarabSpecialSpeed?'':'none'});var __scarabSpeed='1';function setSpeedVisual(active){var key=typeof active==='string'?active:(active&&active.dataset?active.dataset.sp:'1');__scarabSpeed=key||'1';document.querySelectorAll('[data-sp]').forEach(function(x){var yes=String(x.dataset.sp)===String(__scarabSpeed);x.classList.toggle('on',yes);x.classList.toggle('speedActive',yes);x.setAttribute('aria-pressed',yes?'true':'false');});}function setSpeedState(msg,state){var x=document.getElementById('scSpeedState');if(!x)return;x.textContent=msg;x.classList.toggle('ok',state==='ok');x.classList.toggle('err',state==='err')}function applySpeed(key){var e=eng(),v=key==='max'?999:+key;if(!e){setSpeedState('引擎尚未連線，未套用','err');return false}try{var out;if(typeof e.setSpeed==='function')out=e.setSpeed(v);else if(typeof e.setTurbo==='function'&&v<=2)out=e.setTurbo(v>1);else{setSpeedState('此遊戲引擎不支援這個倍率','err');return false}var actual=Number(e.speed),accepted=out!==false&&(actual===v||(!isFinite(actual)&&out===true));if(!accepted){setSpeedState('遊戲引擎拒絕倍率，未套用','err');return false}setSpeedVisual(key);setSpeedState('引擎已套用 '+(key==='max'?'MAX':key+'X'),'ok');return true}catch(x){setSpeedState('套用失敗：'+(x&&x.message?x.message:'引擎錯誤'),'err');return false}}setSpeedVisual('1');setSpeedState(eng()?'遊戲引擎已連線':'偵測遊戲引擎中…',eng()?'ok':'');document.querySelectorAll('[data-sp]').forEach(function(b){b.onclick=function(ev){if(ev){ev.preventDefault();ev.stopPropagation();}applySpeed(b.dataset.sp);};});setInterval(function(){if(eng()&&document.getElementById('scSpeedState')&&!document.getElementById('scSpeedState').classList.contains('err'))setSpeedState('遊戲引擎已連線','ok')},1000);
 var guard=false,signal=false,free=false,spoil=false,started=false;try{var __gp=pan();if(__gp){__gp.guardOn=false;__gp.tp=0;__gp.sl=0;if(typeof __gp.setThresholds==='function')__gp.setThresholds(0,0);if(typeof __gp.setGuard==='function')__gp.setGuard(false)}}catch(__ge){}setToggle(document.getElementById('scGuard'),false);
-document.getElementById('scStart').onclick=function(ev){if(ev){ev.preventDefault();ev.stopPropagation();}started=!started;var e=eng(),ok=false;try{if(started&&e&&typeof e.startAuto==='function'){e.startAuto();ok=true}else if(!started&&e&&typeof e.stopAuto==='function'){e.stopAuto();ok=true}}catch(x){}if(!ok)ok=legacyClick(started?/^開始$|開始|自動轉開始/:/停止|■ 停/);this.classList.toggle('on',!!started);this.setAttribute('aria-pressed',started?'true':'false');var p=pan();if(p)p.auto=started};
+document.getElementById('scStart').onclick=function(ev){if(ev){ev.preventDefault();ev.stopPropagation();}var want=!started,e=eng(),ok=false;try{if(want&&e&&typeof e.startAuto==='function'){e.startAuto();ok=true}else if(want&&e&&typeof e.startTestLoop==='function'){ok=e.startTestLoop(650)!==false}else if(!want&&e){if(typeof e.stopAuto==='function')e.stopAuto();if(typeof e.stopTestLoop==='function')e.stopTestLoop();ok=typeof e.stopAuto==='function'||typeof e.stopTestLoop==='function'}}catch(x){}if(!ok)ok=legacyClick(want?/^開始$|開始|自動轉開始/:/停止|■ 停/);if(!ok)return;started=want;this.classList.toggle('on',!!started);this.setAttribute('aria-pressed',started?'true':'false');var p=pan();if(p)p.auto=started};
 document.getElementById('scGuard').onclick=function(){guard=!guard;var p=pan(),tp=Math.max(0,+document.getElementById('scTp').value||0),sl=Math.max(0,+document.getElementById('scSl').value||0);if(p){p.guardOn=guard;p.tp=guard?tp:0;p.sl=guard?sl:0;if(typeof p.setThresholds==='function')p.setThresholds(p.tp,p.sl);if(typeof p.setGuard==='function')p.setGuard(guard)}setToggle(this,guard)};
 document.getElementById('scApplyGuard').onclick=function(){var p=pan(),tp=Math.max(0,+document.getElementById('scTp').value||0),sl=Math.max(0,+document.getElementById('scSl').value||0);if(p){p.tp=guard?tp:0;p.sl=guard?sl:0;if(typeof p.setThresholds==='function')p.setThresholds(p.tp,p.sl)}this.textContent='已套用';setTimeout(()=>this.textContent='套用',900)};
-document.getElementById('scResetPnl').onclick=function(){var p=pan();if(p)p.pnlReset=true;legacyClick(/重置本場|↺ 重置/)};
+document.getElementById('scResetPnl').onclick=function(){var e=eng(),p=pan();try{if(e&&typeof e.resetPnl==='function')e.resetPnl()}catch(x){}if(p)p.pnlReset=true;legacyClick(/重置本場|↺ 重置/)};
 function fmtGood(n){n=Number(n);if(!isFinite(n))return '—';var a=Math.abs(n);if(a>=10000)return (n/10000).toFixed(a>=100000?1:2).replace(/\.0+$/,'')+'萬';return Math.round(n).toLocaleString();}
-function buildGoodRooms(){var box=document.getElementById('scGoodRooms');if(!box)return;var e=eng(),rooms=(e&&e.__goodRooms)||window.__SC_GOOD_ROOMS||[];box.innerHTML='';if(!rooms.length){box.innerHTML='<div class="scGoodEmpty">目前沒有可用推薦資料</div>';return;}rooms.slice(0,3).forEach(function(c,i){var rtp=c.rtp!=null?c.rtp:(c.todayRtp!=null?c.todayRtp:'—'),bet=c.bet!=null?c.bet:c.todayBet,raw=c.profit!=null?c.profit:c.todayPnl,pnl=raw==null?null:-(Number(raw)||0),row=document.createElement('div');row.className='scGoodRow';row.innerHTML='<div class="scGoodTop"><span>'+(i===0?'🥇':i===1?'🥈':'🥉')+'</span><b>'+String(c.machineNum||'—').padStart(3,'0')+'房</b><span class="rtp">RTP '+rtp+(rtp==='—'?'':'%')+'</span></div><div class="scGoodSub"><span>下注量 '+fmtGood(bet)+'</span><span>｜前手 '+(pnl==null?'—':((pnl>=0?'+':'')+Math.round(pnl).toLocaleString()))+'</span><button>前往</button></div>';row.querySelector('button').onclick=function(ev){ev.stopPropagation();location.href='https://__sethcmd__/pick?ri='+encodeURIComponent(c.roomId||'')+'&mn='+encodeURIComponent(c.machineNum||'')};box.appendChild(row)});}
+function buildGoodRooms(){var box=document.getElementById('scGoodRooms');if(!box)return;var e=eng(),rooms=(e&&e.__goodRooms)||window.__SC_GOOD_ROOMS||[];box.innerHTML='';if(!rooms.length){box.innerHTML='<div class="scGoodEmpty">目前沒有可用推薦資料</div>';return;}rooms.slice(0,3).forEach(function(c,i){var rtp=c.rtp!=null?c.rtp:(c.todayRtp!=null?c.todayRtp:'—'),bet=c.bet!=null?c.bet:c.todayBet,raw=c.profit!=null?c.profit:c.todayPnl,pnl=raw==null?null:-(Number(raw)||0),row=document.createElement('div');row.className='scGoodRow';row.innerHTML='<div class="scGoodTop"><span>'+(i===0?'🥇':i===1?'🥈':'🥉')+'</span><b>'+String(c.machineNum||'—').padStart(3,'0')+'房</b><span class="rtp">RTP '+rtp+(rtp==='—'?'':'%')+'</span></div><div class="scGoodSub"><span>下注量 '+fmtGood(bet)+'</span><span>｜前手 '+(pnl==null?'—':((pnl>=0?'+':'')+Math.round(pnl).toLocaleString()))+'</span><button>前往</button></div>';row.querySelector('button').onclick=function(ev){ev.stopPropagation();goCmd('https://__sethcmd__/pick?ri='+encodeURIComponent(c.roomId||'')+'&mn='+encodeURIComponent(c.machineNum||''))};box.appendChild(row)});}
 document.getElementById('scRefreshGood').onclick=function(ev){if(ev)ev.stopPropagation();buildGoodRooms();this.textContent='已更新';var b=this;setTimeout(function(){b.textContent='🔍 重新尋找'},700)};
-document.getElementById('scFree').onclick=function(){free=!free;var e=eng(),p=pan();try{if(e&&e.setFreeAuto)e.setFreeAuto(free);if(e&&e.setFreeAutoSkip)e.setFreeAutoSkip(free)}catch(x){}if(p)p.freeAuto=free;setToggle(this,free)};
-document.getElementById('scSpoil').onclick=function(){spoil=!spoil;var e=eng(),p=pan();try{if(e&&typeof e.setFreeSpoiler==='function')e.setFreeSpoiler(spoil);else if(e&&typeof e.setSpoiler==='function')e.setSpoiler(spoil)}catch(x){}if(p)p.spoilerOn=spoil;if(!spoil){__lastSpoilerSig='';__rsgFreeActive=false;__rsgFreeFinal=null;__rsgFreeMaxSpins=0;var t=document.getElementById('shToast');if(t)t.classList.remove('show')}setToggle(this,spoil)};
-document.getElementById('scRoom').onclick=function(){location.href=window.__thorEngine?'https://__thorcmd__/home':'https://__sethcmd__/rooms'};document.getElementById('scHome').onclick=function(){location.href=window.__thorEngine?'https://__thorcmd__/home':'https://__sethcmd__/home'};
+document.getElementById('scFree').onclick=function(){var want=!free,e=eng(),p=pan(),ok=false;try{if(e&&typeof e.setFreeAuto==='function'){e.setFreeAuto(want);ok=true}if(e&&typeof e.setFreeAutoSkip==='function'){e.setFreeAutoSkip(want);ok=true}}catch(x){}if(p){p.freeAuto=want;ok=true}if(!ok)return;free=want;setToggle(this,free)};
+document.getElementById('scSpoil').onclick=function(){var want=!spoil,e=eng(),p=pan(),ok=false;try{if(e&&typeof e.setFreeSpoiler==='function'){e.setFreeSpoiler(want);ok=true}else if(e&&typeof e.setSpoiler==='function'){e.setSpoiler(want);ok=true}}catch(x){}if(p){p.spoilerOn=want;ok=true}if(!ok)return;spoil=want;if(!spoil){__lastSpoilerSig='';__rsgFreeActive=false;__rsgFreeFinal=null;__rsgFreeMaxSpins=0;resetSpoilerResult()}setToggle(this,spoil)};
+document.getElementById('scRoom').onclick=function(){goCmd(window.__thorEngine?'https://__thorcmd__/home':'https://__sethcmd__/rooms')};document.getElementById('scHome').onclick=function(){goCmd(window.__thorEngine?'https://__thorcmd__/home':'https://__sethcmd__/home')};
 buildGoodRooms();
 function __fitNum(el,text,base){if(!el)return;el.textContent=text;el.style.whiteSpace='nowrap';el.style.overflow='visible';el.style.textOverflow='clip';el.style.maxWidth='100%';el.style.minWidth='0';el.style.fontSize=base+'px';el.style.lineHeight='1.05';var parent=el.parentElement,avail=parent?Math.max(36,parent.clientWidth-(el.offsetLeft||0)-4):0,px=base;while(avail>0&&el.scrollWidth>avail&&px>7){px--;el.style.fontSize=px+'px';}}
-var __lastSpoilerSig='',__rsgFreeActive=false,__rsgFreeFinal=null,__rsgFreeMaxSpins=0;setInterval(function(){var e=eng(),p=pan(),r=null,fg=0,pnl=0,isRSG=!!window.__thorEngine;try{if(p&&p.spoilerWin){var q=p.spoilerWin;r=q.totalWin!=null?q.totalWin:(q.totalWinnings!=null?q.totalWinnings:(q.cumWin!=null?q.cumWin:null));fg=q.fg||q.freeGameCount||q.spins||0}else if(isRSG){if(e&&e.spoiler){var q2=e.spoiler,rr=q2.totalWin!=null?q2.totalWin:(q2.totalWinnings!=null?q2.totalWinnings:(q2.cumWin!=null?q2.cumWin:(q2.win!=null?q2.win:null))),ff=Number(q2.fg||q2.freeGameCount||q2.spins||0);__rsgFreeActive=true;__rsgFreeMaxSpins=Math.max(__rsgFreeMaxSpins,isFinite(ff)?ff:0);if(rr!=null&&isFinite(Number(rr)))__rsgFreeFinal={score:Number(rr),fg:__rsgFreeMaxSpins}}else if(__rsgFreeActive){__rsgFreeActive=false;if(__rsgFreeFinal){r=__rsgFreeFinal.score;fg=__rsgFreeFinal.fg}__rsgFreeFinal=null;__rsgFreeMaxSpins=0}}else if(e&&e.spoiler){var q3=e.spoiler;r=q3.totalWin!=null?q3.totalWin:(q3.totalWinnings!=null?q3.totalWinnings:(q3.cumWin!=null?q3.cumWin:(q3.win!=null?q3.win:null)));fg=q3.fg||q3.freeGameCount||q3.spins||0}pnl=(e&&e.pnl!=null)?e.pnl:((p&&p.pnl!=null)?p.pnl:0)}catch(x){}if(spoil&&r!=null&&isFinite(Number(r))){var sig=String(r)+'|'+String(fg);if(sig!==__lastSpoilerSig){__lastSpoilerSig=sig;toast(r,fg)}}if(!spoil){__lastSpoilerSig='';__rsgFreeActive=false;__rsgFreeFinal=null;__rsgFreeMaxSpins=0}var ps=(+pnl||0),txt=(ps>=0?'+':'')+ps.toFixed(2);__fitNum(document.getElementById('scPnl'),txt,11);__fitNum(document.getElementById('scGuardPnl'),txt,17);var old=legacyRoot();if(old){old.style.removeProperty('left');old.style.removeProperty('top');old.style.removeProperty('opacity');old.style.removeProperty('pointer-events')}} ,500);
+var __lastSpoilerSig='',__rsgFreeActive=false,__rsgFreeFinal=null,__rsgFreeMaxSpins=0;setInterval(function(){var e=eng(),p=pan(),r=null,fg=0,pnl=0,isRSG=!!window.__thorEngine;try{if(p&&p.spoilerWin){var q=p.spoilerWin;r=q.totalWin!=null?q.totalWin:(q.totalWinnings!=null?q.totalWinnings:(q.cumWin!=null?q.cumWin:null));fg=q.fg||q.freeGameCount||q.spins||0}else if(isRSG){if(e&&e.spoiler){var q2=e.spoiler,rr=q2.totalWin!=null?q2.totalWin:(q2.totalWinnings!=null?q2.totalWinnings:(q2.cumWin!=null?q2.cumWin:(q2.win!=null?q2.win:null))),ff=Number(q2.fg||q2.freeGameCount||q2.spins||0);__rsgFreeActive=true;__rsgFreeMaxSpins=Math.max(__rsgFreeMaxSpins,isFinite(ff)?ff:0);if(rr!=null&&isFinite(Number(rr))){r=Number(rr);fg=__rsgFreeMaxSpins;__rsgFreeFinal={score:r,fg:fg}}}else if(__rsgFreeActive){__rsgFreeActive=false;if(__rsgFreeFinal){r=__rsgFreeFinal.score;fg=__rsgFreeFinal.fg}__rsgFreeFinal=null;__rsgFreeMaxSpins=0}}else if(e&&e.spoiler){var q3=e.spoiler;r=q3.totalWin!=null?q3.totalWin:(q3.totalWinnings!=null?q3.totalWinnings:(q3.cumWin!=null?q3.cumWin:(q3.win!=null?q3.win:null)));fg=q3.fg||q3.freeGameCount||q3.spins||0}pnl=(e&&e.pnl!=null)?e.pnl:((p&&p.pnl!=null)?p.pnl:0)}catch(x){}if(spoil&&r!=null&&isFinite(Number(r))){var sig=String(r)+'|'+String(fg);if(sig!==__lastSpoilerSig){__lastSpoilerSig=sig;toast(r,fg)}}if(!spoil){__lastSpoilerSig='';__rsgFreeActive=false;__rsgFreeFinal=null;__rsgFreeMaxSpins=0}var ps=(+pnl||0),txt=(ps>=0?'+':'')+ps.toFixed(2);__fitNum(document.getElementById('scPnl'),txt,11);__fitNum(document.getElementById('scGuardPnl'),txt,17);var old=legacyRoot();if(old){old.style.removeProperty('left');old.style.removeProperty('top');old.style.removeProperty('opacity');old.style.removeProperty('pointer-events')}} ,500);
 })();`;
 
 // Web 版：遊戲保持官方直連，APK v2.50 的完整面板掛在外層頁面。
 // 資料/控制只有在取得對應引擎事件時才會生效，不再使用簡化假工具列。
 function mountScarabWebOverlay(gameCode) {
   if (!(window.Capacitor && window.Capacitor.getPlatform && window.Capacitor.getPlatform() === 'web')) return;
+  // 網站版遊戲經同網域代理載入時，面板會直接注入遊戲頁；外層不再建立一份假面板。
+  if (window.__SCARAB_PROXY_MODE) { window.__unmountScarabWebOverlay(); return; }
   try {
     window.__unmountScarabWebOverlay();
     window.__SC_GAME_CODE = String(gameCode || '');
@@ -454,20 +466,20 @@ async function enterGame(mode) {
 }
 
 // ══ 雷神二代（RSG）資格閘 ══════════════════════════════════════════════
-// 雷神引擎無引擎內資格檢查(賽特是引擎內做)→進場前在 app.js 擋。過→true 進遊戲、不過→跳 LINE 客服回 false。
+// 雷神引擎無引擎內資格檢查(賽特是引擎內做)→進場前在 app.js 擋。通過才進遊戲，不通過顯示站內提示。
 async function rsgGate() {
   try {
     // ①聖甲之心助手會員登入(同金盈匯帳密、bindLogin 已在 login() 建帳本)
     if (!SethEyeAPI.token) {
       let j; try { j = await SethEyeAPI.login(session.account, session.password); } catch (e) { j = null; }
-      if (!j || !j.token) { showLineDialog((j && j.message) || '無法驗證聖甲之心資格'); return false; }
+      if (!j || !j.token) { showMessageDialog((j && j.message) || '無法驗證聖甲之心資格'); return false; }
     }
     // ②eligibility 帶 game=thor(後端分辨雷神、查白名單代理線)
     let el; try { el = await SethEyeAPI.eligibility('thor'); } catch (e) { el = null; }
     L('RSG eligibility', JSON.stringify(el));
-    if (!el || !el.eligible) { showLineDialog((el && el.reason) || '請聯繫聖甲之心客服開通功能', (el && el.lineUrl) || SETH_LINE); return false; }
+    if (!el || !el.eligible) { showMessageDialog('此帳號目前無使用資格\n請完成轉線後再重新登入。'); return false; }
     return true;
-  } catch (e) { L('rsgGate err', e && e.message); showLineDialog('資格驗證失敗，請稍後重試'); return false; }
+  } catch (e) { L('rsgGate err', e && e.message); showMessageDialog('資格驗證失敗，請稍後重試'); return false; }
 }
 
 // ══ 雷神二代（RSG）進場鏈 ══════════════════════════════════════════════
@@ -511,15 +523,15 @@ function openGameRSG(lobbyUrl, gameId) {
     "fetch('../Lobby/GetGameURL?k='+sk+'&id=" + gameId + "&lobby=2',{cache:'no-cache'})" +
     ".then(function(r){return r.json();}).then(function(d){" +
     "sessionStorage.setItem('GameWebSession2',d.newsession);localStorage.setItem('backupSession',d.newsession);" +
-    "location.href=location.origin+d.nextpage;}).catch(function(e){});},500);}catch(e){}})();";
+    "var nx=String(d.nextpage||'');location.href=/^https?:/i.test(nx)?('/__game/open?url='+encodeURIComponent(nx)):((window.__SCARAB_PROXY_PREFIX||location.origin)+nx);}).catch(function(e){});},500);}catch(e){}})();";
 
   // 遊戲頁：注入雷神引擎(overlay UI)
   // 帶 SETH_API/KEY/ACCOUNT → 雷神引擎「餘額不足跳存款彈窗」用(同賽特)。
   const cfg = { MUTE: true, DEBUG: true, SPEED: 1, UI: 'none', GAME_ID: String(gameId),
     SETH_API: SethEyeAPI.CFG.API_BASE, SETH_KEY: SethEyeAPI.CFG.COPILOT_KEY, SETH_ACCOUNT: (session && session.account) || '',
-    AGENT_MODE: true };   // ★代理版旗標傳給雷神引擎(不跳儲值彈窗)
+    AGENT_MODE: false };  // 正式模式：雷神引擎使用真實會員與儲值流程
   const RSG_STABILITY_SRC = `;(function(){if(window.__scarabRsgStable)return;window.__scarabRsgStable=1;function wake(){try{window.focus();document.documentElement.style.minHeight='100%';document.body.style.minHeight='100%';window.dispatchEvent(new Event('resize'));}catch(e){}}document.addEventListener('visibilitychange',function(){if(!document.hidden)setTimeout(wake,60)});window.addEventListener('focus',wake);window.addEventListener('pageshow',wake);window.addEventListener('orientationchange',function(){setTimeout(wake,120);setTimeout(wake,420)});setInterval(function(){if(!document.hidden)wake()},4000);})();`;
-  const engineCode = window.THOR_ENGINE_SRC + "\n;if(!window.__thorBooted){window.__thorBooted=true;try{thorEngine(" + JSON.stringify(cfg) + ");console.log('[THOR] engine() called');}catch(_e){console.log('[THOR] engine err '+(_e&&_e.message));}}" + SCARAB_OVERLAY_SRC + SCARAB_IOS_GAME_FIX_SRC + RSG_STABILITY_SRC;
+  const engineCode = window.THOR_ENGINE_SRC + "\n;if(!window.__thorBooted){window.__thorBooted=true;try{thorEngine(" + JSON.stringify(cfg) + ");console.log('[THOR] engine() called');}catch(_e){console.log('[THOR] engine err '+(_e&&_e.message));}}" + "\n;window.__SC_GAME_CODE=" + JSON.stringify('rsg-' + String(gameId)) + ";" + SCARAB_OVERLAY_SRC + SCARAB_IOS_GAME_FIX_SRC + RSG_STABILITY_SRC;
 
   // ★網域不寫死(2026-08-03 真機實證)：實際遊戲網域是 gameweb2.rsgaming955.com(不是交接文件的 royalgaming777.com、RSG 會換網域)。
   //   改認路徑 /Web/SlotGame\d + /Lobby，不綁特定網域→換網域也不會漏注入。
@@ -595,8 +607,8 @@ function openGame(url, room, scoreMap, machineNumHint, boardName, boardList, tar
   $('roomView').classList.add('hide');   // ★ iOS:IAB(toolbar) 沒蓋到底部安全區會露出選房頁殘存→開遊戲就主動藏；Android 一併乾淨。還原由 handleCmd 回選房/回主畫面 remove('hide')
   if(ATG_LANDSCAPE.has((session&&session.game)||'')){unlockOri();lockLandscape();}else{unlockOri();}   // 已確認橫式遊戲固定橫向，其餘跟隨遊戲→恢復跟隨感應器，玩家橫放即可轉橫（配合引擎內「請橫放」提示）；修「第二次進房卡直向」
   const cfg = { TARGET: String(room), TARGET_KIND: targetKind || null, MACHINENUM: String(machineNumHint || ''), MUTE: true, DEBUG: true, TAKE_PROFIT: 0, STOP_LOSS: 0, SPEED: 1, UI: 'none', NO_SHIFT: true, SCORE_MAP: scoreMap || null, BOARD_NAME: boardName || '', BOARD_LIST: boardList || null, GOOD_ROOMS: ((_boards&&_boards.composite)||[]).filter(c=>c&&c.machineNum!=null).slice(0,3).map(c=>({roomId:c.roomId,machineNum:c.machineNum,rtp:c.rtp!=null?c.rtp:c.todayRtp,bet:c.bet!=null?c.bet:c.todayBet,profit:c.profit!=null?c.profit:c.todayPnl})),
-    // ★ 資格攔截：引擎在遊戲頁直接查 eligibility(CORS開)，傳 token/key/LINE + 攔截區(% 相對畫面)
-    SETH_API: SethEyeAPI.CFG.API_BASE, SETH_KEY: SethEyeAPI.CFG.COPILOT_KEY, SETH_TOKEN: SethEyeAPI.token || '', SETH_LINE: SETH_LINE, AGENT_MODE: true,
+    // ★ 資格攔截：引擎在遊戲頁直接查 eligibility，僅傳 API/token 與攔截區設定。
+    SETH_API: SethEyeAPI.CFG.API_BASE, SETH_KEY: SethEyeAPI.CFG.COPILOT_KEY, SETH_TOKEN: SethEyeAPI.token || '', AGENT_MODE: false,
     SETH_ACCOUNT: (session && session.account) || '', GAME_CODE: (session && session.game) || $('game').value || '', APP_VER: window.SETH_APP_VER || '',   // ★eligibility 被擋時記錄用(帳號/遊戲/版本)
     ELIG: { spin: { l: 47.1, t: 36.2, w: 52.9, h: 63.8 }, free: { l: 0.0, t: 59.6, w: 30.3, h: 40.4 } } };
   const code = "console.log('[SETH] inject start');" + window.SETH_ENGINE_SRC + "\n;if(!window.__sethBooted){window.__sethBooted=true;try{engine(" + JSON.stringify(cfg) + ");console.log('[SETH] engine() called');}catch(_e){console.log('[SETH] engine err '+(_e&&_e.message));}}" + "\n;window.__SC_GOOD_ROOMS=" + JSON.stringify(cfg.GOOD_ROOMS||[]) + ";window.__SC_GAME_CODE=" + JSON.stringify(cfg.GAME_CODE||'') + ";" + SCARAB_OVERLAY_SRC + SCARAB_IOS_GAME_FIX_SRC + SCARAB_ATG_NO_SWIPE_GUIDE_SRC;
@@ -772,7 +784,7 @@ function onUnlockPremium() {
       $('err2').textContent = '解鎖中…';
       try {
         // 沒登入聖甲之心助手會員 → 用娛樂城同帳密自動登
-        if (!SethEyeAPI.token) { let j; try { j = await SethEyeAPI.login(session.account, session.password); } catch (e) {} if (!j || !j.token) { $('err2').textContent = ''; showLineDialog((j && j.message) || '無法驗證聖甲之心資格'); return; } }
+        if (!SethEyeAPI.token) { let j; try { j = await SethEyeAPI.login(session.account, session.password); } catch (e) {} if (!j || !j.token) { $('err2').textContent = ''; showMessageDialog((j && j.message) || '無法驗證聖甲之心資格'); return; } }
         const r = await SethEyeAPI.buyPass('gold');   // 金牌榜扣金幣（銀牌另做）
         if (r && (r.success || r.alreadyActive)) {
           $('err2').textContent = r.alreadyActive ? '✅ 通行證已開通中' : '✅ 解鎖成功，10 分鐘內可看完整精品榜';
@@ -837,7 +849,7 @@ async function selectScarabGame(game){
     const item=(SCARAB_GAMES.RSG||[]).find(x=>x[0]===game)||[game,game];
     showConfirm('即將進入「'+item[1]+'」', async function(){
       $('gameCenterView').classList.add('hide');
-      try{await enterGameRSG();}catch(e){$('gameCenterView').classList.remove('hide');$('err').textContent=(e&&e.message)||'RSG 進入失敗';setTimeout(()=>window.scrollTo(0,scarabGameCenterScrollY),0);}
+      try{const gateOk=await rsgGate();if(!gateOk){$('gameCenterView').classList.remove('hide');return;}await enterGameRSG();}catch(e){$('gameCenterView').classList.remove('hide');$('err').textContent=(e&&e.message)||'RSG 進入失敗';setTimeout(()=>window.scrollTo(0,scarabGameCenterScrollY),0);}
     }, '確認進入');
   }else{
     $('gameCenterView').classList.add('hide');lockPortrait();
@@ -859,8 +871,9 @@ async function scarabLogin(){
   try{const base=(loginPlatform==='OFA'?'https://www.ofa1188.net':'https://www.tz6868.cc'),u=$('u').value.trim(),p=$('p').value;if(!u||!p)throw new Error('請輸入 '+loginPlatform+' 帳號與密碼');
   const j=await postJson(base+'/api/v1/login',{username:u,password:p,device_id:deviceId()});const token=j&&j.data&&j.data.token;if(!token)throw new Error((j&&j.message)||'帳號或密碼錯誤');
   session={base,token,account:u,password:p,game:null,platform:loginPlatform};if($('r').checked)localStorage.setItem('seth_creds',JSON.stringify({base,u}));else localStorage.removeItem('seth_creds');
-  showGameCenter();}
-  catch(e){$('err').textContent=(e&&e.message)||'連線失敗';}finally{$('loginBtn').disabled=false;$('loginBtn').textContent='登入 聖甲之心助手';}}
+  const member=await SethEyeAPI.bindLogin(u);if(!member||!member.token)throw new Error('會員資料驗證失敗，請稍後重試');
+  showGameCenter();refreshCoins();}
+  catch(e){session=null;$('err').textContent=(e&&e.message)||'連線失敗';}finally{$('loginBtn').disabled=false;$('loginBtn').textContent='登入 聖甲之心助手';}}
 document.querySelectorAll('.gcProvider').forEach(function(b){b.onclick=function(){scarabProvider=b.dataset.p;renderScarabGames();window.scrollTo(0,0);};});
 if($('gcLogout'))$('gcLogout').onclick=function(){session=null;$('gameCenterView').classList.add('hide');$('loginView').classList.remove('hide');};
 if($('roomBack'))$('roomBack').onclick=function(){lockPortrait();$('roomView').classList.add('hide');$('gameCenterView').classList.remove('hide');scarabProvider='ATG';renderScarabGames();setTimeout(()=>window.scrollTo(0,scarabGameCenterScrollY),0);};
