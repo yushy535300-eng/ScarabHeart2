@@ -24,8 +24,8 @@
   function agentSave() { try { localStorage.setItem('seth_agent_coins', JSON.stringify(AGENT_COINS)); localStorage.setItem('seth_agent_passes', JSON.stringify(AGENT_PASSES)); } catch (e) {} }
   function agentReset() { AGENT_COINS = { gold: 3, silver: 3 }; AGENT_PASSES = { gold: { active: false, remainSec: 0 }, silver: { active: false, remainSec: 0 } }; agentSave(); }   // 登入重置：金幣補滿3、通行證清空
 
-  // 代理版專用 key（獨立於 COPILOT_KEY）：只代理版帶、後端認得才 agent 全解遮 premium。洩了只影響 premium 白嫖、不碰其他。
-  const AGENT_KEY = 'cak_2c9fbf98cf29cf8d5c543257571984efa2d308c11fc424a1';
+  // 正式網站不使用代理測試權限；不要把代理專用 key 放進公開前端。
+  const AGENT_KEY = '';
 
   // ---- 真實 HTTP（CapacitorHttp 繞 CORS；mock 模式不會走到）----
   function capacitorHttp() {
@@ -118,11 +118,11 @@
     } catch (e) { L('公告抓取失敗(不影響登入)', e && e.message); return { enabled: false }; }
   }
 
-  // ★使用資格（按「開始」即時打、不快取）→ {eligible, reason, lineUrl}
+  // ★使用資格（按「開始」即時打、不快取）→ {eligible, reason}
   //   game 選填：雷神(RSG)帶 'thor' 讓後端分辨遊戲商別；賽特(ATG)不帶、維持原行為。
   async function eligibility(game) {
-    if (AGENT) return { eligible: true, reason: null, lineUrl: null };
-    if (CFG.USE_MOCK) return { eligible: true, reason: null, lineUrl: null };
+    if (AGENT) return { eligible: true, reason: null };
+    if (CFG.USE_MOCK) return { eligible: true, reason: null };
     return http('/eligibility' + (game ? '?game=' + encodeURIComponent(game) : ''));
   }
 

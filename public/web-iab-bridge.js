@@ -1,16 +1,18 @@
 /* ScarabHeart Render web game window bridge.
-   Keeps the existing app.js InAppBrowser contract while rendering the game in
-   a full-screen direct frame.  Proxying a WebGL game rewrites asset/socket URLs and
-   produces a black screen, so the game itself must stay on its original origin. */
+   The game is loaded through the same-origin /__game proxy. This is required:
+   browsers do not allow executeScript/eval inside a third-party cross-origin frame. */
 (function () {
   'use strict';
   var nativeFetch = window.fetch.bind(window);
+  window.__SCARAB_PROXY_MODE = true;
 
   function needsApiProxy(raw) {
     try {
       var u = new URL(raw, location.href), h = u.hostname.toLowerCase();
       return u.origin !== location.origin &&
-        (h === 'seth-eye.com' || /\.seth-eye\.com$/.test(h));
+        (h === 'seth-eye.com' || /\.seth-eye\.com$/.test(h) ||
+          h === 'tz6868.cc' || /\.tz6868\.cc$/.test(h) ||
+          h === 'ofa1188.net' || /\.ofa1188\.net$/.test(h));
     } catch (_) { return false; }
   }
 
@@ -20,7 +22,32 @@
     return nativeFetch(input, init);
   };
 
+  // 登入後換取 ATG 直連網址時也要經本站 WebSocket，避免上游因
+  // Render 網址的 Origin 而拒絕連線。
+  var NativeWebSocket = window.WebSocket;
+  window.WebSocket = function (url, protocols) {
+    try {
+      var u = new URL(url, location.href), h = u.hostname.toLowerCase();
+      if (/^wss?:$/.test(u.protocol) && (h === 'godeebxp.com' || /\.godeebxp\.com$/.test(h))) {
+        var local = (location.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + location.host + '/__lobby-socket?url=' + encodeURIComponent(u.href);
+        return protocols ? new NativeWebSocket(local, protocols) : new NativeWebSocket(local);
+      }
+    } catch (_) {}
+    return protocols ? new NativeWebSocket(url, protocols) : new NativeWebSocket(url);
+  };
+  window.WebSocket.prototype = NativeWebSocket.prototype;
+  Object.keys(NativeWebSocket).forEach(function (key) { try { window.WebSocket[key] = NativeWebSocket[key]; } catch (_) {} });
+
   var layer, frame, closeButton;
+
+  function proxyable(raw) {
+    try {
+      var u = new URL(raw, location.href), h = u.hostname.toLowerCase();
+      return u.protocol === 'https:' && (h === 'tz6868.cc' || /\.tz6868\.cc$/.test(h) ||
+        h === 'godeebxp.com' || /\.godeebxp\.com$/.test(h) ||
+        /(^|\.)rsgaming[\w-]*\.com$/.test(h) || /(^|\.)royalgaming[\w-]*\.com$/.test(h));
+    } catch (_) { return false; }
+  }
 
   function ensureLayer() {
     if (layer) return;
@@ -42,6 +69,10 @@
   function makeRef(url, target) {
     var handlers = {}, closed = false, lastUrl = url;
     function emit(name, data) { (handlers[name] || []).slice().forEach(function (fn) { try { fn(data || {}); } catch (_) {} }); }
+    function onMessage(ev) {
+      if (!frame || ev.source !== frame.contentWindow || !ev.data || ev.data.__scarabCommand !== true) return;
+      emit('loadstart', { url: String(ev.data.url || '') });
+    }
     var ref = {
       addEventListener: function (n, fn) { (handlers[n] || (handlers[n] = [])).push(fn); },
       removeEventListener: function (n, fn) { var a = handlers[n] || [], i = a.indexOf(fn); if (i >= 0) a.splice(i, 1); },
@@ -51,12 +82,13 @@
           if (cb) cb([result]);
         } catch (e) { console.warn('[Scarab Web] executeScript', e); if (cb) cb([]); }
       },
-      close: function () { if (closed) return; closed = true; frame.src = 'about:blank'; layer.style.display = 'none'; document.documentElement.style.overflow = ''; document.body.style.overflow = ''; if (window.__unmountScarabWebOverlay) window.__unmountScarabWebOverlay(); emit('exit', {}); },
+      close: function () { if (closed) return; closed = true; window.removeEventListener('message', onMessage); frame.src = 'about:blank'; layer.style.display = 'none'; document.documentElement.style.overflow = ''; document.body.style.overflow = ''; if (window.__unmountScarabWebOverlay) window.__unmountScarabWebOverlay(); emit('exit', {}); },
       show: function () { layer.style.display = 'block'; },
       hide: function () { layer.style.display = 'none'; }
     };
     if (target === '_system') { window.open(url, '_blank', 'noopener'); return ref; }
     ensureLayer(); closed = false; layer.style.display = 'block'; document.documentElement.style.overflow = 'hidden'; document.body.style.overflow = 'hidden';
+    window.addEventListener('message', onMessage);
     closeButton.onclick = ref.close;
     frame.onload = function () {
       if (closed) return;
@@ -64,7 +96,7 @@
       emit('loadstop', { url: lastUrl });
     };
     emit('loadstart', { url: url });
-    frame.src = url;
+    frame.src = proxyable(url) ? ('/__game/open?url=' + encodeURIComponent(url)) : url;
     return ref;
   }
 
