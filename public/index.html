@@ -112,6 +112,91 @@
 }
 </style>
 
+
+<style id="v284-game-card-blur-bg">
+/* v2.84 — no side blanks: use the same game art as a blurred enlarged background */
+.game-card,
+.game-tile {
+  position: relative !important;
+  isolation: isolate !important;
+  background: #07111d !important;
+  overflow: hidden !important;
+}
+
+.game-card::before,
+.game-tile::before {
+  content: "" !important;
+  position: absolute !important;
+  inset: -6px !important;
+  background-image: var(--game-bg) !important;
+  background-size: cover !important;
+  background-position: center center !important;
+  background-repeat: no-repeat !important;
+  transform: scale(1.14) !important;
+  filter: blur(18px) saturate(1.05) brightness(.85) !important;
+  opacity: .88 !important;
+  z-index: 0 !important;
+}
+
+.game-card::after,
+.game-tile::after {
+  content: "" !important;
+  position: absolute !important;
+  inset: 0 !important;
+  background: linear-gradient(180deg, rgba(2,8,18,.18) 0%, rgba(2,8,18,.10) 38%, rgba(2,7,14,.82) 100%) !important;
+  z-index: 1 !important;
+  pointer-events: none !important;
+}
+
+.game-card img,
+.game-tile img,
+.game-card .game-cover,
+.game-tile .game-cover {
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: 2 !important;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain !important;
+  object-position: center center !important;
+  background: transparent !important;
+}
+
+.game-card .game-shade,
+.game-tile .game-shade {
+  z-index: 3 !important;
+  background: linear-gradient(180deg, rgba(0,0,0,0) 18%, rgba(2,7,14,.08) 44%, rgba(2,7,14,.92) 100%) !important;
+}
+
+.game-card .game-meta,
+.game-card .game-arrow,
+.game-tile .game-meta,
+.game-tile .game-arrow {
+  position: absolute !important;
+  z-index: 4 !important;
+}
+
+@media (min-width: 900px) {
+  .game-card,
+  .game-tile {
+    max-width: 360px !important;
+  }
+}
+
+@media (max-width: 599px) {
+  .game-card,
+  .game-tile {
+    width: min(100%, 420px) !important;
+    aspect-ratio: 16 / 9 !important;
+  }
+  .game-card::before,
+  .game-tile::before {
+    filter: blur(16px) saturate(1.03) brightness(.88) !important;
+    transform: scale(1.12) !important;
+  }
+}
+</style>
+
 </head>
 <body>
   <main id="loginView" class="login-page">

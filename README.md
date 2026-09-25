@@ -367,3 +367,11 @@ All v2.79 loading-speed optimizations are preserved.
 - Tablet uses two columns.
 - Phones use one centered 16:9 column with safe side margins.
 - Recommendation, auto-room, loading-speed and other v2.82 behavior remain unchanged.
+
+
+## v2.84 game-card blurred background
+
+- Game center cards now use the same game artwork as a blurred enlarged background layer.
+- The clear foreground artwork remains centered with `object-fit: contain`.
+- This removes the dark empty side margins while keeping the cards from becoming too large.
+- Desktop / tablet / mobile layouts from v2.83 are preserved.

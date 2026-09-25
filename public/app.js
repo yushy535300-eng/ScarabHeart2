@@ -3,7 +3,7 @@
 
   const $ = id => document.getElementById(id);
   const log = (...args) => { try { console.log('[ScarabHeart]', ...args); } catch (_) {} };
-  const APP_VERSION = 'v2.83-game-card-image-fit';
+  const APP_VERSION = 'v2.84-game-card-blur-bg';
   const GAMES = [
     ['golden-seth', '戰神賽特2 覺醒之力', 'media/game2.png'],
     ['egyptian-mythology', '戰神賽特', 'media/game8.png'],
@@ -252,6 +252,7 @@
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'game-card';
+      button.style.setProperty('--game-bg', 'url("' + game[2] + '")');
       button.innerHTML = '<img src="' + game[2] + '" alt=""><span class="game-shade"></span><span class="game-meta"><small>ATG · GAME</small><b>' + game[1] + '</b></span><span class="game-arrow">›</span>';
       button.onclick = () => chooseGame(game[0]);
       box.appendChild(button);
