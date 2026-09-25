@@ -3,7 +3,7 @@
   if (window.__scarabBootstrapStarted) return;
   window.__scarabBootstrapStarted = true;
 
-  var ROOM_TIMEOUT_MS = 35000;
+  var ROOM_TIMEOUT_MS = 12000;
   var READY_STABLE_MS = 1200;
   var GAME_READY_TIMEOUT_MS = 90000;
   var roomWaitSince = 0;

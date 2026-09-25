@@ -6,6 +6,7 @@
   var nativeFetch = window.fetch.bind(window);
   var NativeWebSocket = window.WebSocket;
   var loadTimer = null;
+  var frameLoaded = false;
 
   function needsBackendProxy(raw) {
     try {
@@ -94,6 +95,7 @@
     var ui = elements();
     if (!ui.view || !ui.frame) throw new Error('找不到程式內遊戲視窗');
     clearTimeout(loadTimer);
+    frameLoaded = false;
     setLoading('正在連線 ATG 遊戲…', false);
     ui.view.classList.remove('hide');
     document.documentElement.style.overflow = 'hidden';
@@ -102,9 +104,13 @@
     ui.frame.src = '/__game/open?url=' + encodeURIComponent(source.href) +
       '&cfg=' + encodeURIComponent(encoded);
     ui.frame.onload = function () {
-      setLoading('遊戲已載入，正在連接懸浮工具…', false);
+      frameLoaded = true;
+      setLoading('遊戲已載入，懸浮工具將在背景自動接上…', false);
       clearTimeout(loadTimer);
-      loadTimer = setTimeout(function () { setLoading('', true); }, 1800);
+      // Important: never let helper/runtime readiness keep a full-screen layer
+      // above the ATG game. Once the iframe itself has loaded, release input
+      // to ATG and attach/recover the assistant in the background.
+      loadTimer = setTimeout(function () { setLoading('', true); }, 900);
     };
     return true;
   }
@@ -112,6 +118,7 @@
   function closeInApp() {
     var ui = elements();
     clearTimeout(loadTimer);
+    frameLoaded = false;
     if (ui.frame) {
       ui.frame.onload = null;
       ui.frame.src = 'about:blank';
@@ -133,10 +140,22 @@
       return;
     }
     if (data && data.__scarabStatus === true) {
-      if (data.state === 'engine-ready') setLoading('懸浮工具已連線', true);
-      else if (data.state === 'engine-wait') setLoading('遊戲載入中，正在等待引擎…', false);
-      else if (data.state === 'engine-error') {
-        setLoading('懸浮工具載入失敗，請返回後重試', false);
+      if (data.state === 'engine-ready') {
+        setLoading('懸浮工具已連線', true);
+      } else if (data.state === 'engine-wait') {
+        // Before iframe load this is useful feedback. After iframe load, do not
+        // resurrect the blocking loading mask just because Cocos/helper probing
+        // is still running. The game must remain playable.
+        if (!frameLoaded) setLoading('遊戲載入中，正在等待引擎…', false);
+      } else if (data.state === 'room-fallback') {
+        // Auto-room positioning is optional. Failure must never cover or lock
+        // the underlying ATG room selector.
+        setLoading('', true);
+      } else if (data.state === 'engine-error') {
+        // Assistant errors must degrade gracefully: keep ATG usable and let the
+        // user return/re-enter instead of trapping them behind a modal mask.
+        setLoading('', true);
+        try { console.warn('[ScarabHeart] assistant runtime error:', data.message || 'unknown'); } catch (_) {}
       }
     }
   });
