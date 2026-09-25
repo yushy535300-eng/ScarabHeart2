@@ -124,19 +124,25 @@
     document.documentElement.style.overflow = 'hidden';
     document.body.style.overflow = 'hidden';
     var encoded = base64url(payload || {});
-    // Always create a fresh game document. Reusing the previous iframe document
-    // can leave the old auto-room runtime alive and skip the second selection.
-    try { ui.frame.onload = null; ui.frame.src = 'about:blank'; } catch (_) {}
-    ui.frame.src = '/__game/open?url=' + encodeURIComponent(source.href) +
-      '&cfg=' + encodeURIComponent(encoded);
+    try {
+      ui.frame.setAttribute('loading', 'eager');
+      ui.frame.setAttribute('fetchpriority', 'high');
+    } catch (_) {}
+
     ui.frame.onload = function () {
       if (openId !== currentOpenId) return;
       frameLoaded = true;
-      // The ATG page is usable now. The assistant attaches in the background;
-      // never keep a full-screen blocker over a game that has already loaded.
       setLoading('遊戲已載入，懸浮工具背景連線中…', true);
       clearTimeout(loadTimer);
     };
+
+    try {
+      var currentSrc = String(ui.frame.getAttribute('src') || '');
+      if (currentSrc && currentSrc !== 'about:blank') ui.frame.src = 'about:blank';
+    } catch (_) {}
+
+    ui.frame.src = '/__game/open?url=' + encodeURIComponent(source.href) +
+      '&cfg=' + encodeURIComponent(encoded);
     return true;
   }
 

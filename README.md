@@ -303,3 +303,26 @@ Behavior for the six simulated titles:
 - Rows are visibly marked `模擬推薦`.
 - Clicking a row still sends its machine number into the existing machine-number auto-room flow.
 - No recommendation probe runs for these six titles, so it cannot conflict with the formal game session.
+
+
+## v2.78 natural test-data tuning
+
+- Only the six previously selected titles use test recommendation data.
+- RTP is capped below 100% for every row.
+- Top 1-3 recommendations are the only high performers:
+  roughly 93.6% to 99.59%.
+- Remaining rows taper through more moderate ranges, down into the 70s/80s.
+- Recommendation scores taper instead of clustering near 900.
+- Repeated row-level "模擬推薦" text was removed.
+- The page keeps a small "測試資料" status indicator so test values are not mistaken for live ATG statistics.
+
+
+## v2.79 faster all-game load
+
+- Removed repeated row-level simulated/test labels.
+- The six generated recommendation titles use a compact `估算` status only.
+- Recommendation selection starts resolving the ATG direct entry while the confirm dialog is open.
+- Manual enter buttons also pre-warm the ATG entry on pointer/touch down.
+- Prepared ATG entry URLs are reused briefly instead of repeating the whole lobby handshake.
+- The recommendation probe is stopped before the formal game session starts.
+- Added eager/high-priority iframe hints and ATG preconnect/DNS-prefetch.
