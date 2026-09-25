@@ -152,6 +152,7 @@ function gameBoot(sid, originalHref, session, withRuntime) {
     'window.__SCARAB_WEB_PAYLOAD=' + scriptJson(payload) + ';' +
     'window.__SC_GAME_CODE=' + scriptJson(String(payload.gameCode || config.GAME_CODE || '')) + ';' +
     'window.__SC_GOOD_ROOMS=' + scriptJson(config.GOOD_ROOMS || []) + ';' +
+    'window.__SC_ROOM_SESSION_ID=' + scriptJson(String(config.ROOM_SESSION_ID || '')) + ';' +
     'window.__SCARAB_FORCE_MANUAL_ROOM=false;' +
     'try{parent.postMessage({__scarabStatus:true,state:"engine-wait"},location.origin)}catch(e){}' +
     '<\/script>' +

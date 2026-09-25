@@ -1,4 +1,30 @@
 (function(){
+  try {
+    var p=window.__SCARAB_WEB_PAYLOAD||{}, c=p.cfg||{};
+    var sid=String(c.ROOM_SESSION_ID||Date.now());
+    window.__SCARAB_ROOM_SESSION_ID=sid;
+    window.__SCARAB_FORCE_MANUAL_ROOM=false;
+    window.__SCARAB_ROOM_DONE=false;
+    window.__SCARAB_LAST_ROOM=null;
+    window.__SCARAB_LAST_MACHINE=null;
+    try {
+      sessionStorage.setItem('SCARAB_ROOM_SESSION',sid);
+      sessionStorage.removeItem('SCARAB_FORCE_MANUAL_ROOM');
+      sessionStorage.removeItem('scarab_force_manual_room');
+      sessionStorage.removeItem('SCARAB_ROOM_FALLBACK');
+      sessionStorage.removeItem('SCARAB_ROOM_DONE');
+      sessionStorage.removeItem('SCARAB_LAST_ROOM');
+      sessionStorage.removeItem('SCARAB_LAST_MACHINE');
+    } catch (_) {}
+    if(c.MACHINENUM){
+      c.TARGET=String(c.MACHINENUM);
+      c.TARGET_KIND='machineNum';
+      c.VISUAL_TARGET=String(c.MACHINENUM);
+      window.__SC_VISUAL_MACHINE=String(c.MACHINENUM);
+    }
+  }catch(_){}
+})();
+(function(){
   'use strict';
   if (window.__scarabBootstrapStarted) return;
   window.__scarabBootstrapStarted = true;
@@ -159,6 +185,17 @@
         if (isRoomWait()) {
           if (!roomWaitSince) roomWaitSince=Date.now();
           var payload=window.__SCARAB_WEB_PAYLOAD||{}, cfg=payload.cfg||{};
+  // v2.62: the ATG selector UI is searched by the visible machine number.
+  // Internal roomId is retained only as FULL_ROOM_ID for post-selection validation.
+  try {
+    if (cfg && cfg.MACHINENUM) {
+      cfg.TARGET = String(cfg.MACHINENUM);
+      cfg.TARGET_KIND = 'machineNum';
+      cfg.VISUAL_TARGET = String(cfg.MACHINENUM);
+      window.__SC_VISUAL_MACHINE = String(cfg.MACHINENUM);
+    }
+  } catch (_) {}
+
           var exact=!!cfg.EXACT_ROOM;
           if (!exact && !window.__SCARAB_FORCE_MANUAL_ROOM && Date.now()-roomWaitSince>=ROOM_TIMEOUT_MS) {
             forceManualRoom();

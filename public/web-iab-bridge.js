@@ -100,6 +100,10 @@
       sessionStorage.removeItem('SCARAB_FORCE_MANUAL_ROOM');
       sessionStorage.removeItem('scarab_force_manual_room');
       sessionStorage.removeItem('SCARAB_ROOM_FALLBACK');
+      sessionStorage.removeItem('SCARAB_ROOM_DONE');
+      sessionStorage.removeItem('SCARAB_LAST_ROOM');
+      sessionStorage.removeItem('SCARAB_LAST_MACHINE');
+      sessionStorage.removeItem('SCARAB_ROOM_SESSION');
     } catch (_) {}
     var source;
     try {
@@ -118,6 +122,9 @@
     document.documentElement.style.overflow = 'hidden';
     document.body.style.overflow = 'hidden';
     var encoded = base64url(payload || {});
+    // Always create a fresh game document. Reusing the previous iframe document
+    // can leave the old auto-room runtime alive and skip the second selection.
+    try { ui.frame.onload = null; ui.frame.src = 'about:blank'; } catch (_) {}
     ui.frame.src = '/__game/open?url=' + encodeURIComponent(source.href) +
       '&cfg=' + encodeURIComponent(encoded);
     ui.frame.onload = function () {

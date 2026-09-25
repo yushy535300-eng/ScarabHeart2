@@ -3,7 +3,7 @@
 
   const $ = id => document.getElementById(id);
   const log = (...args) => { try { console.log('[ScarabHeart]', ...args); } catch (_) {} };
-  const APP_VERSION = 'v2.61-render-stable';
+  const APP_VERSION = 'v2.63-reentry-auto-room-reset';
   const GAMES = [
     ['golden-seth', '戰神賽特2 覺醒之力', 'media/game2.png'],
     ['egyptian-mythology', '戰神賽特', 'media/game8.png'],
@@ -43,6 +43,7 @@
   let pendingPick = null;
   let boardLoadSerial = 0;
   let gameOpenSerial = 0;
+  let roomSessionSerial = 0;
   const boardCache = Object.create(null);
   const BOARD_CACHE_MS = 15000;
 
@@ -433,6 +434,10 @@
       GAME_CHECKSUM: (GAME_META[session.game] || {}).checksum || '',
       FULL_ROOM_ID: pendingPick && pendingPick.roomId ? String(pendingPick.roomId) : '',
       EXACT_ROOM: !!(pendingPick && pendingPick.roomId),
+      VISUAL_TARGET: String(machineNum || target || ''),
+      VISUAL_TARGET_KIND: 'machineNum',
+      ROOM_SESSION_ID: roomSessionId,
+      FORCE_ROOM_RESET: true,
       SETH_ACCOUNT: session.account,
       APP_VER: APP_VERSION,
       AGENT_MODE: true
@@ -449,6 +454,7 @@
     } catch (_) {}
     const requestedGame = session.game;
     const openSerial = ++gameOpenSerial;
+    const roomSessionId = String(Date.now()) + '-' + String(++roomSessionSerial);
     const buttons = [$('enterBtn'), $('skipBtn')];
     buttons.forEach(button => { button.disabled = true; });
     $('err2').style.color = '';
@@ -462,11 +468,12 @@
       if (mode === 'manual') {
         target = '';
       } else if (pendingPick && String($('room').value).trim() === pendingPick.machineNum) {
-        target = pendingPick.roomId
-          ? String(pendingPick.roomId).replace(/^.*_/, '')
-          : pendingPick.machineNum;
+        // ATG's visible room picker is indexed by machine number (e.g. 3557),
+        // not the internal roomId (e.g. seth2_353157). Feeding roomId into the
+        // visual scanner caused values such as "#65" and a full 1→9 scan with no match.
+        target = pendingPick.machineNum;
         machineNum = pendingPick.machineNum;
-        targetKind = pendingPick.roomId ? 'roomId' : null;
+        targetKind = 'machineNum';
         boardName = pendingPick.boardName;
         const source = (boards && boards[pendingPick.board]) || [];
         boardList = source.filter(x => x && x.roomId && x.machineNum != null).map(x => ({ roomId: String(x.roomId), machineNum: String(x.machineNum), score: x.score }));

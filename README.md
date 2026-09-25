@@ -43,3 +43,26 @@ HAR findings addressed:
 - Only `slotFramework/manifest.json` remains bridged through Render.
 - Preserves v2.60 exact-room logic and existing floating-assistant features.
 - Adds process-level logging guards so transient async errors do not terminate the Node process.
+
+
+## v2.62 machine-number auto room fix
+
+Observed symptom:
+- Auto room picker scanned page 1 through 9 but the overlay showed a target like `#65`.
+- ATG's visible selector contains machine numbers (e.g. 2501, 2781, 3557), not internal room ids.
+
+Fix:
+- Recommended-room visual search always targets `machineNum`.
+- Internal `roomId` remains available as `FULL_ROOM_ID` only for validation/diagnostics.
+- Runtime payload is normalized before the engine starts so stale `TARGET_KIND=roomId` cannot leak into the scanner.
+- Existing Render-stable direct-asset changes and floating assistant features remain unchanged.
+
+
+## v2.63 re-entry auto-room reset
+
+Fixes:
+- Returning from ATG to the program room page and entering again now starts a fresh room-selection session.
+- Each `enterGame()` generates a unique `ROOM_SESSION_ID`.
+- Previous manual fallback / room-done / last-room / last-machine state is cleared before every launch.
+- The iframe is reset to `about:blank` before loading the next ATG session so the prior auto-room runtime cannot survive re-entry.
+- Machine-number targeting from v2.62 and Render-stable asset handling from v2.61 are preserved.
