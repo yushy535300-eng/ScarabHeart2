@@ -357,3 +357,13 @@ All v2.79 loading-speed optimizations are preserved.
 - Example: `更新 01:41`.
 - Removed the `估算` / `測試資料` status text from the recommendation header.
 - All v2.81 machine ranges and v2.79 loading-speed optimizations remain unchanged.
+
+
+## v2.83 game-card artwork fit
+
+- Game-center cards changed to a 16:9 artwork-friendly ratio.
+- Artwork uses `object-fit: contain` so character/title art is not cropped.
+- Desktop remains three columns with a 360px card width cap.
+- Tablet uses two columns.
+- Phones use one centered 16:9 column with safe side margins.
+- Recommendation, auto-room, loading-speed and other v2.82 behavior remain unchanged.

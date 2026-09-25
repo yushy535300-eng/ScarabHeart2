@@ -26,6 +26,92 @@
     @media(max-width:920px){.login-page{grid-template-columns:1fr}.hero{min-height:43dvh;padding:24px 22px 6px;border-right:0;border-bottom:1px solid rgba(119,179,216,.09)}.hero:after{inset:14px}.hero-logo{width:min(300px,38dvh)}.hero-kicker{margin-top:-12px}.hero-title{font-size:28px}.hero-copy{display:none}.login-side{min-height:57dvh;padding:28px 22px 42px;align-items:start}.online-row{margin-bottom:22px}.games{grid-template-columns:repeat(2,minmax(0,1fr));padding:15px;gap:11px}.game-card{min-height:150px}.room-layout{grid-template-columns:1fr}.room-side{border-left:0;border-top:1px solid rgba(102,160,196,.12)}}
     @media(max-width:560px){.app-shell{width:min(100% - 20px,1180px)}.hero{min-height:35dvh}.hero-logo{width:min(245px,31dvh)}.hero-title{font-size:22px}.hero-kicker{font-size:9px}.login-title{font-size:28px}.login-side{min-height:65dvh;padding:24px 19px 38px}.brand-mini{display:none}.online-row{justify-content:flex-end}.quick-links{gap:6px}.workspace{padding-top:17px}.topbar{align-items:flex-start}.status-row{flex-direction:column;align-items:flex-end}.topbrand h1{font-size:19px}.games{grid-template-columns:1fr}.game-card{min-height:170px}.tabs{grid-template-columns:repeat(2,1fr)}.room-main,.room-side{padding:16px}}
   </style>
+
+<style id="v283-game-card-fit">
+/* v2.83 — keep game artwork visible without oversized cards */
+.game-grid,
+.games-grid,
+#gameGrid {
+  align-items: stretch;
+}
+
+.game-card,
+.game-tile {
+  aspect-ratio: 16 / 9 !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow: hidden !important;
+}
+
+.game-card img,
+.game-tile img,
+.game-card .game-cover,
+.game-tile .game-cover {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: contain !important;
+  object-position: center center !important;
+  background: #07111d;
+}
+
+/* Desktop: three columns, but don't let the cards become huge. */
+@media (min-width: 900px) {
+  .game-grid,
+  .games-grid,
+  #gameGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 16px !important;
+  }
+  .game-card,
+  .game-tile {
+    width: 100% !important;
+    max-width: 360px !important;
+    margin-inline: auto !important;
+  }
+}
+
+/* Tablet: two columns. */
+@media (min-width: 600px) and (max-width: 899px) {
+  .game-grid,
+  .games-grid,
+  #gameGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 14px !important;
+  }
+  .game-card,
+  .game-tile {
+    width: 100% !important;
+    max-width: 360px !important;
+    margin-inline: auto !important;
+  }
+}
+
+/* Phone: one clean column, full artwork, safe side margins. */
+@media (max-width: 599px) {
+  .game-grid,
+  .games-grid,
+  #gameGrid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+    padding-inline: 8px !important;
+  }
+  .game-card,
+  .game-tile {
+    width: min(100%, 420px) !important;
+    aspect-ratio: 16 / 9 !important;
+    margin-inline: auto !important;
+    border-radius: 14px !important;
+  }
+  .game-card img,
+  .game-tile img,
+  .game-card .game-cover,
+  .game-tile .game-cover {
+    object-fit: contain !important;
+    object-position: center center !important;
+  }
+}
+</style>
+
 </head>
 <body>
   <main id="loginView" class="login-page">
