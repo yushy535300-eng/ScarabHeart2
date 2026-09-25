@@ -1,3 +1,9 @@
+process.on('unhandledRejection', (reason) => {
+  try { console.error('[unhandledRejection]', reason); } catch (_) {}
+});
+process.on('uncaughtException', (error) => {
+  try { console.error('[uncaughtException]', error); } catch (_) {}
+});
 'use strict';
 
 const express = require('express');
@@ -99,12 +105,6 @@ app.use('/__api', express.raw({ type: '*/*', limit: '2mb' }), async (req, res) =
 });
 
 // Only the three ATG runtime files required by the in-app game are exposed.
-app.get('/sw.js', (_req, res) => {
-  res.set('Cache-Control', 'no-store, max-age=0');
-  res.set('Service-Worker-Allowed', '/');
-  res.sendFile(path.join(publicDir, 'sw.js'));
-});
-
 app.get('/__runtime/atg-engine-runtime.js', (_req, res) => {
   res.sendFile(path.join(runtimeDir, 'atg-engine-runtime.js'));
 });
@@ -335,7 +335,7 @@ app.all(['/__socket/:sid', '/__lobby-socket'], (_req, res) => {
 // assets (config/index/import/native/...) are CORS-enabled by ATG and must go
 // straight to play.godeebxp.com; proxying hundreds of them through Render
 // causes 502/503 bursts followed by 429 throttling.
-app.all('/slotFramework/*', express.raw({ type: '*/*', limit: '4mb' }), async (req, res) => {
+app.all('/slotFramework/*', express.raw({ type: '*/*', limit: '256kb' }), async (req, res) => {
   let sid = '';
   try {
     const ref = String(req.headers.referer || '');
@@ -344,27 +344,27 @@ app.all('/slotFramework/*', express.raw({ type: '*/*', limit: '4mb' }), async (r
   } catch (_) {}
   const session = sid && sessions.get(sid);
   if (!session) return res.status(409).send('ATG session not ready');
+
   let url;
-  try { url = new URL(req.originalUrl, session.origin + '/'); }
+  try { url = new URL(req.originalUrl, 'https://play.godeebxp.com/'); }
   catch (_) { return res.status(400).send('Invalid slotFramework URL'); }
-  if (!gameAllowed(url)) return res.status(403).send('Invalid slotFramework host');
 
   const isManifest = /^\/slotFramework\/manifest\.json$/i.test(url.pathname);
+
+  // Never make Render download versioned ATG framework/assets.
   if (!isManifest && (req.method === 'GET' || req.method === 'HEAD')) {
-    // Last-resort fallback for resource types that bypass our browser URL hooks.
-    // Do not download the asset on Render: send the browser to ATG directly.
-    res.set('Cache-Control', 'no-store');
-    return res.redirect(307, url.href);
+    const direct = 'https://play.godeebxp.com' + url.pathname + url.search;
+    res.set('Cache-Control', 'public, max-age=300');
+    return res.redirect(307, direct);
   }
 
+  // Only the tiny manifest stays bridged.
   try {
-    const init = {
+    const upstream = await fetch(url, {
       method: req.method,
-      headers: upstreamHeaders(req, url, session.origin),
+      headers: upstreamHeaders(req, url, 'https://play.godeebxp.com'),
       redirect: 'follow'
-    };
-    if (req.method !== 'GET' && req.method !== 'HEAD' && req.body && req.body.length) init.body = req.body;
-    const upstream = await fetch(url, init);
+    });
     let bytes = Buffer.from(await upstream.arrayBuffer());
     let contentType = upstream.headers.get('content-type') || 'application/octet-stream';
     if (isManifest && upstream.ok) {
@@ -373,8 +373,7 @@ app.all('/slotFramework/*', express.raw({ type: '*/*', limit: '4mb' }), async (r
         if (manifest && typeof manifest.url === 'string') {
           let raw = manifest.url.trim();
           if (!/^https?:\/\//i.test(raw)) raw = 'https://' + raw.replace(/^\/+/, '');
-          const assetBase = new URL(raw);
-          if (gameAllowed(assetBase)) manifest.url = assetBase.href.replace(/\/$/, '');
+          manifest.url = new URL(raw).href.replace(/\/$/, '');
         }
         bytes = Buffer.from(JSON.stringify(manifest));
         contentType = 'application/json; charset=utf-8';
@@ -382,16 +381,10 @@ app.all('/slotFramework/*', express.raw({ type: '*/*', limit: '4mb' }), async (r
     }
     res.status(upstream.status);
     res.type(contentType);
-    ['content-range', 'accept-ranges', 'etag', 'last-modified'].forEach(key => {
-      const value = upstream.headers.get(key);
-      if (value) res.set(key, value);
-    });
-    res.set('Cache-Control', upstream.headers.get('cache-control') || 'no-cache');
-    res.set('Access-Control-Allow-Origin', '*');
-    sendCookies(res, upstream, sid);
+    res.set('Cache-Control', 'no-store');
     res.send(bytes);
   } catch (error) {
-    res.status(502).send('slotFramework manifest 載入失敗：' + String(error && error.message || error));
+    res.status(502).send('ATG manifest 載入失敗：' + String(error && error.message || error));
   }
 });
 

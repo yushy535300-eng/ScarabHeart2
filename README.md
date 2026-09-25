@@ -33,3 +33,13 @@ HAR findings addressed:
 - Exact recommendation requests remain exact; after timeout the game stays usable while room matching continues.
 - A root service worker redirects versioned `/slotFramework/<hash>/...` resources directly to ATG.
   This prevents the repeated Render/Cloudflare 429, 502 and 503 bursts observed in the uploaded HAR.
+
+
+## v2.61 Render-stable architecture
+
+- Removes/unregisters the root service worker from v2.60.
+- Render never downloads versioned `slotFramework/<hash>/...` files.
+- Heavy ATG framework/image/json/audio requests receive an immediate 307 to `play.godeebxp.com`.
+- Only `slotFramework/manifest.json` remains bridged through Render.
+- Preserves v2.60 exact-room logic and existing floating-assistant features.
+- Adds process-level logging guards so transient async errors do not terminate the Node process.

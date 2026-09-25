@@ -6,14 +6,16 @@
   var nativeFetch = window.fetch.bind(window);
   var NativeWebSocket = window.WebSocket;
   var loadTimer = null;
-
-  // One lightweight worker removes hundreds of slotFramework requests from Render.
-  // Registration failure is harmless; server routes remain the fallback.
+  // Remove the v2.60 root worker. It is no longer needed and an old worker
+  // should never affect a fresh deploy/recovery.
   try {
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(function(){});
+      navigator.serviceWorker.getRegistrations().then(function(list) {
+        list.forEach(function(reg) { try { reg.unregister(); } catch (_) {} });
+      }).catch(function(){});
     }
   } catch (_) {}
+
   var frameLoaded = false;
   var currentOpenId = 0;
 
