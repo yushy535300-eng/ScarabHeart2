@@ -260,3 +260,22 @@ Speed changes:
 - Decoded ATG App/service-state scan interval reduced from 180ms to 80ms.
 - Entering the real game always stops the recommendation probe first, so recommendation
   collection and the formal game session do not overlap.
+
+
+## v2.76 real rooms + simulated recommendation metrics
+
+For:
+- Tiger Princess
+- Hades / Baphomet
+- Wuxia
+- Son Go Ku
+- New Vampire Hunter
+- New Jinlian
+
+Behavior:
+- Machine number, roomId and room availability always come from the current real ATG table list.
+- Only recommendation score/RTP-style display metrics are simulated when the title lacks a reliable recommendation feed.
+- Simulated values are deliberately moderate (score roughly 760-910, RTP roughly 82-122% unless a live RTP exists, then a small bounded jitter is applied).
+- Rows are explicitly marked `模擬推薦`.
+- Clicking a row still uses the real machine number and the existing auto-room flow, so the program can enter and locate the actual ATG machine.
+- Locked/missing rooms are excluded from simulated recommendations.

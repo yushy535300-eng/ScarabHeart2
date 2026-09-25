@@ -3,7 +3,7 @@
 
   const $ = id => document.getElementById(id);
   const log = (...args) => { try { console.log('[ScarabHeart]', ...args); } catch (_) {} };
-  const APP_VERSION = 'v2.75-fast-real-recommendations';
+  const APP_VERSION = 'v2.76-real-rooms-sim-recommendations';
   const GAMES = [
     ['golden-seth', '戰神賽特2 覺醒之力', 'media/game2.png'],
     ['egyptian-mythology', '戰神賽特', 'media/game8.png'],
@@ -454,6 +454,100 @@
     return { composite, volatility, premium, freegame, updatedAt: Date.now(), source: 'ATG_REALTIME' };
   }
 
+  const SIM_RECOMMEND_GAMES = new Set([
+    'tiger-princess',
+    'hades',
+    'wuxia-caishen',
+    'son-go-ku',
+    'new-vampire-hunter',
+    'new-jinlian'
+  ]);
+
+  function simHash(text) {
+    let h = 2166136261 >>> 0;
+    const s = String(text || '');
+    for (let i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 16777619) >>> 0;
+    }
+    return h >>> 0;
+  }
+
+  function simulatedBoardsFromTables(gameCode, tables) {
+    // IMPORTANT: only the displayed recommendation metrics are simulated.
+    // machineNum / roomId / availability always come from the live ATG table.
+    const rawRows = (Array.isArray(tables) ? tables : []).map(raw => {
+      const machineNum = String(raw.machineNum == null ? '' : raw.machineNum);
+      const roomId = String(raw.roomId == null ? '' : raw.roomId);
+      const status = String(raw.status || '');
+      const locked = !!raw.isLocked || /locked/i.test(status);
+      if (!/^\d+$/.test(machineNum) || !roomId || locked) return null;
+
+      const liveRtp = Number(raw.todayBet || 0) > 0
+        ? Number(raw.todayWin || 0) / Number(raw.todayBet || 1) * 100
+        : (Number(raw.bet || 0) > 0 ? Number(raw.win || 0) / Number(raw.bet || 1) * 100 : NaN);
+
+      const seed = simHash(gameCode + ':' + machineNum);
+      // Keep values deliberately moderate. If a real RTP exists, stay close to it;
+      // otherwise use a conservative 82~122% range.
+      let rtp;
+      if (Number.isFinite(liveRtp) && liveRtp > 0) {
+        const jitter = ((seed % 700) / 100) - 3.5; // -3.5 ~ +3.49
+        rtp = Math.max(78, Math.min(128, liveRtp + jitter));
+      } else {
+        rtp = 82 + (seed % 4000) / 100; // 82.00 ~ 121.99
+      }
+
+      const score = 760 + (seed % 151); // 760 ~ 910
+      const heat = 1000 + ((seed >>> 8) % 9000);
+      return {
+        roomId,
+        machineNum,
+        status,
+        isLocked: false,
+        available: true,
+        rtp: Math.round(rtp * 100) / 100,
+        bet: heat,
+        win: Math.round(heat * rtp / 100),
+        profit: Math.round(heat * (rtp / 100 - 1)),
+        score,
+        simulated: true,
+        source: 'ATG_REAL_ROOM_SIM_METRIC'
+      };
+    }).filter(Boolean);
+
+    const seen = new Set();
+    const rows = rawRows.filter(row => {
+      if (seen.has(row.machineNum)) return false;
+      seen.add(row.machineNum);
+      return true;
+    });
+    if (!rows.length) return emptyBoards();
+
+    // Pick a stable top 10 from real currently available machines.
+    const composite = rows.slice().sort((a,b) => (b.score - a.score) || (b.rtp - a.rtp)).slice(0,10)
+      .map(x => Object.assign({}, x, {metric:'模擬綜合'}));
+    const volatility = rows.slice().sort((a,b) => (b.rtp - a.rtp) || (b.score - a.score)).slice(0,10)
+      .map(x => Object.assign({}, x, {metric:'模擬爆分'}));
+    const premium = rows.slice().sort((a,b) => (b.bet - a.bet) || (b.score - a.score)).slice(0,10)
+      .map(x => Object.assign({}, x, {metric:'模擬熱度'}));
+    const freegame = rows.slice().sort((a,b) => {
+      const ah = simHash('fg:'+gameCode+':'+a.machineNum);
+      const bh = simHash('fg:'+gameCode+':'+b.machineNum);
+      return (ah - bh) || (b.score - a.score);
+    }).slice(0,10).map(x => Object.assign({}, x, {metric:'模擬免遊'}));
+
+    return {
+      composite,
+      volatility,
+      premium,
+      freegame,
+      updatedAt: Date.now(),
+      source: 'ATG_REAL_ROOM_SIM_METRIC',
+      simulated: true
+    };
+  }
+
   async function probeAtgTables(gameCode) {
     stopRecommendationProbe();
     const serial = ++recommendationProbeSerial;
@@ -560,10 +654,12 @@
     const probePromise = probeAtgTables(game)
       .then(tables => {
         if (!session || session.game !== game || serial !== boardLoadSerial) return null;
-        const real = normalizeBoards(realBoardsFromTables(tables));
-        if (usableBoardCount(real) < 1) throw new Error('ATG 沒有回傳可用機台');
-        showFresh(real, 'ATG_REALTIME');
-        return real;
+        const value = SIM_RECOMMEND_GAMES.has(game)
+          ? normalizeBoards(simulatedBoardsFromTables(game, tables))
+          : normalizeBoards(realBoardsFromTables(tables));
+        if (usableBoardCount(value) < 1) throw new Error('ATG 沒有回傳可用機台');
+        showFresh(value, SIM_RECOMMEND_GAMES.has(game) ? 'ATG_REAL_ROOM_SIM_METRIC' : 'ATG_REALTIME');
+        return value;
       })
       .catch(error => {
         if (String(error && error.message || '') !== 'probe-cancelled') {
@@ -620,7 +716,8 @@
       const row = document.createElement('div');
       row.className = 'room-card';
       const metric = item.metric ? ' · ' + item.metric : '';
-      row.innerHTML = '<span class="room-rank">' + (index + 1) + '</span><span><b>' + (locked ? '🔒 ' + machine.padStart(3, '0') + ' 號機台' : machine.padStart(3, '0') + ' 號機台') + '</b><small>' + BOARD_META[activeBoard][0] + (item.rtp != null ? ' · RTP ' + item.rtp + '%' : '') + metric + '</small></span><span class="score">' + (item.score == null ? '—' : item.score) + '</span>';
+      const simMark = item.simulated ? ' · 模擬推薦' : '';
+      row.innerHTML = '<span class="room-rank">' + (index + 1) + '</span><span><b>' + (locked ? '🔒 ' + machine.padStart(3, '0') + ' 號機台' : machine.padStart(3, '0') + ' 號機台') + '</b><small>' + BOARD_META[activeBoard][0] + (item.rtp != null ? ' · RTP ' + item.rtp + '%' : '') + metric + simMark + '</small></span><span class="score">' + (item.score == null ? '—' : item.score) + '</span>';
       if (!locked) {
         row.style.cursor = 'pointer';
         row.setAttribute('role', 'button');
