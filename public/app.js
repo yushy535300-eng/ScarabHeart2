@@ -3,7 +3,7 @@
 
   const $ = id => document.getElementById(id);
   const log = (...args) => { try { console.log('[ScarabHeart]', ...args); } catch (_) {} };
-  const APP_VERSION = 'v2.64-room-session-scope-fix';
+  const APP_VERSION = 'v2.65-correct-roomid-autoselect';
   const GAMES = [
     ['golden-seth', '戰神賽特2 覺醒之力', 'media/game2.png'],
     ['egyptian-mythology', '戰神賽特', 'media/game8.png'],
@@ -469,19 +469,22 @@
       if (mode === 'manual') {
         target = '';
       } else if (pendingPick && String($('room').value).trim() === pendingPick.machineNum) {
-        // ATG's visible room picker is indexed by machine number (e.g. 3557),
-        // not the internal roomId (e.g. seth2_353157). Feeding roomId into the
-        // visual scanner caused values such as "#65" and a full 1→9 scan with no match.
-        target = pendingPick.machineNum;
+        // The engine's native contract is:
+        // TARGET = internal roomId, MACHINENUM = visible machine number.
+        // It resolves roomId -> machineNum from the live ATG table map, and only
+        // falls back to MACHINENUM if that map is late. Do not replace TARGET
+        // with machineNum here.
+        target = pendingPick.roomId || pendingPick.machineNum;
         machineNum = pendingPick.machineNum;
-        targetKind = 'machineNum';
+        targetKind = pendingPick.roomId ? 'roomId' : 'roomId';
         boardName = pendingPick.boardName;
         const source = (boards && boards[pendingPick.board]) || [];
         boardList = source.filter(x => x && x.roomId && x.machineNum != null).map(x => ({ roomId: String(x.roomId), machineNum: String(x.machineNum), score: x.score }));
       } else {
         machineNum = String($('room').value || '').trim();
         if (!machineNum) throw new Error('請輸入機台號碼，或選擇「進入大廳自行選擇」');
-        target = machineNum;
+        target = '__machine__' + machineNum;
+        targetKind = 'roomId';
       }
 
       const requestGameUrl = async token => {

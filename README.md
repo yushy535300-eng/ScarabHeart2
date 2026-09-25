@@ -74,3 +74,22 @@ Fixes:
 - `ROOM_SESSION_ID` is now stored in a shared app-level variable and refreshed for every `enterGame()` call.
 - Re-entry auto-room reset from v2.63 remains enabled.
 - Machine-number visual targeting from v2.62 and Render-stable asset handling from v2.61 remain unchanged.
+
+
+## v2.65 correct roomId auto-select contract
+
+Root cause found in the actual ATG engine runtime:
+- The engine only activates its exact-room path when `TARGET_KIND` is `roomId`
+  (or when TARGET is non-numeric).
+- It then resolves `roomId -> machineNum` from the live ATG table map.
+- `MACHINENUM` is already the built-in fallback if that map is late.
+
+v2.62-v2.64 incorrectly overwrote `TARGET` with machineNum and set
+`TARGET_KIND=machineNum`, which bypassed the engine's native exact-room path.
+
+Fix:
+- Recommendation entry: `TARGET = roomId`, `TARGET_KIND = roomId`,
+  `MACHINENUM = recommended machine number`.
+- Typed machine entry uses the existing machine fallback path.
+- Bootstrap no longer overwrites TARGET/TARGET_KIND.
+- Re-entry session reset and Render-stable asset routing remain preserved.

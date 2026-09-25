@@ -17,8 +17,8 @@
       sessionStorage.removeItem('SCARAB_LAST_MACHINE');
     } catch (_) {}
     if(c.MACHINENUM){
-      c.TARGET=String(c.MACHINENUM);
-      c.TARGET_KIND='machineNum';
+      // Keep TARGET/TARGET_KIND untouched. The ATG engine needs the roomId
+      // as TARGET and uses MACHINENUM only as the visible-machine fallback.
       c.VISUAL_TARGET=String(c.MACHINENUM);
       window.__SC_VISUAL_MACHINE=String(c.MACHINENUM);
     }
@@ -185,16 +185,6 @@
         if (isRoomWait()) {
           if (!roomWaitSince) roomWaitSince=Date.now();
           var payload=window.__SCARAB_WEB_PAYLOAD||{}, cfg=payload.cfg||{};
-  // v2.62: the ATG selector UI is searched by the visible machine number.
-  // Internal roomId is retained only as FULL_ROOM_ID for post-selection validation.
-  try {
-    if (cfg && cfg.MACHINENUM) {
-      cfg.TARGET = String(cfg.MACHINENUM);
-      cfg.TARGET_KIND = 'machineNum';
-      cfg.VISUAL_TARGET = String(cfg.MACHINENUM);
-      window.__SC_VISUAL_MACHINE = String(cfg.MACHINENUM);
-    }
-  } catch (_) {}
 
           var exact=!!cfg.EXACT_ROOM;
           if (!exact && !window.__SCARAB_FORCE_MANUAL_ROOM && Date.now()-roomWaitSince>=ROOM_TIMEOUT_MS) {
