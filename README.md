@@ -279,3 +279,27 @@ Behavior:
 - Rows are explicitly marked `模擬推薦`.
 - Clicking a row still uses the real machine number and the existing auto-room flow, so the program can enter and locate the actual ATG machine.
 - Locked/missing rooms are excluded from simulated recommendations.
+
+
+## v2.77 six-game instant simulated recommendations
+
+ONLY these six titles use simulated recommendation data:
+- Tiger Princess
+- Hades / Baphomet
+- Wuxia
+- Son Go Ku
+- New Vampire Hunter
+- New Jinlian
+
+The other three titles remain on the real recommendation pipeline:
+- Golden Seth 2
+- Egyptian Mythology / Seth 1
+- Scarlet Three Kingdoms
+
+Behavior for the six simulated titles:
+- 10 recommendation rows appear immediately; no ATG recommendation probe wait.
+- Score range is intentionally moderate (~790-900).
+- RTP display is intentionally moderate (~84%-120%).
+- Rows are visibly marked `模擬推薦`.
+- Clicking a row still sends its machine number into the existing machine-number auto-room flow.
+- No recommendation probe runs for these six titles, so it cannot conflict with the formal game session.

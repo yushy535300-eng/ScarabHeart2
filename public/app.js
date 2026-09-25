@@ -3,7 +3,7 @@
 
   const $ = id => document.getElementById(id);
   const log = (...args) => { try { console.log('[ScarabHeart]', ...args); } catch (_) {} };
-  const APP_VERSION = 'v2.76-real-rooms-sim-recommendations';
+  const APP_VERSION = 'v2.77-six-games-instant-sim';
   const GAMES = [
     ['golden-seth', '戰神賽特2 覺醒之力', 'media/game2.png'],
     ['egyptian-mythology', '戰神賽特', 'media/game8.png'],
@@ -463,6 +463,73 @@
     'new-jinlian'
   ]);
 
+  // ONLY these six titles use instant simulated recommendation rows.
+  // Other titles continue to use the real recommendation pipeline.
+  const SIM_MACHINE_POOLS = {
+    'tiger-princess': [
+      '970','908','2745','558','218','1526','1508','1516','1530','1511'
+    ],
+    'hades': [
+      '3681','3506','3511','3526','3509','3521','3530','3518','3504','3515'
+    ],
+    'wuxia-caishen': [
+      '2308','3355','2740','3769','493','2394','3030','2089','174','3557'
+    ],
+    'son-go-ku': [
+      '2783','2786','2793','2796','2799','2804','2811','2814','2819','2820'
+    ],
+    'new-vampire-hunter': [
+      '2501','2789','2790','2795','2800','2812','2813','2824','2829','2830'
+    ],
+    'new-jinlian': [
+      '1501','1502','1503','1504','1505','1506','1507','1508','1509','1510'
+    ]
+  };
+
+  function instantSimBoards(gameCode) {
+    const machines = SIM_MACHINE_POOLS[gameCode] || [];
+    const make = (machineNum, index, salt) => {
+      const seed = simHash(gameCode + ':' + machineNum + ':' + salt);
+      const rtp = Math.round((84 + (seed % 3600) / 100) * 100) / 100; // 84.00 ~ 119.99
+      const score = 790 + (seed % 111); // 790 ~ 900
+      const bet = 1200 + ((seed >>> 7) % 7800);
+      const win = Math.round(bet * rtp / 100);
+      return {
+        // Synthetic roomId is intentional: auto-room uses MACHINENUM as the actual target.
+        roomId: '__machine__' + machineNum,
+        machineNum: String(machineNum),
+        status: 'simulated',
+        isLocked: false,
+        available: true,
+        rtp,
+        bet,
+        win,
+        profit: win - bet,
+        score,
+        simulated: true,
+        source: 'SIMULATED_RECOMMENDATION',
+        metric: '模擬推薦'
+      };
+    };
+
+    const base = machines.map((m,i) => make(m,i,'base'));
+    const composite = base.slice().sort((a,b) => b.score - a.score).slice(0,10);
+    const volatility = machines.map((m,i) => make(m,i,'hot')).sort((a,b) => b.rtp - a.rtp).slice(0,10);
+    const premium = machines.map((m,i) => make(m,i,'premium')).sort((a,b) => b.bet - a.bet).slice(0,10);
+    const freegame = machines.map((m,i) => make(m,i,'free')).sort((a,b) => a.score - b.score).slice(0,10);
+
+    return {
+      composite,
+      volatility,
+      premium,
+      freegame,
+      updatedAt: Date.now(),
+      source: 'SIMULATED_RECOMMENDATION',
+      simulated: true
+    };
+  }
+
+
   function simHash(text) {
     let h = 2166136261 >>> 0;
     const s = String(text || '');
@@ -593,6 +660,17 @@
     if (!game || !session || session.game !== game) return;
 
     const serial = ++boardLoadSerial;
+    if (SIM_RECOMMEND_GAMES.has(game)) {
+      stopRecommendationProbe();
+      pendingPick = null;
+      const simulated = normalizeBoards(instantSimBoards(game));
+      boards = simulated;
+      boardCache[game] = { at: Date.now(), value: simulated };
+      $('updTime').textContent = '模擬推薦';
+      renderBoard();
+      return;
+    }
+
     const box = $('recommend');
     pendingPick = null;
 
@@ -881,7 +959,6 @@
   async function enterGame(mode) {
     if (!session || !session.game) return;
     // Recommendation probe must never overlap the real game session.
-    stopRecommendationProbe();
     stopRecommendationProbe();
     // A previous room timeout must never disable the next exact-room request.
     try {
