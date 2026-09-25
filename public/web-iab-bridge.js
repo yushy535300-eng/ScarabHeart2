@@ -18,6 +18,7 @@
 
   var frameLoaded = false;
   var currentOpenId = 0;
+  var currentRoomSessionId = '';
 
   function needsBackendProxy(raw) {
     try {
@@ -96,6 +97,8 @@
   }
 
   function openInApp(raw, payload) {
+    var nextRoomSessionId = String(payload && payload.cfg && payload.cfg.ROOM_SESSION_ID || '');
+    currentRoomSessionId = nextRoomSessionId;
     try {
       sessionStorage.removeItem('SCARAB_FORCE_MANUAL_ROOM');
       sessionStorage.removeItem('scarab_force_manual_room');
@@ -151,6 +154,7 @@
     clearTimeout(loadTimer);
     frameLoaded = false;
     currentOpenId++;
+    currentRoomSessionId = '';
     if (ui.frame) {
       ui.frame.onload = null;
       ui.frame.src = 'about:blank';
@@ -165,9 +169,11 @@
     var ui = elements();
     if (!ui.frame || event.source !== ui.frame.contentWindow) return;
     var data = event.data;
+    var messageRoomSessionId = data && data.roomSessionId != null ? String(data.roomSessionId) : '';
+    if (messageRoomSessionId && currentRoomSessionId && messageRoomSessionId !== currentRoomSessionId) return;
     if (data && data.__scarabCommand === true && typeof data.url === 'string') {
       window.dispatchEvent(new CustomEvent('scarab:web-command', {
-        detail: { url: data.url }
+        detail: { url: data.url, roomSessionId: messageRoomSessionId }
       }));
       return;
     }

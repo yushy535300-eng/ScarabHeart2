@@ -3,7 +3,7 @@
 
   const $ = id => document.getElementById(id);
   const log = (...args) => { try { console.log('[ScarabHeart]', ...args); } catch (_) {} };
-  const APP_VERSION = 'v2.86-fake-rtp-40-97-top2-high';
+  const APP_VERSION = 'v2.96-room-session-lock';
   const GAMES = [
     ['golden-seth', '戰神賽特2 覺醒之力', 'media/game2.png'],
     ['egyptian-mythology', '戰神賽特', 'media/game8.png'],
@@ -1034,13 +1034,14 @@
   }
 
   function gameConfig(target, machineNum, boardName, boardList, targetKind) {
-    const goodRooms = ((boards && boards.composite) || []).filter(x => x && x.machineNum != null).slice(0, 3).map(x => ({
+    const displayGoodRooms = ((boards && boards.composite) || []).filter(x => x && x.machineNum != null).slice(0, 3).map(x => ({
       roomId: x.roomId,
       machineNum: x.machineNum,
       rtp: x.rtp != null ? x.rtp : x.todayRtp,
       bet: x.bet != null ? x.bet : x.todayBet,
       profit: x.profit != null ? x.profit : x.todayPnl
     }));
+    const exactMachine = /^\d+$/.test(String(machineNum || ''));
     return {
       TARGET: String(target || ''),
       TARGET_KIND: targetKind || null,
@@ -1053,14 +1054,20 @@
       UI: 'none',
       NO_SHIFT: true,
       BOARD_NAME: boardName || '',
-      BOARD_LIST: boardList || null,
-      GOOD_ROOMS: goodRooms,
+      // When the user explicitly selected one machine, recommendation data must
+      // never become a fallback target. Keep it only for display in the overlay.
+      BOARD_LIST: exactMachine ? null : (boardList || null),
+      GOOD_ROOMS: exactMachine ? [] : displayGoodRooms,
+      DISPLAY_GOOD_ROOMS: displayGoodRooms,
       GAME_CODE: session.game,
       GAME_ID: (GAME_META[session.game] || {}).gameId || null,
       GAME_MECHANISM: (GAME_META[session.game] || {}).mechanism || '',
       GAME_CHECKSUM: (GAME_META[session.game] || {}).checksum || '',
-      FULL_ROOM_ID: pendingPick && pendingPick.roomId ? String(pendingPick.roomId) : '',
+      // Seth-eye roomId can be stale/different from ATG live roomId. In strict
+      // machine mode it must not be allowed to pull the engine back to an old room.
+      FULL_ROOM_ID: exactMachine ? '' : (pendingPick && pendingPick.roomId ? String(pendingPick.roomId) : ''),
       EXACT_ROOM: false,
+      STRICT_MACHINE_TARGET: exactMachine,
       VISUAL_TARGET: String(machineNum || target || ''),
       VISUAL_TARGET_KIND: 'machineNum',
       ROOM_SESSION_ID: currentRoomSessionId,
@@ -1080,6 +1087,9 @@
       sessionStorage.removeItem('SCARAB_FORCE_MANUAL_ROOM');
       sessionStorage.removeItem('scarab_force_manual_room');
       sessionStorage.removeItem('SCARAB_ROOM_FALLBACK');
+      sessionStorage.removeItem('SCARAB_ROOM_DONE');
+      sessionStorage.removeItem('SCARAB_LAST_ROOM');
+      sessionStorage.removeItem('SCARAB_LAST_MACHINE');
       // Actual keys used by atg-engine-runtime:
       sessionStorage.removeItem('seth_seated');
       sessionStorage.removeItem('seth_switched');
@@ -1146,12 +1156,19 @@
 
   function closeGame(destination) {
     clearPreparedGameEntry();
+    // Any async room launch that started before this close is stale now.
+    gameOpenSerial++;
+    currentRoomSessionId = '';
     if (window.ScarabWebLauncher) ScarabWebLauncher.close();
     try {
       sessionStorage.removeItem('seth_seated');
       sessionStorage.removeItem('seth_switched');
       sessionStorage.removeItem('SCARAB_FORCE_MANUAL_ROOM');
       sessionStorage.removeItem('SCARAB_ROOM_FALLBACK');
+      sessionStorage.removeItem('SCARAB_ROOM_DONE');
+      sessionStorage.removeItem('SCARAB_LAST_ROOM');
+      sessionStorage.removeItem('SCARAB_LAST_MACHINE');
+      sessionStorage.removeItem('SCARAB_ROOM_SESSION');
     } catch (_) {}
     if (destination === 'home') showGameCenter();
     else {
@@ -1174,14 +1191,15 @@
     const command = String(url || '');
     if (!command) return;
     if (/__sethcmd__\/pick/.test(command)) {
+      let found = null;
       try {
         const parsed = new URL(command);
         const roomId = parsed.searchParams.get('ri') || '';
         const machineNum = parsed.searchParams.get('mn') || '';
-        const found = ((boards && boards.composite) || []).find(x => String(x.roomId || '') === roomId || String(x.machineNum || '') === machineNum);
-        if (found) selectRoom(found);
+        found = ((boards && boards.composite) || []).find(x => String(x.roomId || '') === roomId || String(x.machineNum || '') === machineNum) || null;
       } catch (_) {}
       closeGame('rooms');
+      if (found) setTimeout(() => selectRoom(found), 0);
       return;
     }
     if (/__sethcmd__\/rooms/.test(command)) { closeGame('rooms'); return; }

@@ -1,0 +1,12 @@
+v2.96 自動找房 Session Lock 修正
+
+修正重點：
+1. 成功進房後立即標記該 ROOM_SESSION_ID 已完成，ATG 內部重載不再重新找同一房。
+2. 每次選新機台都建立新 ROOM_SESSION_ID；舊 iframe 的訊息若 session 不符會被忽略。
+3. 指定機台模式不再把 GOOD_ROOMS / BOARD_LIST 當備援目標，避免第二次載入又跳回第一推薦。
+4. 指定機台模式不再使用 Seth-eye 的 FULL_ROOM_ID，避免舊/錯 roomId 把流程拉回前一房。
+5. 關閉遊戲立即讓尚未完成的舊 enterGame() 失效，避免舊非同步請求晚到後重開舊房。
+6. 遊戲內點「前往」改成先安全關閉舊遊戲，再啟動新機台選擇，消除 close/select 競態。
+7. /healthz 版本更新為 2.96-room-session-lock。
+
+其餘遊戲、推薦、白名單、後台與 UI 維持 v2.95。
