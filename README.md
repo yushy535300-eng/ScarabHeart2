@@ -1,3 +1,12 @@
+# ScarabHeart2 Web v2.55 ATG SLOTFRAMEWORK FIX
+
+## 這版修正
+- 修正 ATG `/slotFramework/manifest.json` 被 Render SPA fallback 錯誤回傳登入首頁 HTML，造成遊戲卡黑畫面。
+- `/slotFramework/*` 改成同源代理並保留上游原始 bytes，避免 CORS 與 JS/manifest 被改寫。
+- fetch/XHR 包裝器會把誤解析到 Render origin 的 `/slotFramework/*` 重新綁回當前 ATG session。
+- 保留 ATG 大型可跨域資源直連策略，避免所有資源都壓 Render。
+- 保留懸浮、換房重綁、速度狀態同步與 35 秒自動選房 fallback。
+
 # ScarabHeart2 Web v2.54（ATG 穩定整合版）
 
 這是可部署到 Render 的網站原始檔，不是 APK。

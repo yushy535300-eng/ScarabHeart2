@@ -123,8 +123,8 @@ function gameBoot(sid, originalHref, session, withRuntime) {
     ';window.__SCARAB_PROXY_PREFIX=' + scriptJson(prefix) +
     ';(function(){var O=window.__SCARAB_ORIGINAL_URL,P=' + scriptJson(prefix) +
     ';function A(x){var h=x.hostname.toLowerCase();return h==="godeebxp.com"||/\\.godeebxp\\.com$/.test(h)}' +
-    'function S(x){var p=x.pathname;return /^\/slotFramework\//i.test(p)||/^\/egames\/[a-f0-9]{40}\/game\/(?:assets|src|public|images|cocos-js)\//i.test(p)||/^\/egames\/[a-f0-9]{40}\/game\/(?:style\.css|game\.css|app\.js|index\.js|application\.js)$/i.test(p)}' +
-    'function H(raw){try{var x=new URL(String(raw),O);if(/^https?:$/.test(x.protocol)&&A(x)){if(S(x))return x.href;return P+"/__remote?url="+encodeURIComponent(x.href)}}catch(e){}return raw}' +
+    'function S(x){var p=x.pathname;return /^\/egames\/[a-f0-9]{40}\/game\/(?:assets|src|public|images|cocos-js)\//i.test(p)||/^\/egames\/[a-f0-9]{40}\/game\/(?:style\.css|game\.css|app\.js|index\.js|application\.js)$/i.test(p)}' +
+    'function H(raw){try{var x=new URL(String(raw),O);var here=location.origin;if(x.origin===here&&(/^\/slotFramework\//i.test(x.pathname)||/^\/egames\//i.test(x.pathname)))x=new URL(x.pathname+x.search,O);if(/^https?:$/.test(x.protocol)&&A(x)){if(/^\/slotFramework\//i.test(x.pathname))return P+x.pathname+x.search;if(S(x))return x.href;return P+"/__remote?url="+encodeURIComponent(x.href)}}catch(e){}return raw}' +
     'var F=window.fetch;if(F)window.fetch=function(i,n){var raw=typeof i==="string"?i:(i&&i.url)||String(i),u=H(raw);try{if(i instanceof Request&&u!==raw)i=new Request(u,i);else if(u!==raw)i=u}catch(e){i=u}return F.call(this,i,n)};' +
     'var XO=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(m,u){arguments[1]=H(u);return XO.apply(this,arguments)};' +
     'if(window.EventSource){var ES=window.EventSource;window.EventSource=function(u,o){return new ES(H(u),o)};window.EventSource.prototype=ES.prototype}' +
@@ -242,7 +242,8 @@ app.use('/__game/:sid/*', express.raw({ type: '*/*', limit: '16mb' }), async (re
   try {
     const dest = String(req.headers['sec-fetch-dest'] || '').toLowerCase();
     const mediaExt = /\.(?:png|jpe?g|gif|webp|svg|ico|mp3|ogg|wav|m4a|mp4|webm|woff2?|ttf|otf)(?:$|\?)/i.test(url.pathname + url.search);
-    const directStatic = /^\/slotFramework\//i.test(url.pathname) ||
+    const isSlotFramework = /^\/slotFramework\//i.test(url.pathname);
+    const directStatic =
       /^\/egames\/[a-f0-9]{40}\/game\/(?:assets|src|public|images|cocos-js)\//i.test(url.pathname) ||
       /^\/egames\/[a-f0-9]{40}\/game\/(?:style\.css|game\.css|app\.js|index\.js|application\.js)$/i.test(url.pathname);
     if ((req.method === 'GET' || req.method === 'HEAD') &&
@@ -282,7 +283,7 @@ app.use('/__game/:sid/*', express.raw({ type: '*/*', limit: '16mb' }), async (re
     const finalUrl = new URL(upstream.url || url.href);
     let bytes = Buffer.from(await upstream.arrayBuffer());
     const type = String(upstream.headers.get('content-type') || 'application/octet-stream');
-    if (/text\/html|javascript|text\/css/.test(type)) {
+    if (!isSlotFramework && /text\/html|javascript|text\/css/.test(type)) {
       const prefix = '/__game/' + sid;
       let body = bytes.toString('utf8');
       body = body.replaceAll(session.origin, prefix);
@@ -318,6 +319,46 @@ app.use('/__game/:sid/*', express.raw({ type: '*/*', limit: '16mb' }), async (re
 
 app.all(['/__socket/:sid', '/__lobby-socket'], (_req, res) => {
   res.status(426).send('WebSocket upgrade required');
+});
+
+// ATG/Cocos sometimes creates Request('/slotFramework/...') before our fetch wrapper
+// can see the original relative URL. In that case the browser resolves it against
+// this Render origin. Never let Express' SPA fallback return index.html for those
+// requests: recover the game session from Referer and proxy the exact ATG bytes.
+app.all('/slotFramework/*', express.raw({ type: '*/*', limit: '32mb' }), async (req, res) => {
+  let sid = '';
+  try {
+    const ref = String(req.headers.referer || '');
+    const match = ref.match(/\/__game\/([a-f0-9]{24})\//i);
+    if (match) sid = match[1];
+  } catch (_) {}
+  const session = sid && sessions.get(sid);
+  if (!session) return res.status(409).send('ATG session not ready');
+  let url;
+  try { url = new URL(req.originalUrl, session.origin + '/'); }
+  catch (_) { return res.status(400).send('Invalid slotFramework URL'); }
+  if (!gameAllowed(url)) return res.status(403).send('Invalid slotFramework host');
+  try {
+    const init = {
+      method: req.method,
+      headers: upstreamHeaders(req, url, session.origin),
+      redirect: 'follow'
+    };
+    if (req.method !== 'GET' && req.method !== 'HEAD' && req.body && req.body.length) init.body = req.body;
+    const upstream = await fetch(url, init);
+    const bytes = Buffer.from(await upstream.arrayBuffer());
+    res.status(upstream.status);
+    res.type(upstream.headers.get('content-type') || 'application/octet-stream');
+    ['content-range', 'accept-ranges', 'etag', 'last-modified'].forEach(key => {
+      const value = upstream.headers.get(key);
+      if (value) res.set(key, value);
+    });
+    res.set('Cache-Control', upstream.headers.get('cache-control') || 'public, max-age=3600');
+    sendCookies(res, upstream, sid);
+    res.send(bytes);
+  } catch (error) {
+    res.status(502).send('slotFramework 載入失敗：' + String(error && error.message || error));
+  }
 });
 
 app.use(express.static(publicDir, { extensions: ['html'] }));
