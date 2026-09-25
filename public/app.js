@@ -3,7 +3,7 @@
 
   const $ = id => document.getElementById(id);
   const log = (...args) => { try { console.log('[ScarabHeart]', ...args); } catch (_) {} };
-  const APP_VERSION = 'v2.63-reentry-auto-room-reset';
+  const APP_VERSION = 'v2.64-room-session-scope-fix';
   const GAMES = [
     ['golden-seth', '戰神賽特2 覺醒之力', 'media/game2.png'],
     ['egyptian-mythology', '戰神賽特', 'media/game8.png'],
@@ -44,6 +44,7 @@
   let boardLoadSerial = 0;
   let gameOpenSerial = 0;
   let roomSessionSerial = 0;
+  let currentRoomSessionId = '';
   const boardCache = Object.create(null);
   const BOARD_CACHE_MS = 15000;
 
@@ -436,7 +437,7 @@
       EXACT_ROOM: !!(pendingPick && pendingPick.roomId),
       VISUAL_TARGET: String(machineNum || target || ''),
       VISUAL_TARGET_KIND: 'machineNum',
-      ROOM_SESSION_ID: roomSessionId,
+      ROOM_SESSION_ID: currentRoomSessionId,
       FORCE_ROOM_RESET: true,
       SETH_ACCOUNT: session.account,
       APP_VER: APP_VERSION,
@@ -454,7 +455,7 @@
     } catch (_) {}
     const requestedGame = session.game;
     const openSerial = ++gameOpenSerial;
-    const roomSessionId = String(Date.now()) + '-' + String(++roomSessionSerial);
+    currentRoomSessionId = String(Date.now()) + '-' + String(++roomSessionSerial);
     const buttons = [$('enterBtn'), $('skipBtn')];
     buttons.forEach(button => { button.disabled = true; });
     $('err2').style.color = '';

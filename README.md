@@ -66,3 +66,11 @@ Fixes:
 - Previous manual fallback / room-done / last-room / last-machine state is cleared before every launch.
 - The iframe is reset to `about:blank` before loading the next ATG session so the prior auto-room runtime cannot survive re-entry.
 - Machine-number targeting from v2.62 and Render-stable asset handling from v2.61 are preserved.
+
+
+## v2.64 room-session scope fix
+
+- Fixes `roomSessionId is not defined` shown on the room-selection page.
+- `ROOM_SESSION_ID` is now stored in a shared app-level variable and refreshed for every `enterGame()` call.
+- Re-entry auto-room reset from v2.63 remains enabled.
+- Machine-number visual targeting from v2.62 and Render-stable asset handling from v2.61 remain unchanged.
