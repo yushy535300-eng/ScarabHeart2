@@ -125,3 +125,22 @@ Fix:
 - Underlying engine logic remains loaded: room automation, speed, FREE, guard/signal,
   stop-profit/stop-loss and live state are not removed.
 - v2.66 seated/switched reset and single-confirm fixes are preserved.
+
+
+## v2.68 block ATG 500 document replacement
+
+Cause confirmed by comparing the normal direct ATG HAR with the proxied flow:
+- Normal room selection completes over WebSocket:
+  `getSlotTableDetail -> updateSlotTable`.
+- A successful room selection does not require a new page/document.
+- The white `500 Internal Server Error / nginx` screen is a secondary document
+  navigation replacing an already-running game.
+
+Fix:
+- Each proxied game session now tracks whether a healthy HTML document has loaded.
+- Initial game load errors are still surfaced normally.
+- After the game is healthy, any later document navigation returning 500/502/503
+  is cancelled with HTTP 204, which leaves the current game document running.
+- The same protection is applied to `__remote` document navigations.
+- Legacy black/gold panel removal from v2.67 is preserved.
+- Seated/switched reset and second-entry auto-room behavior from v2.66 are preserved.

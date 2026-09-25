@@ -195,7 +195,9 @@ app.get('/__game/open', (req, res) => {
   sessions.set(sid, {
     origin: url.origin,
     createdAt: Date.now(),
-    payload
+    payload,
+    documentReady: false,
+    lastGoodDocumentUrl: ''
   });
   res.redirect(302, '/__game/' + sid + url.pathname + url.search);
 });
@@ -220,6 +222,16 @@ app.all('/__game/:sid/__remote', express.raw({ type: '*/*', limit: '16mb' }), as
       init.body = req.body;
     }
     const upstream = await fetch(url, init);
+    const remoteDest = String(req.headers['sec-fetch-dest'] || '').toLowerCase();
+    const remoteIsDocument = remoteDest === 'document' ||
+      /text\/html/i.test(String(req.headers.accept || ''));
+    if (remoteIsDocument && session.documentReady && upstream.status >= 500) {
+      try { if (upstream.body && upstream.body.cancel) await upstream.body.cancel(); } catch (_) {}
+      console.warn('[ATG_REMOTE_NAV_BLOCK]', sid, upstream.status, url.href);
+      res.set('X-Scarab-Recovered-From', String(upstream.status));
+      res.set('Cache-Control', 'no-store');
+      return res.status(204).end();
+    }
     const location = upstream.headers.get('location');
     if (location && upstream.status >= 300 && upstream.status < 400) {
       const next = new URL(location, url);
@@ -255,6 +267,8 @@ app.use('/__game/:sid/*', express.raw({ type: '*/*', limit: '16mb' }), async (re
 
   try {
     const dest = String(req.headers['sec-fetch-dest'] || '').toLowerCase();
+    const isDocumentRequest = dest === 'document' ||
+      /text\/html/i.test(String(req.headers.accept || ''));
     const mediaExt = /\.(?:png|jpe?g|gif|webp|svg|ico|mp3|ogg|wav|m4a|mp4|webm|woff2?|ttf|otf)(?:$|\?)/i.test(url.pathname + url.search);
     const isSlotFramework = /^\/slotFramework\//i.test(url.pathname);
     const directStatic =
@@ -273,13 +287,26 @@ app.use('/__game/:sid/*', express.raw({ type: '*/*', limit: '16mb' }), async (re
       init.body = req.body;
     }
     const upstream = await fetch(url, init);
+
+    // ATG room changes can occasionally trigger a secondary document navigation
+    // that returns nginx 500/502/503. Normal manual room selection in the user's
+    // HAR completes over WebSocket (getSlotTableDetail -> updateSlotTable) and
+    // does not require replacing the current game document. Once a healthy game
+    // document is already running, cancel only those later 5xx navigations.
+    if (isDocumentRequest && session.documentReady && upstream.status >= 500) {
+      try { if (upstream.body && upstream.body.cancel) await upstream.body.cancel(); } catch (_) {}
+      console.warn('[ATG_NAV_BLOCK]', sid, upstream.status, url.href);
+      res.set('X-Scarab-Recovered-From', String(upstream.status));
+      res.set('Cache-Control', 'no-store');
+      return res.status(204).end();
+    }
+
     const redirectLocation = upstream.headers.get('location');
     if (redirectLocation && upstream.status >= 300 && upstream.status < 400) {
       const next = new URL(redirectLocation, url);
       if (!gameAllowed(next)) return res.status(403).send('Invalid redirect URL');
       sendCookies(res, upstream, sid);
-      const isDocument = req.headers['sec-fetch-dest'] === 'document' ||
-        /text\/html/i.test(String(req.headers.accept || ''));
+      const isDocument = isDocumentRequest;
       // Only a real page navigation may change the session's document origin.
       // A cross-host asset redirect must keep its full origin encoded, or later
       // relative game requests would accidentally be sent to the asset host.
@@ -297,6 +324,11 @@ app.use('/__game/:sid/*', express.raw({ type: '*/*', limit: '16mb' }), async (re
     const finalUrl = new URL(upstream.url || url.href);
     let bytes = Buffer.from(await upstream.arrayBuffer());
     const type = String(upstream.headers.get('content-type') || 'application/octet-stream');
+    if (isDocumentRequest && upstream.status >= 200 && upstream.status < 400 &&
+        /text\/html/i.test(type)) {
+      session.documentReady = true;
+      session.lastGoodDocumentUrl = finalUrl.href;
+    }
     if (!isSlotFramework && /text\/html/i.test(type)) {
       let body = bytes.toString('utf8');
       body = body
