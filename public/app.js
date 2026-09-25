@@ -3,7 +3,7 @@
 
   const $ = id => document.getElementById(id);
   const log = (...args) => { try { console.log('[ScarabHeart]', ...args); } catch (_) {} };
-  const APP_VERSION = 'v2.96-room-session-lock';
+  const APP_VERSION = 'v2.97-all-games-auto-room-until-success';
   const GAMES = [
     ['golden-seth', '戰神賽特2 覺醒之力', 'media/game2.png'],
     ['egyptian-mythology', '戰神賽特', 'media/game8.png'],
@@ -1054,10 +1054,12 @@
       UI: 'none',
       NO_SHIFT: true,
       BOARD_NAME: boardName || '',
-      // When the user explicitly selected one machine, recommendation data must
-      // never become a fallback target. Keep it only for display in the overlay.
-      BOARD_LIST: exactMachine ? null : (boardList || null),
-      GOOD_ROOMS: exactMachine ? [] : displayGoodRooms,
+      // Keep the current composite recommendation queue available for the
+      // user's explicit "自動推薦找房一次" fallback. The engine still starts
+      // from the exact selected machine and will not use this queue until the
+      // user confirms fallback.
+      BOARD_LIST: boardList || null,
+      GOOD_ROOMS: displayGoodRooms,
       DISPLAY_GOOD_ROOMS: displayGoodRooms,
       GAME_CODE: session.game,
       GAME_ID: (GAME_META[session.game] || {}).gameId || null,
@@ -1119,8 +1121,12 @@
         machineNum = String(pendingPick.machineNum || '');
         target = '__machine__' + machineNum;
         targetKind = 'roomId';
-        boardName = pendingPick.boardName;
-        const source = (boards && boards[pendingPick.board]) || [];
+        // Fallback always follows the current 綜合分數 ranking, regardless
+        // of which tab the user originally clicked. This preserves the original
+        // exact machine as the first attempt, then lets the explicit fallback
+        // walk the composite top 10 from highest to lowest.
+        boardName = BOARD_META.composite[0];
+        const source = (boards && boards.composite) || [];
         boardList = source.filter(x => x && x.roomId && x.machineNum != null).map(x => ({ roomId: String(x.roomId), machineNum: String(x.machineNum), score: x.score }));
       } else {
         machineNum = String($('room').value || '').trim();
