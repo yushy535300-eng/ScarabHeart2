@@ -124,9 +124,15 @@ function gameBoot(sid, originalHref, session, withRuntime) {
     ';(function(){var O=window.__SCARAB_ORIGINAL_URL,P=' + scriptJson(prefix) +
     ';function A(x){var h=x.hostname.toLowerCase();return h==="godeebxp.com"||/\\.godeebxp\\.com$/.test(h)}' +
     'function S(x){var p=x.pathname;return /^\/egames\/[a-f0-9]{40}\/game\/(?:assets|src|public|images|cocos-js)\//i.test(p)||/^\/egames\/[a-f0-9]{40}\/game\/(?:style\.css|game\.css|app\.js|index\.js|application\.js)$/i.test(p)}' +
-    'function H(raw){try{var x=new URL(String(raw),O);var here=location.origin;if(x.origin===here&&(/^\/slotFramework\//i.test(x.pathname)||/^\/egames\//i.test(x.pathname)))x=new URL(x.pathname+x.search,O);if(/^https?:$/.test(x.protocol)&&A(x)){if(/^\/slotFramework\//i.test(x.pathname))return P+x.pathname+x.search;if(S(x))return x.href;return P+"/__remote?url="+encodeURIComponent(x.href)}}catch(e){}return raw}' +
+    'function H(raw){try{var x=new URL(String(raw),O);var here=location.origin;if(x.origin===here&&(/^\/slotFramework\//i.test(x.pathname)||/^\/egames\//i.test(x.pathname)))x=new URL(x.pathname+x.search,O);if(/^https?:$/.test(x.protocol)&&A(x)){if(/^\/slotFramework\//i.test(x.pathname)){if(/^\/slotFramework\/manifest\.json$/i.test(x.pathname))return P+x.pathname+x.search;return x.href}if(S(x))return x.href;return P+"/__remote?url="+encodeURIComponent(x.href)}}catch(e){}return raw}' +
+    'function D(raw){try{var x=new URL(String(raw),location.href);if(x.origin===location.origin&&/^\/slotFramework\//i.test(x.pathname)&&!/^\/slotFramework\/manifest\.json$/i.test(x.pathname))return new URL(x.pathname+x.search,O).href}catch(e){}return raw}' +
     'var F=window.fetch;if(F)window.fetch=function(i,n){var raw=typeof i==="string"?i:(i&&i.url)||String(i),u=H(raw);try{if(i instanceof Request&&u!==raw)i=new Request(u,i);else if(u!==raw)i=u}catch(e){i=u}return F.call(this,i,n)};' +
     'var XO=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(m,u){arguments[1]=H(u);return XO.apply(this,arguments)};' +
+    'var SA=Element.prototype.setAttribute;Element.prototype.setAttribute=function(k,v){try{if(/^(?:src|href)$/i.test(String(k)))v=D(v)}catch(e){}return SA.call(this,k,v)};' +
+    'function PS(C,k){try{var d=Object.getOwnPropertyDescriptor(C.prototype,k);if(!d||!d.set||!d.get)return;Object.defineProperty(C.prototype,k,{configurable:d.configurable,enumerable:d.enumerable,get:d.get,set:function(v){return d.set.call(this,D(v))}})}catch(e){}}' +
+    '[HTMLImageElement,HTMLScriptElement,HTMLLinkElement,HTMLAudioElement,HTMLVideoElement,HTMLSourceElement].forEach(function(C){if(C)PS(C,C===HTMLLinkElement?"href":"src")});' +
+    'if(window.Worker){var W=window.Worker;window.Worker=function(u,o){return new W(D(u),o)};window.Worker.prototype=W.prototype}' +
+    'if(window.SharedWorker){var SW=window.SharedWorker;window.SharedWorker=function(u,o){return new SW(D(u),o)};window.SharedWorker.prototype=SW.prototype}' +
     'if(window.EventSource){var ES=window.EventSource;window.EventSource=function(u,o){return new ES(H(u),o)};window.EventSource.prototype=ES.prototype}' +
     'if(navigator.sendBeacon){var SB=navigator.sendBeacon.bind(navigator);navigator.sendBeacon=function(u,d){return SB(H(u),d)}}' +
     'var N=window.WebSocket;window.WebSocket=function(u,p){try{var x=new URL(u,O);if(/^wss?:$/.test(x.protocol)&&A(x)){var q=(location.protocol==="https:"?"wss:":"ws:")+"//"+location.host+"/__socket/' + sid + '?url="+encodeURIComponent(x.href);return p?new N(q,p):new N(q)}}catch(e){}return p?new N(u,p):new N(u)};window.WebSocket.prototype=N.prototype;Object.keys(N).forEach(function(k){try{window.WebSocket[k]=N[k]}catch(e){}});["CONNECTING","OPEN","CLOSING","CLOSED"].forEach(function(k){try{Object.defineProperty(window.WebSocket,k,{value:N[k],configurable:true})}catch(e){}});' +
@@ -321,11 +327,12 @@ app.all(['/__socket/:sid', '/__lobby-socket'], (_req, res) => {
   res.status(426).send('WebSocket upgrade required');
 });
 
-// ATG/Cocos sometimes creates Request('/slotFramework/...') before our fetch wrapper
-// can see the original relative URL. In that case the browser resolves it against
-// this Render origin. Never let Express' SPA fallback return index.html for those
-// requests: recover the game session from Referer and proxy the exact ATG bytes.
-app.all('/slotFramework/*', express.raw({ type: '*/*', limit: '32mb' }), async (req, res) => {
+// ATG's manifest does not advertise cross-origin access, so keep only that
+// tiny bootstrap JSON on our same-origin bridge. All versioned slotFramework
+// assets (config/index/import/native/...) are CORS-enabled by ATG and must go
+// straight to play.godeebxp.com; proxying hundreds of them through Render
+// causes 502/503 bursts followed by 429 throttling.
+app.all('/slotFramework/*', express.raw({ type: '*/*', limit: '4mb' }), async (req, res) => {
   let sid = '';
   try {
     const ref = String(req.headers.referer || '');
@@ -338,6 +345,15 @@ app.all('/slotFramework/*', express.raw({ type: '*/*', limit: '32mb' }), async (
   try { url = new URL(req.originalUrl, session.origin + '/'); }
   catch (_) { return res.status(400).send('Invalid slotFramework URL'); }
   if (!gameAllowed(url)) return res.status(403).send('Invalid slotFramework host');
+
+  const isManifest = /^\/slotFramework\/manifest\.json$/i.test(url.pathname);
+  if (!isManifest && (req.method === 'GET' || req.method === 'HEAD')) {
+    // Last-resort fallback for resource types that bypass our browser URL hooks.
+    // Do not download the asset on Render: send the browser to ATG directly.
+    res.set('Cache-Control', 'no-store');
+    return res.redirect(307, url.href);
+  }
+
   try {
     const init = {
       method: req.method,
@@ -353,11 +369,11 @@ app.all('/slotFramework/*', express.raw({ type: '*/*', limit: '32mb' }), async (
       const value = upstream.headers.get(key);
       if (value) res.set(key, value);
     });
-    res.set('Cache-Control', upstream.headers.get('cache-control') || 'public, max-age=3600');
+    res.set('Cache-Control', upstream.headers.get('cache-control') || 'no-cache');
     sendCookies(res, upstream, sid);
     res.send(bytes);
   } catch (error) {
-    res.status(502).send('slotFramework 載入失敗：' + String(error && error.message || error));
+    res.status(502).send('slotFramework manifest 載入失敗：' + String(error && error.message || error));
   }
 });
 

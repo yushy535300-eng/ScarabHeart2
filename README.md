@@ -1,74 +1,17 @@
-# ScarabHeart2 Web v2.55 ATG SLOTFRAMEWORK FIX
+# ScarabHeart2 Web v2.56 — ATG DIRECT ASSETS
 
-## 這版修正
-- 修正 ATG `/slotFramework/manifest.json` 被 Render SPA fallback 錯誤回傳登入首頁 HTML，造成遊戲卡黑畫面。
-- `/slotFramework/*` 改成同源代理並保留上游原始 bytes，避免 CORS 與 JS/manifest 被改寫。
-- fetch/XHR 包裝器會把誤解析到 Render origin 的 `/slotFramework/*` 重新綁回當前 ATG session。
-- 保留 ATG 大型可跨域資源直連策略，避免所有資源都壓 Render。
-- 保留懸浮、換房重綁、速度狀態同步與 35 秒自動選房 fallback。
+本版針對 v2.55 實測 HAR 中的 ATG 黑畫面修正。
 
-# ScarabHeart2 Web v2.54（ATG 穩定整合版）
+## HAR 確認到的主因
+v2.55 將 `/slotFramework/<hash>/import/*` 與 `/native/*` 等數百筆 Cocos 資產經 Render 代理，實測產生大量 502 / 503，接著觸發 429，造成遊戲永遠缺資源而卡在黑畫面。
 
-這是可部署到 Render 的網站原始檔，不是 APK。
+## v2.56 修正
+- 只有 `/slotFramework/manifest.json` 維持同源 Render bridge（原站該項沒有 CORS header）。
+- `/slotFramework/<hash>/config.json`、`index.js`、`import/*`、`native/*` 改由瀏覽器直接向 ATG `play.godeebxp.com` 載入。
+- 同時處理 fetch、XMLHttpRequest、Image.src、Script.src、Link.href、Audio/Video/Source、setAttribute、Worker、SharedWorker 等常見 Cocos 載入方式。
+- 若仍有未被 hook 的 `/slotFramework/*` GET/HEAD，Render 只做 307 導向，不再下載/轉送資產。
+- 保留 ATG WebSocket bridge、懸浮、即時資料、換房重綁、加速與 35 秒手動選房 fallback。
+- 加速仍等待 ATG/Cocos ready 後才掛載，不改 WebSocket/heartbeat 時鐘。
 
-## 這版已改好
-
-- 電腦登入頁恢復為左側大型聖甲蟲、右側登入介面。
-- TZ 與 OFA 登入由使用者瀏覽器直接呼叫娛樂城 API；不再把 TZ 登入繞到 Render。
-- 遊戲在聖甲之心網站內全畫面載入，不會另開官方 ATG 分頁。
-- 遊戲頁、資源、Fetch/XHR 與 WebSocket 由同一個受限代理工作。
-- WebSocket 上游會使用 ATG 所需的 https://play.godeebxp.com Origin。
-- 懸浮工具會在遊戲頁載入，並監聽目前登入遊戲的服務連線。
-- 速度控制真正呼叫 Cocos TimeManager.instance.setTimeScale()。
-- 一般遊戲提供 1X／2X／4X／8X；戰神賽特 1、戰神賽特 2、虎小妹另提供 16X／MAX。
-- MAX 使用持續 32X，避免把 999 直接寫入 Cocos 導致頁面凍結。
-- 劇透功能沿用 ATG 引擎，只在購買免遊後讀取伺服器回傳的整輪結果。
-- 專案只有 ATG 遊戲與 ATG 引擎。
-- 公告中的 LINE 網址會被擋下，不會顯示。
-
-## 上傳 GitHub
-
-1. 解壓縮 ZIP。
-2. 將解壓後的所有內容上傳到 GitHub 儲存庫根目錄。
-3. 確認 package.json、server.js、render.yaml、public、runtime 在同一層。
-4. 不要上傳 HAR、代理後台 Bearer Token、密碼或驗證器金鑰。
-
-## Render 設定
-
-- Runtime：Node
-- Build Command：npm install
-- Start Command：npm start
-- Health Check Path：/healthz
-- Node：20 以上
-
-部署完成後開啟 /healthz，應看到：
-
-    {"ok":true,"version":"2.54-atg-stable"}
-
-## 測試順序
-
-1. 用自己的 TZ 帳號登入。
-2. 選一款 ATG 遊戲與機台。
-3. 確認遊戲留在網站內載入。
-4. 確認懸浮工具顯示「遊戲引擎已連線」。
-5. 點 2X，觀察實際動畫速度與工具狀態。
-6. 開啟劇透，實際購買免遊後確認整輪結果。
-
-靜態檢查與本機流程測試不需要帳號；TZ 真實登入、下注與購買免遊仍必須由你部署後使用自己的測試帳號驗證。
-
-
-## v2.53.1 ATG in-app stability fix
-- Runtime bootstrap waits for the game DOM/body before starting engine, live adapter, and floating assistant.
-- Auto room targeting falls back to manual room selection after 35 seconds instead of blocking indefinitely.
-- Floating assistant is automatically re-mounted if the game rebuilds the DOM and removes it.
-- Large media/font resources bypass Render and load from ATG directly; runtime/API/WebSocket traffic remains proxied where required.
-- Existing floating assistant runtime and controls are preserved.
-
-
-## v2.54 重點修正
-- ATG 遊戲本體優先：等 Cocos canvas / scene / TimeManager / service 任一條件穩定後才啟動輔助，避免輔助在 slotFramework 還沒完成時搶資源。
-- slotFramework 與遊戲靜態資源直接由瀏覽器向 ATG 讀取，Render 只保留需要注入、API 與 WebSocket 的流量。
-- 換房或 Cocos TimeManager instance 重建後，原本選定倍率會自動重新套用。
-- 懸浮根節點不攔截透明區域的滑鼠／觸控，只有實際面板與控制項接收操作。
-- 懸浮被 ATG 重建 DOM 移除時自動恢復；速度按鈕會重新同步實際引擎倍率。
-- 自動定位超過 35 秒會切換手動選房，不讓定位流程永久擋住遊戲。
+## 部署後驗證
+登入 → ATG → 選房 → 進機台。Network 應看到大量 `slotFramework/<hash>/import`、`native` 直接由 `play.godeebxp.com` 回 200，而不是集中打 `scarabheart2.onrender.com`。
