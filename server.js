@@ -63,7 +63,7 @@ function scriptJson(value) {
 
 app.disable('x-powered-by');
 app.get('/healthz', (_req, res) => {
-  res.status(200).json({ ok: true, version: '2.53-atg-inapp' });
+  res.status(200).json({ ok: true, version: '2.53.1-atg-inapp-fixed' });
 });
 
 app.use('/__api', express.raw({ type: '*/*', limit: '2mb' }), async (req, res) => {
@@ -108,6 +108,9 @@ app.get('/__runtime/atg-live-adapter.js', (_req, res) => {
 app.get('/__runtime/overlay-runtime.js', (_req, res) => {
   res.sendFile(path.join(runtimeDir, 'overlay-runtime.js'));
 });
+app.get('/__runtime/bootstrap-runtime.js', (_req, res) => {
+  res.sendFile(path.join(runtimeDir, 'bootstrap-runtime.js'));
+});
 
 function gameBoot(sid, originalHref, session, withRuntime) {
   const prefix = '/__game/' + sid;
@@ -132,14 +135,10 @@ function gameBoot(sid, originalHref, session, withRuntime) {
     'window.__SCARAB_WEB_PAYLOAD=' + scriptJson(payload) + ';' +
     'window.__SC_GAME_CODE=' + scriptJson(String(payload.gameCode || config.GAME_CODE || '')) + ';' +
     'window.__SC_GOOD_ROOMS=' + scriptJson(config.GOOD_ROOMS || []) + ';' +
+    'window.__SCARAB_FORCE_MANUAL_ROOM=false;' +
     'try{parent.postMessage({__scarabStatus:true,state:"engine-wait"},location.origin)}catch(e){}' +
     '<\/script>' +
-    '<script src="/__runtime/atg-engine-runtime.js"><\/script>' +
-    '<script>(function(){if(window.__sethBooted)return;window.__sethBooted=true;try{' +
-    'var p=window.__SCARAB_WEB_PAYLOAD||{};engine(p.cfg||{});' +
-    '}catch(e){window.__sethBooted=false;try{parent.postMessage({__scarabStatus:true,state:"engine-error",message:String(e&&e.message||e)},location.origin)}catch(_){}}})();<\/script>' +
-    '<script src="/__runtime/atg-live-adapter.js"><\/script>' +
-    '<script src="/__runtime/overlay-runtime.js"><\/script>';
+    '<script src="/__runtime/bootstrap-runtime.js" defer><\/script>';
   return proxyBoot + runtimeBoot;
 }
 
@@ -237,6 +236,12 @@ app.use('/__game/:sid/*', express.raw({ type: '*/*', limit: '16mb' }), async (re
   if (!gameAllowed(url)) return res.status(403).send('Invalid game session');
 
   try {
+    const dest = String(req.headers['sec-fetch-dest'] || '').toLowerCase();
+    const mediaExt = /\.(?:png|jpe?g|gif|webp|svg|ico|mp3|ogg|wav|m4a|mp4|webm|woff2?|ttf|otf)(?:$|\?)/i.test(url.pathname + url.search);
+    if ((req.method === 'GET' || req.method === 'HEAD') &&
+        (dest === 'image' || dest === 'audio' || dest === 'video' || dest === 'font' || mediaExt)) {
+      return res.redirect(302, url.href);
+    }
     const init = {
       method: req.method,
       headers: upstreamHeaders(req, url, session.origin),

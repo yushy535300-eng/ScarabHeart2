@@ -46,3 +46,11 @@
 6. 開啟劇透，實際購買免遊後確認整輪結果。
 
 靜態檢查與本機流程測試不需要帳號；TZ 真實登入、下注與購買免遊仍必須由你部署後使用自己的測試帳號驗證。
+
+
+## v2.53.1 ATG in-app stability fix
+- Runtime bootstrap waits for the game DOM/body before starting engine, live adapter, and floating assistant.
+- Auto room targeting falls back to manual room selection after 35 seconds instead of blocking indefinitely.
+- Floating assistant is automatically re-mounted if the game rebuilds the DOM and removes it.
+- Large media/font resources bypass Render and load from ATG directly; runtime/API/WebSocket traffic remains proxied where required.
+- Existing floating assistant runtime and controls are preserved.
