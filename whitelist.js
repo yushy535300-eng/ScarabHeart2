@@ -9,13 +9,14 @@ function getPool(){
   if(!url) return null;
   if(!/^postgres(ql)?:\/\//i.test(url)) throw new Error('DATABASE_URL 必須使用 Render PostgreSQL 連線網址');
   if(!pool) pool = new Pool({
-    connectionString: url,
-    ssl: /localhost|127\.0\.0\.1/i.test(url) ? false : { rejectUnauthorized:false }
+    connectionString:url,
+    ssl:/localhost|127\.0\.0\.1/i.test(url) ? false : { rejectUnauthorized:false }
   });
   return pool;
 }
 
 function whitelistEnabled(){
+  // Scarab uses the shared whitelist by default.
   return String(process.env.TZ_WHITELIST_ENABLED ?? 'true').toLowerCase() !== 'false';
 }
 
@@ -37,58 +38,47 @@ async function ensureWhitelistTables(){
   )`);
 
   await db.query(`ALTER TABLE tz_whitelist ADD COLUMN IF NOT EXISTS platform VARCHAR(16) NOT NULL DEFAULT 'TZ'`);
+  await db.query(`ALTER TABLE tz_whitelist ADD COLUMN IF NOT EXISTS enabled BOOLEAN NOT NULL DEFAULT TRUE`);
+  await db.query(`ALTER TABLE tz_whitelist ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ NULL`);
+  await db.query(`ALTER TABLE tz_whitelist ADD COLUMN IF NOT EXISTS max_devices INTEGER NOT NULL DEFAULT 1`);
+  await db.query(`ALTER TABLE tz_whitelist ADD COLUMN IF NOT EXISTS note VARCHAR(255) NULL`);
+  await db.query(`ALTER TABLE tz_whitelist ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`);
+  await db.query(`ALTER TABLE tz_whitelist ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`);
 
-  // v2.91: whitelist identity is account-only.
-  // Keep old columns for backwards DB compatibility, but authorization no longer
-  // depends on platform / expiry / note / password.
-  //
-  // Old disabled/expired records represented revoked access. Remove them once
-  // during the account-only migration so a revoked old row is not accidentally
-  // re-enabled just because row existence now grants access.
-  await db.query(`DELETE FROM tz_whitelist
-    WHERE enabled = FALSE
-       OR (expires_at IS NOT NULL AND expires_at <= NOW())`);
-
-  // If the same login existed once as TZ and once as OFA, keep the newest row.
-  await db.query(`DELETE FROM tz_whitelist a
-    USING tz_whitelist b
-    WHERE LOWER(a.username)=LOWER(b.username)
-      AND a.id < b.id`);
-
-  await db.query(`UPDATE tz_whitelist
-    SET platform='ACCOUNT',
-        enabled=TRUE,
-        expires_at=NULL,
-        note=NULL,
-        updated_at=NOW()
-    WHERE platform IS DISTINCT FROM 'ACCOUNT'
-       OR enabled IS DISTINCT FROM TRUE
-       OR expires_at IS NOT NULL
-       OR note IS NOT NULL`);
-
-  await db.query(`DROP INDEX IF EXISTS tz_whitelist_platform_username_ci`);
+  // Restore the original MT database index model, without deleting any rows.
+  await db.query(`DROP INDEX IF EXISTS tz_whitelist_username_ci`);
   await db.query(`DROP INDEX IF EXISTS tz_whitelist_username_lower_idx`);
-  await db.query(`CREATE UNIQUE INDEX IF NOT EXISTS tz_whitelist_username_ci
-    ON tz_whitelist (LOWER(username))`);
+  await db.query(`CREATE UNIQUE INDEX IF NOT EXISTS tz_whitelist_platform_username_ci
+    ON tz_whitelist (UPPER(platform), LOWER(username))`);
 
   initialized = true;
   return true;
 }
 
-async function authorizeWhitelist(usernameRaw){
+async function authorizeWhitelist(usernameRaw, platformRaw='TZ'){
   if(!whitelistEnabled()) return { allowed:true, reason:'whitelist_disabled' };
   const db = getPool();
   if(!db) return { allowed:false, reason:'database_unavailable' };
   await ensureWhitelistTables();
 
   const username = String(usernameRaw || '').trim();
+  const platform = String(platformRaw || 'TZ').trim().toUpperCase();
   if(!username) return { allowed:false, reason:'not_whitelisted' };
 
+  // Prefer the exact TZ/OFA row. v2.91 compatibility: ACCOUNT means shared account.
   const r = await db.query(
-    `SELECT id, username FROM tz_whitelist WHERE LOWER(username)=LOWER($1) LIMIT 1`,
-    [username]
+    `SELECT * FROM tz_whitelist
+      WHERE LOWER(username)=LOWER($1)
+        AND (UPPER(platform)=UPPER($2) OR UPPER(platform)='ACCOUNT')
+      ORDER BY CASE WHEN UPPER(platform)=UPPER($2) THEN 0 ELSE 1 END
+      LIMIT 1`,
+    [username, platform]
   );
-  if(!r.rowCount) return { allowed:false, reason:'not_whitelisted' };
+  const row = r.rows[0];
+  if(!row) return { allowed:false, reason:'not_whitelisted' };
+  if(!row.enabled) return { allowed:false, reason:'disabled' };
+  if(row.expires_at && new Date(row.expires_at).getTime() <= Date.now())
+    return { allowed:false, reason:'expired' };
   return { allowed:true, reason:'ok' };
 }
 
@@ -96,11 +86,7 @@ async function listWhitelist(){
   const db = getPool();
   if(!db) throw new Error('DATABASE_URL 尚未設定');
   await ensureWhitelistTables();
-  return (await db.query(
-    `SELECT id, username, created_at, updated_at
-       FROM tz_whitelist
-      ORDER BY updated_at DESC, id DESC`
-  )).rows;
+  return (await db.query(`SELECT w.* FROM tz_whitelist w ORDER BY w.updated_at DESC`)).rows;
 }
 
 async function upsertWhitelist(input){
@@ -109,20 +95,29 @@ async function upsertWhitelist(input){
   await ensureWhitelistTables();
 
   const username = String(input && input.username || '').trim();
-  if(!username) throw new Error('請輸入登入帳號');
+  if(!username) throw new Error('請輸入平台帳號');
+
+  const platform = String(input && input.platform || 'TZ').trim().toUpperCase();
+  if(!['TZ','OFA'].includes(platform)) throw new Error('不支援的平台');
+
+  const permanent = !!(input && input.permanent);
+  const days = input && input.days;
+  const expiresAt = permanent ? null : new Date(Date.now() + Math.max(1, Number(days) || 30) * 86400000);
+  const note = String(input && input.note || '').slice(0,255);
 
   const existing = await db.query(
-    `SELECT id FROM tz_whitelist WHERE LOWER(username)=LOWER($1) LIMIT 1`,
-    [username]
+    `SELECT id FROM tz_whitelist
+      WHERE UPPER(platform)=UPPER($1) AND LOWER(username)=LOWER($2)
+      LIMIT 1`,
+    [platform, username]
   );
 
   if(existing.rowCount){
     await db.query(
       `UPDATE tz_whitelist
-          SET username=$1, platform='ACCOUNT', enabled=TRUE,
-              expires_at=NULL, note=NULL, updated_at=NOW()
-        WHERE id=$2`,
-      [username, existing.rows[0].id]
+          SET username=$1, platform=$2, enabled=TRUE, expires_at=$3, note=$4, updated_at=NOW()
+        WHERE id=$5`,
+      [username, platform, expiresAt, note, existing.rows[0].id]
     );
     return;
   }
@@ -130,32 +125,55 @@ async function upsertWhitelist(input){
   try{
     await db.query(
       `INSERT INTO tz_whitelist
-        (username, platform, enabled, expires_at, max_devices, note, updated_at)
-       VALUES ($1,'ACCOUNT',TRUE,NULL,1,NULL,NOW())`,
-      [username]
+        (username,platform,enabled,expires_at,max_devices,note,updated_at)
+       VALUES ($1,$2,TRUE,$3,1,$4,NOW())`,
+      [username, platform, expiresAt, note]
     );
   }catch(e){
     if(!e || e.code !== '23505') throw e;
     await db.query(
       `UPDATE tz_whitelist
-          SET username=$1, platform='ACCOUNT', enabled=TRUE,
-              expires_at=NULL, note=NULL, updated_at=NOW()
-        WHERE LOWER(username)=LOWER($1)`,
-      [username]
+          SET username=$1,enabled=TRUE,expires_at=$2,note=$3,updated_at=NOW()
+        WHERE UPPER(platform)=UPPER($4) AND LOWER(username)=LOWER($1)`,
+      [username, expiresAt, note, platform]
     );
   }
 }
 
-async function deleteWhitelist(id){
-  const db = getPool();
+async function setWhitelistEnabled(id, enabled){
+  const db=getPool();
   if(!db) throw new Error('DATABASE_URL 尚未設定');
   await ensureWhitelistTables();
-  await db.query(`DELETE FROM tz_whitelist WHERE id=$1`, [Number(id)]);
+  await db.query(`UPDATE tz_whitelist SET enabled=$1,updated_at=NOW() WHERE id=$2`,[!!enabled,Number(id)]);
 }
 
-module.exports = {
+async function extendWhitelist(id, days){
+  const db=getPool();
+  if(!db) throw new Error('DATABASE_URL 尚未設定');
+  await ensureWhitelistTables();
+  await db.query(
+    `UPDATE tz_whitelist
+        SET expires_at=(CASE WHEN expires_at IS NULL OR expires_at < NOW() THEN NOW() ELSE expires_at END)
+                         +($1::text || ' days')::interval,
+            enabled=TRUE,
+            updated_at=NOW()
+      WHERE id=$2`,
+    [Math.max(1,Number(days)||30),Number(id)]
+  );
+}
+
+async function deleteWhitelist(id){
+  const db=getPool();
+  if(!db) throw new Error('DATABASE_URL 尚未設定');
+  await ensureWhitelistTables();
+  await db.query(`DELETE FROM tz_whitelist WHERE id=$1`,[Number(id)]);
+}
+
+module.exports={
   authorizeWhitelist,
   listWhitelist,
   upsertWhitelist,
+  setWhitelistEnabled,
+  extendWhitelist,
   deleteWhitelist
 };

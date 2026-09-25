@@ -12,7 +12,7 @@ const { HttpsProxyAgent } = require('https-proxy-agent');
 const path = require('path');
 const crypto = require('crypto');
 const { adminPage } = require('./admin-page');
-const { authorizeWhitelist, listWhitelist, upsertWhitelist, deleteWhitelist } = require('./whitelist');
+const { authorizeWhitelist, listWhitelist, upsertWhitelist, setWhitelistEnabled, extendWhitelist, deleteWhitelist } = require('./whitelist');
 
 const app = express();
 const sessions = new Map();
@@ -81,13 +81,42 @@ function adminRedirect(res,msg=''){res.redirect(303,'/admin'+(msg?'?msg='+encode
 app.get('/admin',async(req,res)=>{res.set('Cache-Control','no-store, no-cache, must-revalidate');const t=adminToken(req),logged=!!t&&adminSessions.has(t);if(!logged)return res.type('html').send(adminPage(false));let items=[],dbError='';try{items=await listWhitelist();}catch(e){dbError=String(e&&e.message||'讀取失敗');}res.type('html').send(adminPage(true,'',items,String(req.query.msg||''),dbError));});
 app.post('/api/admin/login',adminForm,(req,res)=>{const expected=String(process.env.ADMIN_PASSWORD||'').trim(),supplied=String(req.body&&req.body.password||'').trim();if(!expected)return res.status(503).type('html').send(adminPage(false,'Render 尚未設定 ADMIN_PASSWORD'));if(supplied!==expected)return res.status(401).type('html').send(adminPage(false,'管理員密碼錯誤'));const token=crypto.randomUUID();adminSessions.add(token);res.set('Set-Cookie',`scarab_admin_token=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=28800${process.env.NODE_ENV==='production'?'; Secure':''}`);adminRedirect(res);});
 app.post('/api/admin/logout-form',(req,res)=>{const t=adminToken(req);if(t)adminSessions.delete(t);res.set('Set-Cookie',`scarab_admin_token=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${process.env.NODE_ENV==='production'?'; Secure':''}`);adminRedirect(res);});
-app.post('/api/admin/whitelist-form',adminForm,requireAdmin,async(req,res)=>{try{const u=String(req.body&&req.body.username||'').trim();if(!u)return adminRedirect(res,'請輸入登入帳號');await upsertWhitelist({username:u});adminRedirect(res,`${u} 已加入共用白名單`);}catch(e){adminRedirect(res,`新增失敗：${String(e&&e.message||e)}`);}});
-app.post('/api/admin/whitelist/:id/delete-form',adminForm,requireAdmin,async(req,res)=>{try{await deleteWhitelist(req.params.id);adminRedirect(res,'帳號已刪除');}catch(e){adminRedirect(res,`操作失敗：${String(e&&e.message||e)}`);}});
-app.post('/api/access/login',accessJson,async(req,res)=>{try{const username=String(req.body&&req.body.username||'').trim(),platform=String(req.body&&req.body.platform||'TZ').trim().toUpperCase();if(!username||!['TZ','OFA'].includes(platform))return res.status(400).json({success:false,reason:'invalid_request'});const access=await authorizeWhitelist(username);if(!access.allowed)return res.status(403).json({success:false,reason:access.reason});const sessionId=crypto.randomUUID();accessSessions.set(sessionId,{username,platform,createdAt:Date.now()});res.json({success:true,sessionId});}catch(e){res.status(503).json({success:false,reason:'database_unavailable'});}});
-app.get('/api/access/check',async(req,res)=>{const id=String(req.query.sessionId||''),current=accessSessions.get(id);if(!current)return res.status(401).json({valid:false,reason:'session_invalid'});try{const access=await authorizeWhitelist(current.username);if(!access.allowed){accessSessions.delete(id);return res.status(403).json({valid:false,reason:access.reason});}res.json({valid:true,reason:'ok'});}catch(e){res.status(503).json({valid:false,reason:'database_unavailable',temporary:true});}});
+app.post('/api/admin/whitelist-form',adminForm,requireAdmin,async(req,res)=>{
+  try{
+    const username=String(req.body&&req.body.username||'').trim();
+    const platform=String(req.body&&req.body.platform||'TZ').trim().toUpperCase();
+    const daysRaw=String(req.body&&req.body.days||'permanent').trim();
+    const permanent=daysRaw==='permanent';
+    const days=permanent?null:Math.max(1,Number(daysRaw)||30);
+    const note=String(req.body&&req.body.note||'').trim();
+    if(!username)return adminRedirect(res,'請輸入平台帳號');
+    await upsertWhitelist({username,platform,days,permanent,note});
+    adminRedirect(res,`${platform}｜${username} 已新增／更新授權`);
+  }catch(e){adminRedirect(res,`新增失敗：${String(e&&e.message||e)}`);}
+});
+app.post('/api/admin/whitelist/:id/toggle-form',adminForm,requireAdmin,async(req,res)=>{
+  try{
+    await setWhitelistEnabled(req.params.id,String(req.body&&req.body.enabled||'')==='1');
+    adminRedirect(res,'授權狀態已更新');
+  }catch(e){adminRedirect(res,`操作失敗：${String(e&&e.message||e)}`);}
+});
+app.post('/api/admin/whitelist/:id/extend-form',adminForm,requireAdmin,async(req,res)=>{
+  try{
+    await extendWhitelist(req.params.id,30);
+    adminRedirect(res,'已延長 30 天');
+  }catch(e){adminRedirect(res,`操作失敗：${String(e&&e.message||e)}`);}
+});
+app.post('/api/admin/whitelist/:id/delete-form',adminForm,requireAdmin,async(req,res)=>{
+  try{
+    await deleteWhitelist(req.params.id);
+    adminRedirect(res,'授權已刪除');
+  }catch(e){adminRedirect(res,`操作失敗：${String(e&&e.message||e)}`);}
+});
+app.post('/api/access/login',accessJson,async(req,res)=>{try{const username=String(req.body&&req.body.username||'').trim(),platform=String(req.body&&req.body.platform||'TZ').trim().toUpperCase();if(!username||!['TZ','OFA'].includes(platform))return res.status(400).json({success:false,reason:'invalid_request'});const access=await authorizeWhitelist(username,platform);if(!access.allowed)return res.status(403).json({success:false,reason:access.reason});const sessionId=crypto.randomUUID();accessSessions.set(sessionId,{username,platform,createdAt:Date.now()});res.json({success:true,sessionId});}catch(e){res.status(503).json({success:false,reason:'database_unavailable'});}});
+app.get('/api/access/check',async(req,res)=>{const id=String(req.query.sessionId||''),current=accessSessions.get(id);if(!current)return res.status(401).json({valid:false,reason:'session_invalid'});try{const access=await authorizeWhitelist(current.username,current.platform);if(!access.allowed){accessSessions.delete(id);return res.status(403).json({valid:false,reason:access.reason});}res.json({valid:true,reason:'ok'});}catch(e){res.status(503).json({valid:false,reason:'database_unavailable',temporary:true});}});
 app.post('/api/access/logout',accessJson,(req,res)=>{const id=String(req.body&&req.body.sessionId||'');if(id)accessSessions.delete(id);res.json({success:true});});
 app.get('/healthz', (_req, res) => {
-  res.status(200).json({ ok: true, version: '2.91-account-only-shared-whitelist' });
+  res.status(200).json({ ok: true, version: '2.92-full-whitelist-restored' });
 });
 
 app.use('/__api', express.raw({ type: '*/*', limit: '2mb' }), async (req, res) => {
