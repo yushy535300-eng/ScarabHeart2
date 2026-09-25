@@ -15,6 +15,9 @@
       sessionStorage.removeItem('SCARAB_ROOM_DONE');
       sessionStorage.removeItem('SCARAB_LAST_ROOM');
       sessionStorage.removeItem('SCARAB_LAST_MACHINE');
+      // These are the two real persistence flags checked by atg-engine-runtime.
+      sessionStorage.removeItem('seth_seated');
+      sessionStorage.removeItem('seth_switched');
     } catch (_) {}
     if(c.MACHINENUM){
       // Keep TARGET/TARGET_KIND untouched. The ATG engine needs the roomId

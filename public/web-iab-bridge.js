@@ -104,6 +104,8 @@
       sessionStorage.removeItem('SCARAB_LAST_ROOM');
       sessionStorage.removeItem('SCARAB_LAST_MACHINE');
       sessionStorage.removeItem('SCARAB_ROOM_SESSION');
+      sessionStorage.removeItem('seth_seated');
+      sessionStorage.removeItem('seth_switched');
     } catch (_) {}
     var source;
     try {

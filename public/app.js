@@ -3,7 +3,7 @@
 
   const $ = id => document.getElementById(id);
   const log = (...args) => { try { console.log('[ScarabHeart]', ...args); } catch (_) {} };
-  const APP_VERSION = 'v2.65-correct-roomid-autoselect';
+  const APP_VERSION = 'v2.67-remove-legacy-panel';
   const GAMES = [
     ['golden-seth', '戰神賽特2 覺醒之力', 'media/game2.png'],
     ['egyptian-mythology', '戰神賽特', 'media/game8.png'],
@@ -452,6 +452,9 @@
       sessionStorage.removeItem('SCARAB_FORCE_MANUAL_ROOM');
       sessionStorage.removeItem('scarab_force_manual_room');
       sessionStorage.removeItem('SCARAB_ROOM_FALLBACK');
+      // Actual keys used by atg-engine-runtime:
+      sessionStorage.removeItem('seth_seated');
+      sessionStorage.removeItem('seth_switched');
     } catch (_) {}
     const requestedGame = session.game;
     const openSerial = ++gameOpenSerial;
@@ -536,6 +539,12 @@
 
   function closeGame(destination) {
     if (window.ScarabWebLauncher) ScarabWebLauncher.close();
+    try {
+      sessionStorage.removeItem('seth_seated');
+      sessionStorage.removeItem('seth_switched');
+      sessionStorage.removeItem('SCARAB_FORCE_MANUAL_ROOM');
+      sessionStorage.removeItem('SCARAB_ROOM_FALLBACK');
+    } catch (_) {}
     if (destination === 'home') showGameCenter();
     else {
       showOnly('roomView');

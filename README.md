@@ -93,3 +93,35 @@ Fix:
 - Typed machine entry uses the existing machine fallback path.
 - Bootstrap no longer overwrites TARGET/TARGET_KIND.
 - Re-entry session reset and Render-stable asset routing remain preserved.
+
+
+## v2.66 seated-state reset + single-confirm fix
+
+Root causes verified from the actual obfuscated ATG runtime:
+- After successful seating the engine writes `sessionStorage.seth_seated = 1`.
+- Room-switch flow writes `sessionStorage.seth_switched = 1`.
+- On a later entry the engine checks those exact keys and skips automatic room targeting if either exists.
+- Previous builds were clearing different helper keys, not these actual persistence flags.
+
+Fixes:
+- Clear `seth_seated` and `seth_switched` before every game launch.
+- Clear them again when returning to the program's game-center / room page.
+- Clear them in the injected game bootstrap as a final guard.
+- Auto-seat confirmation now clicks only once instead of up to ten times.
+- Post-confirm wait increased to 1.5 seconds so the ATG selector can close before any retry logic runs.
+- Correct roomId + machineNum targeting from v2.65 remains preserved.
+
+
+## v2.67 remove legacy black/gold assistant panel
+
+Verified from the user's uploaded video:
+- A legacy black/gold helper appears first (eye logo, +0.00, green Start button,
+  lightning/shield/bell/777/door buttons).
+- The user's intended blue ScarabHeart assistant appears afterwards.
+
+Fix:
+- Disabled both legacy engine UI builders (`L()` portrait and `M()` landscape).
+- Kept `overlay-runtime.js` untouched; this is the user's blue assistant UI.
+- Underlying engine logic remains loaded: room automation, speed, FREE, guard/signal,
+  stop-profit/stop-loss and live state are not removed.
+- v2.66 seated/switched reset and single-confirm fixes are preserved.
