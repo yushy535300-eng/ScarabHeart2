@@ -142,10 +142,10 @@
     overlayRecovering=true;
     try { window.__scarabHeartUI=false; } catch (_) {}
     var s=document.createElement('script');
-    s.src='/__runtime/overlay-runtime.js?recover='+Date.now();
+    s.src=location.origin+'/__runtime/overlay-runtime.js?recover='+Date.now();
     s.onload=function(){
       overlayRecovering=false;
-      load('/__runtime/stability-runtime.js?recover='+Date.now(),'stability-recover-'+Date.now()).catch(function(){});
+      load(location.origin+'/__runtime/stability-runtime.js?recover='+Date.now(),'stability-recover-'+Date.now()).catch(function(){});
       status('overlay-recovered');
     };
     s.onerror=function(){ overlayRecovering=false; status('overlay-recover-error'); };
@@ -170,7 +170,7 @@
       status('engine-wait','ATG 遊戲本體載入中…');
       await waitForGameReady();
       status('engine-loading','ATG 已就緒，正在連接懸浮工具…');
-      await load('/__runtime/atg-engine-runtime.js','engine');
+      await load(location.origin+'/__runtime/atg-engine-runtime.js','engine');
       if (!window.__sethBooted) {
         window.__sethBooted=true;
         try {
@@ -182,10 +182,10 @@
           throw e;
         }
       }
-      await load('/__runtime/atg-live-adapter.js','live');
-      await load('/__runtime/overlay-runtime.js','overlay');
+      await load(location.origin+'/__runtime/atg-live-adapter.js','live');
+      await load(location.origin+'/__runtime/overlay-runtime.js','overlay');
       window.__scarabOverlayEverLoaded=true;
-      await load('/__runtime/stability-runtime.js','stability');
+      await load(location.origin+'/__runtime/stability-runtime.js','stability');
       startWatchdogs();
       status('engine-ready','懸浮工具已連線');
     } catch (e) {

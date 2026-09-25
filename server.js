@@ -63,7 +63,7 @@ function scriptJson(value) {
 
 app.disable('x-powered-by');
 app.get('/healthz', (_req, res) => {
-  res.status(200).json({ ok: true, version: '2.54-atg-stable' });
+  res.status(200).json({ ok: true, version: '2.57-atg-direct-base' });
 });
 
 app.use('/__api', express.raw({ type: '*/*', limit: '2mb' }), async (req, res) => {
@@ -123,9 +123,10 @@ function gameBoot(sid, originalHref, session, withRuntime) {
     ';window.__SCARAB_PROXY_PREFIX=' + scriptJson(prefix) +
     ';(function(){var O=window.__SCARAB_ORIGINAL_URL,P=' + scriptJson(prefix) +
     ';function A(x){var h=x.hostname.toLowerCase();return h==="godeebxp.com"||/\\.godeebxp\\.com$/.test(h)}' +
-    'function S(x){var p=x.pathname;return /^\/egames\/[a-f0-9]{40}\/game\/(?:assets|src|public|images|cocos-js)\//i.test(p)||/^\/egames\/[a-f0-9]{40}\/game\/(?:style\.css|game\.css|app\.js|index\.js|application\.js)$/i.test(p)}' +
-    'function H(raw){try{var x=new URL(String(raw),O);var here=location.origin;if(x.origin===here&&(/^\/slotFramework\//i.test(x.pathname)||/^\/egames\//i.test(x.pathname)))x=new URL(x.pathname+x.search,O);if(/^https?:$/.test(x.protocol)&&A(x)){if(/^\/slotFramework\//i.test(x.pathname)){if(/^\/slotFramework\/manifest\.json$/i.test(x.pathname))return P+x.pathname+x.search;return x.href}if(S(x))return x.href;return P+"/__remote?url="+encodeURIComponent(x.href)}}catch(e){}return raw}' +
-    'function D(raw){try{var x=new URL(String(raw),location.href);if(x.origin===location.origin&&/^\/slotFramework\//i.test(x.pathname)&&!/^\/slotFramework\/manifest\.json$/i.test(x.pathname))return new URL(x.pathname+x.search,O).href}catch(e){}return raw}' +
+    'function S(x){var p=x.pathname;return /^\/egames\/[a-f0-9]{40}\/game\/(?:assets|src|public|images|cocos-js)\//i.test(p)||/^\/egames\/[a-f0-9]{40}\/game\/(?:style\.css|game\.css|app\.js|index\.js|application\.js)$/i.test(p)||/\.(?:js|mjs|css|json|png|jpe?g|gif|webp|svg|ico|mp3|ogg|wav|m4a|mp4|webm|woff2?|ttf|otf|bin|wasm)(?:$|\?)/i.test(p+x.search)}' +
+    'function U(raw){try{var str=String(raw),x=new URL(str,document.baseURI||O),here=location.origin;if(x.origin===here){var m=x.pathname.match(/^\/__game\/[a-f0-9]{24}(\/.*)$/i);if(m)x=new URL(m[1]+x.search,O);else if(/^\/(?:slotFramework|egames)\//i.test(x.pathname))x=new URL(x.pathname+x.search,O)}return x}catch(e){return null}}' +
+    'function H(raw){try{var x=U(raw);if(x&&/^https?:$/.test(x.protocol)&&A(x)){if(/^\/slotFramework\//i.test(x.pathname)){if(/^\/slotFramework\/manifest\.json$/i.test(x.pathname))return location.origin+x.pathname+x.search;return x.href}if(S(x))return x.href;return location.origin+P+"/__remote?url="+encodeURIComponent(x.href)}}catch(e){}return raw}' +
+    'function D(raw){try{var x=U(raw);if(x&&A(x)&&(/^\/slotFramework\//i.test(x.pathname)||S(x)))return x.href}catch(e){}return raw}' +
     'var F=window.fetch;if(F)window.fetch=function(i,n){var raw=typeof i==="string"?i:(i&&i.url)||String(i),u=H(raw);try{if(i instanceof Request&&u!==raw)i=new Request(u,i);else if(u!==raw)i=u}catch(e){i=u}return F.call(this,i,n)};' +
     'var XO=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(m,u){arguments[1]=H(u);return XO.apply(this,arguments)};' +
     'var SA=Element.prototype.setAttribute;Element.prototype.setAttribute=function(k,v){try{if(/^(?:src|href)$/i.test(String(k)))v=D(v)}catch(e){}return SA.call(this,k,v)};' +
@@ -148,7 +149,7 @@ function gameBoot(sid, originalHref, session, withRuntime) {
     'window.__SCARAB_FORCE_MANUAL_ROOM=false;' +
     'try{parent.postMessage({__scarabStatus:true,state:"engine-wait"},location.origin)}catch(e){}' +
     '<\/script>' +
-    '<script src="/__runtime/bootstrap-runtime.js" defer><\/script>';
+    '<script>(function(){var s=document.createElement("script");s.src=location.origin+"/__runtime/bootstrap-runtime.js";s.defer=true;(document.head||document.documentElement).appendChild(s)})()<\/script>';
   return proxyBoot + runtimeBoot;
 }
 
@@ -289,28 +290,24 @@ app.use('/__game/:sid/*', express.raw({ type: '*/*', limit: '16mb' }), async (re
     const finalUrl = new URL(upstream.url || url.href);
     let bytes = Buffer.from(await upstream.arrayBuffer());
     const type = String(upstream.headers.get('content-type') || 'application/octet-stream');
-    if (!isSlotFramework && /text\/html|javascript|text\/css/.test(type)) {
-      const prefix = '/__game/' + sid;
+    if (!isSlotFramework && /text\/html/i.test(type)) {
       let body = bytes.toString('utf8');
-      body = body.replaceAll(session.origin, prefix);
-      body = body.replace(/\b(src|href|action)=(['"])\/(?!\/|__game\/)/gi,
-        (_match, attr, quote) => attr + '=' + quote + prefix + '/');
-      if (/text\/css/.test(type)) {
-        body = body.replace(/url\((['"]?)\/(?!\/|__game\/)/gi, 'url($1' + prefix + '/');
-      }
-      if (/text\/html/.test(type)) {
-        body = body
-          .replace(/<meta\b[^>]*http-equiv=(['"])Content-Security-Policy\1[^>]*>/gi, '')
-          .replace(/\s+integrity=(['"])[^'"]*\1/gi, '');
-        const isLobby = /\/egames\/lobby\//i.test(finalUrl.pathname);
-        const boot = gameBoot(sid, finalUrl.href, session, !isLobby);
-        const head = '<head><base href="' + prefix + finalUrl.pathname + '">' +
-          '<meta name="viewport" content="width=device-width,height=device-height,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">' +
-          '<style>html,body{margin:0!important;width:100%!important;height:100%!important;overflow:hidden!important;overscroll-behavior:none!important}</style>' +
-          boot;
-        if (/<head(?:\s[^>]*)?>/i.test(body)) body = body.replace(/<head(?:\s[^>]*)?>/i, head);
-        else body = head + body;
-      }
+      body = body
+        .replace(/<meta\b[^>]*http-equiv=(['"])Content-Security-Policy\1[^>]*>/gi, '')
+        .replace(/\s+integrity=(['"])[^'"]*\1/gi, '')
+        .replace(/<base\b[^>]*>/gi, '');
+      const isLobby = /\/egames\/lobby\//i.test(finalUrl.pathname);
+      const boot = gameBoot(sid, finalUrl.href, session, !isLobby);
+      // Critical: relative Cocos assets must resolve at ATG itself, not at Render.
+      // location.origin stays Render (so our injected runtime/API remain same-origin),
+      // while document.baseURI becomes the real ATG game directory.
+      const remoteBase = new URL('.', finalUrl).href;
+      const head = '<head><base href="' + remoteBase.replace(/"/g, '&quot;') + '">' +
+        '<meta name="viewport" content="width=device-width,height=device-height,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">' +
+        '<style>html,body{margin:0!important;width:100%!important;height:100%!important;overflow:hidden!important;overscroll-behavior:none!important}</style>' +
+        boot;
+      if (/<head(?:\s[^>]*)?>/i.test(body)) body = body.replace(/<head(?:\s[^>]*)?>/i, head);
+      else body = head + body;
       bytes = Buffer.from(body);
     }
     res.status(upstream.status);
@@ -362,14 +359,29 @@ app.all('/slotFramework/*', express.raw({ type: '*/*', limit: '4mb' }), async (r
     };
     if (req.method !== 'GET' && req.method !== 'HEAD' && req.body && req.body.length) init.body = req.body;
     const upstream = await fetch(url, init);
-    const bytes = Buffer.from(await upstream.arrayBuffer());
+    let bytes = Buffer.from(await upstream.arrayBuffer());
+    let contentType = upstream.headers.get('content-type') || 'application/octet-stream';
+    if (isManifest && upstream.ok) {
+      try {
+        const manifest = JSON.parse(bytes.toString('utf8'));
+        if (manifest && typeof manifest.url === 'string') {
+          let raw = manifest.url.trim();
+          if (!/^https?:\/\//i.test(raw)) raw = 'https://' + raw.replace(/^\/+/, '');
+          const assetBase = new URL(raw);
+          if (gameAllowed(assetBase)) manifest.url = assetBase.href.replace(/\/$/, '');
+        }
+        bytes = Buffer.from(JSON.stringify(manifest));
+        contentType = 'application/json; charset=utf-8';
+      } catch (_) {}
+    }
     res.status(upstream.status);
-    res.type(upstream.headers.get('content-type') || 'application/octet-stream');
+    res.type(contentType);
     ['content-range', 'accept-ranges', 'etag', 'last-modified'].forEach(key => {
       const value = upstream.headers.get(key);
       if (value) res.set(key, value);
     });
     res.set('Cache-Control', upstream.headers.get('cache-control') || 'no-cache');
+    res.set('Access-Control-Allow-Origin', '*');
     sendCookies(res, upstream, sid);
     res.send(bytes);
   } catch (error) {

@@ -1,17 +1,11 @@
-# ScarabHeart2 Web v2.56 — ATG DIRECT ASSETS
+# ScarabHeart2 Web v2.57 — ATG Direct Base Fix
 
-本版針對 v2.55 實測 HAR 中的 ATG 黑畫面修正。
+本版針對最新 HAR 的剩餘 429 / 502 / 503 根因修正：
 
-## HAR 確認到的主因
-v2.55 將 `/slotFramework/<hash>/import/*` 與 `/native/*` 等數百筆 Cocos 資產經 Render 代理，實測產生大量 502 / 503，接著觸發 429，造成遊戲永遠缺資源而卡在黑畫面。
-
-## v2.56 修正
-- 只有 `/slotFramework/manifest.json` 維持同源 Render bridge（原站該項沒有 CORS header）。
-- `/slotFramework/<hash>/config.json`、`index.js`、`import/*`、`native/*` 改由瀏覽器直接向 ATG `play.godeebxp.com` 載入。
-- 同時處理 fetch、XMLHttpRequest、Image.src、Script.src、Link.href、Audio/Video/Source、setAttribute、Worker、SharedWorker 等常見 Cocos 載入方式。
-- 若仍有未被 hook 的 `/slotFramework/*` GET/HEAD，Render 只做 307 導向，不再下載/轉送資產。
-- 保留 ATG WebSocket bridge、懸浮、即時資料、換房重綁、加速與 35 秒手動選房 fallback。
-- 加速仍等待 ATG/Cocos ready 後才掛載，不改 WebSocket/heartbeat 時鐘。
-
-## 部署後驗證
-登入 → ATG → 選房 → 進機台。Network 應看到大量 `slotFramework/<hash>/import`、`native` 直接由 `play.godeebxp.com` 回 200，而不是集中打 `scarabheart2.onrender.com`。
+- ATG 遊戲 HTML 的 `<base>` 直接指向真實 `play.godeebxp.com` 遊戲目錄。
+- Cocos 的 `assets/resources`、`assets/main`、`src`、`cocos-js`、圖片、音效、JSON、WASM 等相對資源會從一開始就直接走 ATG，不先經 Render。
+- `slotFramework/manifest.json` 仍使用同源橋接，但會把 ATG 回傳的無協定 URL 正規化成完整 `https://play.godeebxp.com/slotFramework/<hash>`。
+- slotFramework 的 `config/index/import/native` 直接向 ATG 載入。
+- Runtime 腳本改用 `location.origin` 明確載入，避免新的遠端 `<base>` 讓懸浮腳本誤跑到 ATG 網域。
+- 保留懸浮、加速、換房重新綁定、即時資料、WebSocket bridge、35 秒手動選房 fallback。
+- Render 端原有 302/307 僅保留為漏網 fallback，正常流程不應再靠它承載大量 Cocos 資源。
