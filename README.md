@@ -1,4 +1,4 @@
-# ScarabHeart2 Web v2.53（ATG 程式內遊戲版）
+# ScarabHeart2 Web v2.54（ATG 穩定整合版）
 
 這是可部署到 Render 的網站原始檔，不是 APK。
 
@@ -34,7 +34,7 @@
 
 部署完成後開啟 /healthz，應看到：
 
-    {"ok":true,"version":"2.53-atg-inapp"}
+    {"ok":true,"version":"2.54-atg-stable"}
 
 ## 測試順序
 
@@ -54,3 +54,12 @@
 - Floating assistant is automatically re-mounted if the game rebuilds the DOM and removes it.
 - Large media/font resources bypass Render and load from ATG directly; runtime/API/WebSocket traffic remains proxied where required.
 - Existing floating assistant runtime and controls are preserved.
+
+
+## v2.54 重點修正
+- ATG 遊戲本體優先：等 Cocos canvas / scene / TimeManager / service 任一條件穩定後才啟動輔助，避免輔助在 slotFramework 還沒完成時搶資源。
+- slotFramework 與遊戲靜態資源直接由瀏覽器向 ATG 讀取，Render 只保留需要注入、API 與 WebSocket 的流量。
+- 換房或 Cocos TimeManager instance 重建後，原本選定倍率會自動重新套用。
+- 懸浮根節點不攔截透明區域的滑鼠／觸控，只有實際面板與控制項接收操作。
+- 懸浮被 ATG 重建 DOM 移除時自動恢復；速度按鈕會重新同步實際引擎倍率。
+- 自動定位超過 35 秒會切換手動選房，不讓定位流程永久擋住遊戲。

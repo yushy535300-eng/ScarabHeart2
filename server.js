@@ -63,7 +63,7 @@ function scriptJson(value) {
 
 app.disable('x-powered-by');
 app.get('/healthz', (_req, res) => {
-  res.status(200).json({ ok: true, version: '2.53.1-atg-inapp-fixed' });
+  res.status(200).json({ ok: true, version: '2.54-atg-stable' });
 });
 
 app.use('/__api', express.raw({ type: '*/*', limit: '2mb' }), async (req, res) => {
@@ -111,6 +111,9 @@ app.get('/__runtime/overlay-runtime.js', (_req, res) => {
 app.get('/__runtime/bootstrap-runtime.js', (_req, res) => {
   res.sendFile(path.join(runtimeDir, 'bootstrap-runtime.js'));
 });
+app.get('/__runtime/stability-runtime.js', (_req, res) => {
+  res.sendFile(path.join(runtimeDir, 'stability-runtime.js'));
+});
 
 function gameBoot(sid, originalHref, session, withRuntime) {
   const prefix = '/__game/' + sid;
@@ -120,7 +123,8 @@ function gameBoot(sid, originalHref, session, withRuntime) {
     ';window.__SCARAB_PROXY_PREFIX=' + scriptJson(prefix) +
     ';(function(){var O=window.__SCARAB_ORIGINAL_URL,P=' + scriptJson(prefix) +
     ';function A(x){var h=x.hostname.toLowerCase();return h==="godeebxp.com"||/\\.godeebxp\\.com$/.test(h)}' +
-    'function H(raw){try{var x=new URL(String(raw),O);if(/^https?:$/.test(x.protocol)&&A(x))return P+"/__remote?url="+encodeURIComponent(x.href)}catch(e){}return raw}' +
+    'function S(x){var p=x.pathname;return /^\/slotFramework\//i.test(p)||/^\/egames\/[a-f0-9]{40}\/game\/(?:assets|src|public|images|cocos-js)\//i.test(p)||/^\/egames\/[a-f0-9]{40}\/game\/(?:style\.css|game\.css|app\.js|index\.js|application\.js)$/i.test(p)}' +
+    'function H(raw){try{var x=new URL(String(raw),O);if(/^https?:$/.test(x.protocol)&&A(x)){if(S(x))return x.href;return P+"/__remote?url="+encodeURIComponent(x.href)}}catch(e){}return raw}' +
     'var F=window.fetch;if(F)window.fetch=function(i,n){var raw=typeof i==="string"?i:(i&&i.url)||String(i),u=H(raw);try{if(i instanceof Request&&u!==raw)i=new Request(u,i);else if(u!==raw)i=u}catch(e){i=u}return F.call(this,i,n)};' +
     'var XO=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(m,u){arguments[1]=H(u);return XO.apply(this,arguments)};' +
     'if(window.EventSource){var ES=window.EventSource;window.EventSource=function(u,o){return new ES(H(u),o)};window.EventSource.prototype=ES.prototype}' +
@@ -238,8 +242,11 @@ app.use('/__game/:sid/*', express.raw({ type: '*/*', limit: '16mb' }), async (re
   try {
     const dest = String(req.headers['sec-fetch-dest'] || '').toLowerCase();
     const mediaExt = /\.(?:png|jpe?g|gif|webp|svg|ico|mp3|ogg|wav|m4a|mp4|webm|woff2?|ttf|otf)(?:$|\?)/i.test(url.pathname + url.search);
+    const directStatic = /^\/slotFramework\//i.test(url.pathname) ||
+      /^\/egames\/[a-f0-9]{40}\/game\/(?:assets|src|public|images|cocos-js)\//i.test(url.pathname) ||
+      /^\/egames\/[a-f0-9]{40}\/game\/(?:style\.css|game\.css|app\.js|index\.js|application\.js)$/i.test(url.pathname);
     if ((req.method === 'GET' || req.method === 'HEAD') &&
-        (dest === 'image' || dest === 'audio' || dest === 'video' || dest === 'font' || mediaExt)) {
+        (directStatic || dest === 'image' || dest === 'audio' || dest === 'video' || dest === 'font' || mediaExt)) {
       return res.redirect(302, url.href);
     }
     const init = {
