@@ -440,3 +440,25 @@ This keeps only the top 2 visibly high while the rest spread naturally down towa
 - 獨立 App 視窗不顯示 Safari 網址列與分頁列
 - 保留登入、遊戲中心、返回按鈕、懸浮輔助與所有 ATG 遊戲流程
 - 不修改 WebSocket、遊戲代理、選房、自動進房等核心連線邏輯
+
+
+## v2.90 — 共用白名單 + /admin 後台
+- 新增 scarabheart2.onrender.com/admin 管理後台。
+- 與 MT Assistant 共用 PostgreSQL tz_whitelist。
+- 聖甲之心登入會檢查同一份白名單。
+- 每 5 秒重新確認授權；停用、刪除、到期會自動退出。
+- /admin 加到手機主畫面時使用 MT 百家＋聖甲之心＋後台管理系統專用 Logo。
+- Render 必要環境變數：DATABASE_URL、ADMIN_PASSWORD。
+
+
+## v2.91 account-only shared whitelist
+
+白名單規則固定為：
+- 只儲存登入帳號
+- 不儲存平台密碼
+- 不以 TZ / OFA 區分白名單資格
+- 資料表中存在該帳號 = 百家與聖甲之心皆有使用資格
+- 刪除該帳號 = 兩個程式皆失去使用資格
+- 實際帳號密碼仍由 TZ / OFA 官方登入 API 驗證
+- `mt-assistant-web-v3` 與 `scarabheart2` 必須指向同一個 `DATABASE_URL`
+- 兩個 `/admin` 後台讀寫同一張 `tz_whitelist`

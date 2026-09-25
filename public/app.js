@@ -37,6 +37,7 @@
   };
 
   let session = null;
+  let accessWatchTimer = null;
   let loginPlatform = 'TZ';
   let boards = null;
   let activeBoard = 'composite';
@@ -135,6 +136,17 @@
     if (!data) throw new Error('娛樂城回傳格式錯誤');
     return data;
   }
+
+  function accessReasonText(reason) {
+    const map = { not_whitelisted:'此帳號目前無使用資格', disabled:'此帳號授權已停用', expired:'此帳號授權已到期', database_unavailable:'授權服務暫時無法使用', session_invalid:'授權工作階段已失效，請重新登入' };
+    return map[String(reason||'')] || '白名單驗證失敗';
+  }
+  async function localAccess(path, body) {
+    const response = await fetch(path,{method:body?'POST':'GET',credentials:'same-origin',cache:'no-store',headers:body?{'Accept':'application/json','Content-Type':'application/json'}:{'Accept':'application/json'},body:body?JSON.stringify(body):undefined});
+    let data={}; try{data=await response.json()}catch(_){} return {response,data:data||{}};
+  }
+  function stopAccessWatch(){if(accessWatchTimer)clearInterval(accessWatchTimer);accessWatchTimer=null;}
+  function startAccessWatch(){stopAccessWatch();accessWatchTimer=setInterval(async()=>{const current=session;if(!current||!current.accessSessionId)return;try{const r=await localAccess('/api/access/check?sessionId='+encodeURIComponent(current.accessSessionId));if(r.response.status>=500||r.data.temporary)return;if(!r.data.valid){const message=accessReasonText(r.data.reason);logout(true);$('err').textContent=message;}}catch(_){}},5000);}
 
   function directGameUrlOnce(lobbyToken, gameCode, timeoutMs) {
     return new Promise((resolve, reject) => {
@@ -280,7 +292,10 @@
       });
       const token = result && result.data && result.data.token;
       if (!token) throw new Error((result && result.message) || '帳號或密碼錯誤');
-      session = { base, token, account, password, platform: loginPlatform, game: '' };
+      const access = await localAccess('/api/access/login', { username: account, platform: loginPlatform });
+      if (!access.response.ok || !access.data.success || !access.data.sessionId) throw new Error(accessReasonText(access.data.reason));
+      session = { base, token, account, password, platform: loginPlatform, game: '', accessSessionId: access.data.sessionId };
+      startAccessWatch();
       if ($('r').checked) localStorage.setItem('scarab_login', JSON.stringify({ platform: loginPlatform, account }));
       else localStorage.removeItem('scarab_login');
       showGameCenter();
@@ -297,8 +312,11 @@
     }
   }
 
-  function logout() {
+  function logout(silent) {
     if (window.ScarabWebLauncher) ScarabWebLauncher.close();
+    stopAccessWatch();
+    const accessSessionId = session && session.accessSessionId;
+    if (accessSessionId) localAccess('/api/access/logout', { sessionId: accessSessionId }).catch(() => null);
     session = null;
     boards = null;
     pendingPick = null;

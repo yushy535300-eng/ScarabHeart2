@@ -1,6 +1,6 @@
 {
   "name": "scarabheart-web-render",
-  "version": "2.89.0",
+  "version": "2.91.0",
   "private": true,
   "engines": {
     "node": ">=20"
@@ -12,6 +12,7 @@
   "dependencies": {
     "express": "4.21.2",
     "https-proxy-agent": "7.0.6",
-    "ws": "8.18.3"
+    "ws": "8.18.3",
+    "pg": "8.16.3"
   }
 }
