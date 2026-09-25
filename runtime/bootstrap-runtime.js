@@ -2,14 +2,17 @@
   try {
     var p=window.__SCARAB_WEB_PAYLOAD||{}, c=p.cfg||{};
     var sid=String(c.ROOM_SESSION_ID||'');
-    var originalMachine=String(c.MACHINENUM||c.VISUAL_TARGET||'');
     var previousSid='';
     try { previousSid=String(sessionStorage.getItem('SCARAB_ROOM_SESSION')||''); } catch (_) {}
 
-    // A new user selection is a brand-new room job. ATG internal reloads keep
-    // the same ROOM_SESSION_ID and must not start that job a second time.
+    // IMPORTANT:
+    // A new launch from the ScarabHeart room page gets a new ROOM_SESSION_ID.
+    // Only that event may clear the previous seated/switched state.
+    //
+    // ATG itself can reload the game document after a successful room selection.
+    // That reload keeps the same ROOM_SESSION_ID, so seth_seated/seth_switched
+    // MUST survive or the auto-room engine will search for the room a second time.
     var freshLaunch = !!sid && previousSid !== sid;
-    var doneKey=sid ? ('SCARAB_ROOM_DONE:'+sid) : 'SCARAB_ROOM_DONE';
 
     window.__SCARAB_ROOM_SESSION_ID=sid;
     window.__SCARAB_FORCE_MANUAL_ROOM=false;
@@ -26,42 +29,22 @@
         sessionStorage.removeItem('SCARAB_FORCE_MANUAL_ROOM');
         sessionStorage.removeItem('scarab_force_manual_room');
         sessionStorage.removeItem('SCARAB_ROOM_FALLBACK');
-        if (sid) sessionStorage.removeItem(doneKey);
       }
       if (sid) sessionStorage.setItem('SCARAB_ROOM_SESSION',sid);
     } catch (_) {}
 
-    var restoredDone=false;
+    // Do not reset ROOM_DONE on an internal ATG reload.
     try {
-      restoredDone = !!sid && previousSid===sid && (
-        sessionStorage.getItem(doneKey)==='1' ||
-        sessionStorage.getItem('SCARAB_ROOM_DONE')==='1' ||
-        sessionStorage.getItem('seth_seated')==='1' ||
-        sessionStorage.getItem('seth_switched')==='1'
-      );
-    } catch (_) {}
-    window.__SCARAB_ROOM_DONE=restoredDone;
+      window.__SCARAB_ROOM_DONE =
+        sessionStorage.getItem('seth_seated') === '1' ||
+        sessionStorage.getItem('SCARAB_ROOM_DONE') === '1';
+    } catch (_) {
+      window.__SCARAB_ROOM_DONE=false;
+    }
 
     if(c.MACHINENUM){
       c.VISUAL_TARGET=String(c.MACHINENUM);
       window.__SC_VISUAL_MACHINE=String(c.MACHINENUM);
-    }
-
-    // If ATG reloaded after a successful seat, neutralize every auto-room input
-    // before the engine boots. The visual machine number stays available.
-    if(restoredDone){
-      try {
-        sessionStorage.setItem('seth_seated','1');
-        sessionStorage.setItem('seth_switched','1');
-      } catch (_) {}
-      c.TARGET='';
-      c.TARGET_KIND=null;
-      c.MACHINENUM='';
-      c.FULL_ROOM_ID='';
-      c.BOARD_LIST=null;
-      c.GOOD_ROOMS=[];
-      c.STRICT_MACHINE_TARGET=false;
-      c.VISUAL_TARGET=originalMachine||String(c.VISUAL_TARGET||'');
     }
   }catch(_){}
 })();
@@ -189,83 +172,6 @@
     return /定位機台中|定位推薦房|自動帶你進房|正在帶你進房|找房\s*\d+/i.test(assistantText());
   }
 
-  function roomConfig(){
-    try { return (window.__SCARAB_WEB_PAYLOAD||{}).cfg||{}; } catch (_) { return {}; }
-  }
-
-  function selectedMachine(){
-    var cfg=roomConfig();
-    return String(window.__SC_VISUAL_MACHINE||cfg.VISUAL_TARGET||cfg.MACHINENUM||'');
-  }
-
-  function cancelRoomSearch(){
-    var cfg=roomConfig();
-    try {
-      cfg.TARGET='';
-      cfg.TARGET_KIND=null;
-      cfg.MACHINENUM='';
-      cfg.FULL_ROOM_ID='';
-      cfg.BOARD_LIST=null;
-      cfg.GOOD_ROOMS=[];
-      cfg.STRICT_MACHINE_TARGET=false;
-    } catch (_) {}
-    try {
-      var e=window.__sethEngine;
-      if(e){
-        if(typeof e.cancelRoomTarget==='function') e.cancelRoomTarget();
-        if(typeof e.setRoomTarget==='function') e.setRoomTarget(null);
-        if('_roomTarget' in e) e._roomTarget=null;
-        if('roomTarget' in e) e.roomTarget=null;
-        if('__goodRooms' in e) e.__goodRooms=[];
-      }
-    } catch (_) {}
-  }
-
-  function markRoomDone(reason){
-    if(window.__SCARAB_ROOM_DONE) return;
-    var sid=String(window.__SCARAB_ROOM_SESSION_ID||window.__SC_ROOM_SESSION_ID||'');
-    var machine=selectedMachine();
-    window.__SCARAB_ROOM_DONE=true;
-    window.__SCARAB_LAST_MACHINE=machine||null;
-    try {
-      if(sid) sessionStorage.setItem('SCARAB_ROOM_DONE:'+sid,'1');
-      sessionStorage.setItem('SCARAB_ROOM_DONE','1');
-      sessionStorage.setItem('seth_seated','1');
-      sessionStorage.setItem('seth_switched','1');
-      if(machine) sessionStorage.setItem('SCARAB_LAST_MACHINE',machine);
-    } catch (_) {}
-    cancelRoomSearch();
-    roomWaitSince=0;
-    status('room-done',machine?('已進入機台 #'+machine):'已完成進房');
-  }
-
-  function detectRoomDone(){
-    if(window.__SCARAB_ROOM_DONE) return true;
-    var machine=selectedMachine();
-    if(!machine) return false;
-    try {
-      if(sessionStorage.getItem('seth_seated')==='1'||sessionStorage.getItem('seth_switched')==='1'){
-        markRoomDone('engine-state'); return true;
-      }
-    } catch (_) {}
-    var text=assistantText();
-    if(/確認入座[，,]?\s*載入中|進房成功|已進入遊戲\s*#?/i.test(text)){
-      markRoomDone('success-text'); return true;
-    }
-    return false;
-  }
-
-  function startRoomDoneGuard(){
-    var timer=setInterval(function(){try{detectRoomDone()}catch(_){}},180);
-    try {
-      var mo=new MutationObserver(function(){try{detectRoomDone()}catch(_){}});
-      mo.observe(document.documentElement,{subtree:true,childList:true,characterData:true});
-      addEventListener('pagehide',function(){try{mo.disconnect()}catch(_){}clearInterval(timer)},{once:true});
-    } catch (_) {
-      addEventListener('pagehide',function(){clearInterval(timer)},{once:true});
-    }
-  }
-
   function forceManualRoom(){
     window.__SCARAB_FORCE_MANUAL_ROOM=true;
     try { sessionStorage.removeItem('SCARAB_FORCE_MANUAL_ROOM'); } catch (_) {}
@@ -300,12 +206,11 @@
     if(watchdogTimer) return;
     watchdogTimer=setInterval(function(){
       try {
-        if (detectRoomDone()) { roomWaitSince=0; recoverOverlay(); return; }
         if (isRoomWait()) {
           if (!roomWaitSince) roomWaitSince=Date.now();
           var payload=window.__SCARAB_WEB_PAYLOAD||{}, cfg=payload.cfg||{};
 
-          var exact=!!cfg.EXACT_ROOM || !!cfg.STRICT_MACHINE_TARGET || /^\d+$/.test(String(cfg.MACHINENUM||''));
+          var exact=!!cfg.EXACT_ROOM;
           if (!exact && !window.__SCARAB_FORCE_MANUAL_ROOM && Date.now()-roomWaitSince>=ROOM_TIMEOUT_MS) {
             forceManualRoom();
           } else if (exact && Date.now()-roomWaitSince>=ROOM_TIMEOUT_MS) {
@@ -322,7 +227,6 @@
 
   domReady().then(async function(){
     try {
-      startRoomDoneGuard();
       status('engine-wait','ATG 遊戲本體載入中…');
       await waitForGameReady();
       status('engine-loading','ATG 已就緒，正在連接懸浮工具…');

@@ -97,8 +97,7 @@
   }
 
   function openInApp(raw, payload) {
-    var nextRoomSessionId = String(payload && payload.cfg && payload.cfg.ROOM_SESSION_ID || '');
-    currentRoomSessionId = nextRoomSessionId;
+    currentRoomSessionId = String(payload && payload.cfg && payload.cfg.ROOM_SESSION_ID || '');
     try {
       sessionStorage.removeItem('SCARAB_FORCE_MANUAL_ROOM');
       sessionStorage.removeItem('scarab_force_manual_room');
@@ -170,6 +169,8 @@
     if (!ui.frame || event.source !== ui.frame.contentWindow) return;
     var data = event.data;
     var messageRoomSessionId = data && data.roomSessionId != null ? String(data.roomSessionId) : '';
+    // Old game documents are allowed to finish loading, but they are never
+    // allowed to control the current room selection.
     if (messageRoomSessionId && currentRoomSessionId && messageRoomSessionId !== currentRoomSessionId) return;
     if (data && data.__scarabCommand === true && typeof data.url === 'string') {
       window.dispatchEvent(new CustomEvent('scarab:web-command', {
