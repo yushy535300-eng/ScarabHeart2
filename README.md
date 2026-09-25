@@ -246,3 +246,17 @@ Ranking:
 
 `seth-eye /boards` remains only as a secondary fallback; it is no longer the
 primary source for titles that were returning empty lists.
+
+
+## v2.75 fast real recommendations
+
+Speed changes:
+- Real recommendation API and direct ATG table probe now run in parallel.
+- If the API has real rows first, they are rendered immediately.
+- When the ATG real-time table arrives, it automatically replaces/re-ranks the visible list.
+- The last successful REAL result per game is kept for up to 5 minutes and is shown
+  instantly when returning to the recommendation page while a fresh refresh runs.
+- No fake/random machines are generated.
+- Decoded ATG App/service-state scan interval reduced from 180ms to 80ms.
+- Entering the real game always stops the recommendation probe first, so recommendation
+  collection and the formal game session do not overlap.

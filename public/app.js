@@ -3,7 +3,7 @@
 
   const $ = id => document.getElementById(id);
   const log = (...args) => { try { console.log('[ScarabHeart]', ...args); } catch (_) {} };
-  const APP_VERSION = 'v2.74-real-atg-all-games-top10';
+  const APP_VERSION = 'v2.75-fast-real-recommendations';
   const GAMES = [
     ['golden-seth', '戰神賽特2 覺醒之力', 'media/game2.png'],
     ['egyptian-mythology', '戰神賽特', 'media/game8.png'],
@@ -49,6 +49,24 @@
   let currentRoomSessionId = '';
   const boardCache = Object.create(null);
   const BOARD_CACHE_MS = 15000;
+  const REAL_BOARD_STORAGE_MS = 5 * 60 * 1000;
+
+  function realBoardStorageKey(game) {
+    return 'scarab_real_boards_v275_' + String(game || '');
+  }
+  function saveRealBoardStorage(game, value) {
+    try {
+      if (!game || !value || usableBoardCount(value) < 1) return;
+      localStorage.setItem(realBoardStorageKey(game), JSON.stringify({ at: Date.now(), value: value }));
+    } catch (_) {}
+  }
+  function loadRealBoardStorage(game) {
+    try {
+      const raw = JSON.parse(localStorage.getItem(realBoardStorageKey(game)) || 'null');
+      if (!raw || !raw.value || Date.now() - Number(raw.at || 0) > REAL_BOARD_STORAGE_MS) return null;
+      return normalizeBoards(raw.value);
+    } catch (_) { return null; }
+  }
 
   function emptyBoards() {
     return { composite: [], volatility: [], premium: [], freegame: [], updatedAt: Date.now() };
@@ -479,44 +497,94 @@
   async function loadBoards(gameCode, options) {
     const game = String(gameCode || (session && session.game) || '');
     if (!game || !session || session.game !== game) return;
+
     const serial = ++boardLoadSerial;
     const box = $('recommend');
-    boards = null;
     pendingPick = null;
-    box.innerHTML = '<div style="color:#7893a9;font-size:12px;padding:16px">正在讀取 ATG 即時機台資料…</div>';
-    $('updTime').textContent = '讀取中';
 
-    try {
-      const tables = await probeAtgTables(game);
-      if (!session || session.game !== game || serial !== boardLoadSerial) return;
-      const real = normalizeBoards(realBoardsFromTables(tables));
-      if (usableBoardCount(real) < 1) throw new Error('ATG 沒有回傳可用機台');
-      boards = real;
-      boardCache[game] = { at: Date.now(), value: real };
-      $('updTime').textContent = '更新 ' + formatTime(real.updatedAt);
+    // Show the last REAL result immediately while refreshing.
+    // This removes the blank 10~20 second wait when returning to this game.
+    let instant = null;
+    const memory = boardCache[game] && boardCache[game].value;
+    if (memory && usableBoardCount(memory) > 0) instant = normalizeBoards(memory);
+    if (!instant) instant = loadRealBoardStorage(game);
+
+    if (instant && usableBoardCount(instant) > 0) {
+      boards = instant;
+      $('updTime').textContent = '更新中';
       renderBoard();
-      return;
-    } catch (probeError) {
-      if (String(probeError && probeError.message || '') === 'probe-cancelled') return;
-      log('ATG 即時推薦讀取失敗，嘗試推薦 API 備援', game, probeError && probeError.message);
+    } else {
+      boards = null;
+      box.innerHTML = '<div style="color:#7893a9;font-size:12px;padding:16px">正在讀取真實機台資料…</div>';
+      $('updTime').textContent = '讀取中';
     }
 
-    // Secondary fallback only. It is never allowed to fabricate rows.
-    try {
-      if (!window.SethEyeAPI || !SethEyeAPI.boards) throw new Error('推薦 API 未載入');
-      const fallback = normalizeBoards(await SethEyeAPI.boards(game, operatorCode()));
-      if (!session || session.game !== game || serial !== boardLoadSerial) return;
-      if (usableBoardCount(fallback) < 1) throw new Error('此遊戲目前沒有真實推薦資料');
-      boards = fallback;
-      boardCache[game] = { at: Date.now(), value: fallback };
-      $('updTime').textContent = '更新 ' + formatTime(fallback.updatedAt);
+    let renderedFresh = false;
+
+    const showFresh = (value, source) => {
+      if (!session || session.game !== game || serial !== boardLoadSerial) return false;
+      const normalized = normalizeBoards(value);
+      if (usableBoardCount(normalized) < 1) return false;
+      normalized.updatedAt = Date.now();
+      normalized.source = source || normalized.source || 'REAL';
+      boards = normalized;
+      boardCache[game] = { at: Date.now(), value: normalized };
+      saveRealBoardStorage(game, normalized);
+      $('updTime').textContent = '更新 ' + formatTime(normalized.updatedAt);
       renderBoard();
-    } catch (error) {
-      if (!session || session.game !== game || serial !== boardLoadSerial) return;
-      boards = emptyBoards();
-      $('updTime').textContent = '讀取失敗';
-      box.innerHTML = '<div style="color:#ff9a82;font-size:12px;padding:16px">ATG 即時機台資料讀取失敗，請按「刷新」重試。</div>';
-      log('真實推薦資料失敗', game, error && error.message);
+      renderedFresh = true;
+      return true;
+    };
+
+    // Run BOTH real-data sources in parallel.
+    // API can be much faster for titles it already supports.
+    // ATG probe remains authoritative and replaces API data when it arrives.
+    let apiPromise = Promise.resolve(null);
+    if (window.SethEyeAPI && SethEyeAPI.boards) {
+      apiPromise = SethEyeAPI.boards(game, operatorCode())
+        .then(value => {
+          if (!session || session.game !== game || serial !== boardLoadSerial) return null;
+          const normalized = normalizeBoards(value);
+          if (usableBoardCount(normalized) > 0) {
+            showFresh(normalized, 'REAL_API');
+            return normalized;
+          }
+          return null;
+        })
+        .catch(error => {
+          log('推薦 API 快速來源未取得資料', game, error && error.message);
+          return null;
+        });
+    }
+
+    const probePromise = probeAtgTables(game)
+      .then(tables => {
+        if (!session || session.game !== game || serial !== boardLoadSerial) return null;
+        const real = normalizeBoards(realBoardsFromTables(tables));
+        if (usableBoardCount(real) < 1) throw new Error('ATG 沒有回傳可用機台');
+        showFresh(real, 'ATG_REALTIME');
+        return real;
+      })
+      .catch(error => {
+        if (String(error && error.message || '') !== 'probe-cancelled') {
+          log('ATG 即時推薦讀取失敗', game, error && error.message);
+        }
+        return null;
+      });
+
+    const [apiResult, probeResult] = await Promise.all([apiPromise, probePromise]);
+    if (!session || session.game !== game || serial !== boardLoadSerial) return;
+
+    if (!renderedFresh && !apiResult && !probeResult) {
+      if (instant && usableBoardCount(instant) > 0) {
+        boards = instant;
+        $('updTime').textContent = '暫用最近真實資料';
+        renderBoard();
+      } else {
+        boards = emptyBoards();
+        $('updTime').textContent = '讀取失敗';
+        box.innerHTML = '<div style="color:#ff9a82;font-size:12px;padding:16px">目前無法取得真實機台資料，請按「刷新」重試。</div>';
+      }
     }
   }
 
@@ -715,6 +783,8 @@
 
   async function enterGame(mode) {
     if (!session || !session.game) return;
+    // Recommendation probe must never overlap the real game session.
+    stopRecommendationProbe();
     stopRecommendationProbe();
     // A previous room timeout must never disable the next exact-room request.
     try {
