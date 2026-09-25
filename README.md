@@ -408,3 +408,16 @@ New RTP target:
 - Rank 10: about 40.5%–45.29%
 
 This keeps only the top 2 visibly high while the rest spread naturally down toward the 40% range.
+
+
+## v2.87 floating assistant UI tuning
+
+- FREE 分頁只保留：
+  - FREE 自動
+  - 劇透分數
+- 移除 FREE 分頁底部「本輪免費遊戲結果 / 等待購買免遊」顯示框
+- 懸浮小面板放大：
+  - 外框、按鈕、圖示、標題字級一起放大
+- 點開的功能面板放大：
+  - 面板寬度、按鈕、狀態列、輸入框、字級一起放大
+- 面板加入一點點透明度，但仍維持可讀性
