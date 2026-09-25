@@ -4,7 +4,7 @@
   window.__scarabBootstrapStarted = true;
 
   var ROOM_TIMEOUT_MS = 12000;
-  var READY_STABLE_MS = 1200;
+  var READY_STABLE_MS = 650;
   var GAME_READY_TIMEOUT_MS = 90000;
   var roomWaitSince = 0;
   var overlayRecovering = false;
@@ -105,7 +105,7 @@
           started=now;
           status('engine-wait','ATG 仍在載入，懸浮工具會在遊戲完成後自動接上');
         }
-      },250);
+      },400);
     });
   }
 
@@ -162,7 +162,7 @@
         } else roomWaitSince=0;
         recoverOverlay();
       } catch (_) {}
-    },750);
+    },1000);
   }
 
   domReady().then(async function(){

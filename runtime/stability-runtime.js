@@ -42,7 +42,7 @@
 
   var timer=setInterval(function(){
     try{ syncSpeedVisual(); keepInsideViewport(); }catch(_){}
-  },500);
+  },900);
   addEventListener('resize',keepInsideViewport,{passive:true});
   addEventListener('orientationchange',function(){setTimeout(keepInsideViewport,180);},{passive:true});
   addEventListener('pagehide',function(){clearInterval(timer);},{once:true});

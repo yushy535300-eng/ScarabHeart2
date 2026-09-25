@@ -1,4 +1,4 @@
-# ScarabHeart2 Web v2.58 — ATG Non-blocking Loader Fix
+# ScarabHeart2 Web v2.57 — ATG Direct Base Fix
 
 本版針對最新 HAR 的剩餘 429 / 502 / 503 根因修正：
 
@@ -11,10 +11,13 @@
 - Render 端原有 302/307 僅保留為漏網 fallback，正常流程不應再靠它承載大量 Cocos 資源。
 
 
-## v2.58 修正
+## v2.59 ALL-GAMES / SMOOTH fix (2026-09-25)
 
-- ATG iframe 本體一載入就釋放全螢幕 Loading，不再讓懸浮/引擎偵測訊息重新蓋住遊戲。
-- `engine-wait` 只在 iframe 尚未載入時顯示；遊戲載入後懸浮工具改為背景接續。
-- 懸浮 runtime 載入失敗時不再鎖死 ATG，遊戲仍可操作。
-- 自動定位機台等待由 35 秒縮短為 12 秒，逾時立即切換手動選房。
-- 保留既有懸浮、加速、即時資料、WebSocket bridge 與換房重新綁定。
+- HAR-verified ATG identities for 9 games (gameId / mechanism / checksum).
+- Prevents stale board requests from one game overwriting another after fast switching.
+- Per-game recommendation cache; transient empty responses no longer erase a valid list.
+- If a selected ranking tab is empty, the UI temporarily shows composite recommendations instead of a blank panel.
+- ATG direct lobbyPlay validates the requested game code and retries once on short transient socket failures.
+- Game iframe becomes usable immediately after page load. `engine-wait` / overlay failures never re-block the real game.
+- Auto room targeting falls back to manual room selection after 12 seconds instead of holding the game for 35 seconds.
+- Existing overlay, speed, auto functions, FREE, stop-profit/stop-loss and machine control runtimes are retained.

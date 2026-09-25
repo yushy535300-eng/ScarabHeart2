@@ -3,7 +3,7 @@
 
   const $ = id => document.getElementById(id);
   const log = (...args) => { try { console.log('[ScarabHeart]', ...args); } catch (_) {} };
-  const APP_VERSION = 'v2.58-atg-nonblocking';
+  const APP_VERSION = 'v2.59-all-games-smooth';
   const GAMES = [
     ['golden-seth', '戰神賽特2 覺醒之力', 'media/game2.png'],
     ['egyptian-mythology', '戰神賽特', 'media/game8.png'],
@@ -15,6 +15,20 @@
     ['new-vampire-hunter', '惡魔血域', 'media/game6.png'],
     ['new-jinlian', '金蓮三缺一', 'media/game9.png']
   ];
+  // 2026-09-25: verified from the user's ATG HAR captures.
+  // Keeping the real ATG identity beside each game prevents stale/foreign
+  // room state from being reused when switching games quickly.
+  const GAME_META = {
+    'golden-seth': { gameId: 123, mechanism: 'slot-erase-any-times-2', checksum: '3d2f2320da720b4a5c0da29079776e107daa3a79' },
+    'new-jinlian': { gameId: 134, mechanism: 'slot-expanding-wild-1', checksum: 'f8d1b0cae05078122191ba04093254c6b9efb09a' },
+    'new-vampire-hunter': { gameId: 133, mechanism: 'slot-pick-one-of-three-1', checksum: '05439f232a321501c3791d60b88a53420638e0df' },
+    'hades': { gameId: 127, mechanism: 'slot-erase-cluster-times-1', checksum: '37ab205b0990c6a3643e0dbb8c9ee4adb698123c' },
+    'tiger-princess': { gameId: 130, mechanism: 'slot-erase-any-times-2', checksum: 'a21ec50d4a0db8456e8814164723d753969947dc' },
+    'egyptian-mythology': { gameId: 114, mechanism: 'slot-erase-any-times-1', checksum: 'fc0932025c774421a21fe1f2e7702c10e33a7487' },
+    'scarlet-three-kingdoms': { gameId: 122, mechanism: 'slot-erase-any-times-1', checksum: '7c2dbf0bb8988bcd674d026e0ff428fa9c0caa41' },
+    'wuxia-caishen': { gameId: 121, mechanism: 'slot-erase-link-times-1', checksum: '1b87ecd58a8dc56437f49e2d0e04f1870d01671a' },
+    'son-go-ku': { gameId: 118, mechanism: 'slot-erase-link-times-2', checksum: '3935504edb3857524d7a3125c0cf284f07d0fb45' }
+  };
   const BOARD_META = {
     composite: ['綜合分數', '綜合'],
     volatility: ['爆分榜', '爆發'],
@@ -27,6 +41,31 @@
   let boards = null;
   let activeBoard = 'composite';
   let pendingPick = null;
+  let boardLoadSerial = 0;
+  let gameOpenSerial = 0;
+  const boardCache = Object.create(null);
+  const BOARD_CACHE_MS = 15000;
+
+  function emptyBoards() {
+    return { composite: [], volatility: [], premium: [], freegame: [], updatedAt: Date.now() };
+  }
+
+  function normalizeBoards(value) {
+    const out = value && typeof value === 'object' ? value : {};
+    ['composite', 'volatility', 'premium', 'freegame'].forEach(key => {
+      if (!Array.isArray(out[key])) out[key] = [];
+    });
+    if (!out.updatedAt) out.updatedAt = Date.now();
+    return out;
+  }
+
+  function usableBoardCount(value) {
+    if (!value) return 0;
+    return ['composite', 'volatility', 'premium', 'freegame'].reduce((sum, key) => {
+      const list = Array.isArray(value[key]) ? value[key] : [];
+      return sum + list.filter(item => item && (item.roomId || item.machineNum != null)).length;
+    }, 0);
+  }
 
   window.SETH_APP_VER = APP_VERSION;
   document.querySelectorAll('.seth-ver').forEach(el => { el.textContent = APP_VERSION; });
@@ -72,7 +111,7 @@
     return data;
   }
 
-  function directGameUrl(lobbyToken, gameCode) {
+  function directGameUrlOnce(lobbyToken, gameCode, timeoutMs) {
     return new Promise((resolve, reject) => {
       let ws;
       let settled = false;
@@ -80,6 +119,7 @@
       let token = lobbyToken;
       let initialAck = -1;
       let playAck = -1;
+      let canonicalCode = gameCode;
       const finish = (fn, value) => {
         if (settled) return;
         settled = true;
@@ -87,7 +127,7 @@
         try { ws && ws.close(); } catch (_) {}
         fn(value);
       };
-      const timer = setTimeout(() => finish(reject, new Error('ATG 遊戲連線逾時')), 20000);
+      const timer = setTimeout(() => finish(reject, new Error('ATG 遊戲連線逾時')), timeoutMs || 12000);
       try {
         ws = new WebSocket('wss://socket.godeebxp.com/socket.io/?EIO=3&transport=websocket');
       } catch (error) {
@@ -95,15 +135,16 @@
         return;
       }
       const send = (name, data) => {
+        if (!ws || ws.readyState !== WebSocket.OPEN) return -1;
         const id = ack++;
         ws.send('42' + id + JSON.stringify([name, data]));
         return id;
       };
       ws.onmessage = event => {
         const message = String(event.data || '');
-        if (message === '2') { ws.send('3'); return; }
+        if (message === '2') { try { ws.send('3'); } catch (_) {} return; }
         if (message === '40') {
-          initialAck = send('lobbyInitial', { token: lobbyToken, clientType: 'web' });
+          if (initialAck < 0) initialAck = send('lobbyInitial', { token: lobbyToken, clientType: 'web' });
           return;
         }
         const match = message.match(/^43(\d+)([\s\S]*)/);
@@ -111,18 +152,51 @@
         const id = Number(match[1]);
         let result = null;
         try { result = JSON.parse(match[2]); } catch (_) {}
-        if (result && result[0] && result[0].token) token = result[0].token;
+        const packet = result && result[0];
+        if (packet && packet.token) token = packet.token;
         if (id === initialAck && playAck < 0) {
-          playAck = send('lobbyPlay', { token, clientType: 'web', code: gameCode });
+          // HAR shows the canonical game code in lobbyInitial. Resolve against it
+          // before lobbyPlay so fast game switching cannot reuse a stale identity.
+          try {
+            const games = packet && packet.content && packet.content.games;
+            const wanted = Array.isArray(games) && games.find(g => String(g && g.code || '') === String(gameCode));
+            if (wanted && wanted.code) canonicalCode = String(wanted.code);
+          } catch (_) {}
+          playAck = send('lobbyPlay', { token, clientType: 'web', code: canonicalCode });
           return;
         }
-        if (id === playAck && result && result[0] && result[0].redirectUrl) {
-          finish(resolve, result[0].redirectUrl);
+        if (id === playAck) {
+          if (packet && packet.redirectUrl) {
+            try {
+              const parsed = new URL(packet.redirectUrl);
+              const returnedCode = parsed.searchParams.get('gn');
+              if (returnedCode && returnedCode !== canonicalCode) {
+                finish(reject, new Error('ATG 回傳了錯誤的遊戲入口'));
+                return;
+              }
+            } catch (_) {}
+            finish(resolve, packet.redirectUrl);
+          } else if (packet && packet.message) {
+            finish(reject, new Error(String(packet.message)));
+          }
         }
       };
       ws.onerror = () => finish(reject, new Error('ATG 遊戲連線失敗'));
       ws.onclose = () => { if (!settled) finish(reject, new Error('ATG 遊戲連線中斷')); };
     });
+  }
+
+  async function directGameUrl(lobbyToken, gameCode) {
+    let lastError = null;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        return await directGameUrlOnce(lobbyToken, gameCode, attempt === 0 ? 12000 : 9000);
+      } catch (error) {
+        lastError = error;
+        if (attempt === 0) await new Promise(resolve => setTimeout(resolve, 180));
+      }
+    }
+    throw lastError || new Error('ATG 遊戲連線失敗');
   }
 
   function setPlatform(value) {
@@ -206,9 +280,14 @@
   }
 
   async function chooseGame(code) {
-    if (!session) return;
+    if (!session || !GAME_META[code]) return;
+    // Invalidate every async result belonging to the previous game first.
+    boardLoadSerial++;
+    gameOpenSerial++;
     session.game = code;
+    boards = null;
     pendingPick = null;
+    activeBoard = 'composite';
     $('game').innerHTML = '<option value="' + code + '">' + code + '</option>';
     $('game').value = code;
     const item = GAMES.find(game => game[0] === code);
@@ -216,26 +295,49 @@
     $('room').value = '';
     $('err2').textContent = '';
     showOnly('roomView');
-    await loadBoards();
+    loadBoards(code);
   }
 
   function operatorCode() {
     return session && session.platform === 'OFA' ? 'ofa' : '';
   }
 
-  async function loadBoards() {
+  async function loadBoards(gameCode) {
+    const game = String(gameCode || (session && session.game) || '');
+    if (!game || !session || session.game !== game) return;
+    const serial = ++boardLoadSerial;
     const box = $('recommend');
-    box.innerHTML = '<div style="color:#7893a9;font-size:12px;padding:16px">正在取得即時排行…</div>';
+    const cached = boardCache[game];
+    if (cached && Date.now() - cached.at < BOARD_CACHE_MS) {
+      boards = cached.value;
+      $('updTime').textContent = '更新 ' + formatTime(boards.updatedAt);
+      renderBoard();
+    } else {
+      box.innerHTML = '<div style="color:#7893a9;font-size:12px;padding:16px">正在取得即時排行…</div>';
+    }
     try {
       if (!window.SethEyeAPI || !SethEyeAPI.boards) throw new Error('排行服務未載入');
-      const result = await SethEyeAPI.boards(session.game, operatorCode());
-      boards = result || {};
-      $('updTime').textContent = '更新 ' + formatTime(result && result.updatedAt);
+      const result = normalizeBoards(await SethEyeAPI.boards(game, operatorCode()));
+      // Ignore a late response from a game the user already left.
+      if (!session || session.game !== game || serial !== boardLoadSerial) return;
+      const previous = boardCache[game] && boardCache[game].value;
+      // A transient empty response must not wipe a good recommendation list.
+      const next = usableBoardCount(result) > 0 || !previous ? result : previous;
+      boards = next;
+      boardCache[game] = { at: Date.now(), value: next };
+      $('updTime').textContent = '更新 ' + formatTime(next.updatedAt);
       renderBoard();
     } catch (error) {
-      boards = { composite: [], volatility: [], premium: [], freegame: [] };
-      box.innerHTML = '<div style="color:#ff9a82;font-size:12px;padding:16px">目前無法取得排行；仍可輸入機台號碼或進入大廳。</div>';
-      log('排行讀取失敗', error && error.message);
+      if (!session || session.game !== game || serial !== boardLoadSerial) return;
+      const fallback = boardCache[game] && boardCache[game].value;
+      boards = fallback || emptyBoards();
+      if (usableBoardCount(boards) > 0) {
+        $('updTime').textContent = '快取 ' + formatTime(boards.updatedAt);
+        renderBoard();
+      } else {
+        box.innerHTML = '<div style="color:#ff9a82;font-size:12px;padding:16px">推薦資料暫時無法同步；你仍可輸入機台號碼，或進入大廳自行選擇。</div>';
+      }
+      log('排行讀取失敗', game, error && error.message);
     }
   }
 
@@ -248,11 +350,22 @@
   function renderBoard() {
     document.querySelectorAll('.board-tab').forEach(button => button.classList.toggle('active', button.dataset.k === activeBoard));
     const box = $('recommend');
-    const list = (boards && Array.isArray(boards[activeBoard])) ? boards[activeBoard] : [];
+    let list = (boards && Array.isArray(boards[activeBoard])) ? boards[activeBoard] : [];
+    let usingFallback = false;
+    if (!list.length && activeBoard !== 'composite' && boards && Array.isArray(boards.composite) && boards.composite.length) {
+      list = boards.composite;
+      usingFallback = true;
+    }
     box.innerHTML = '';
     if (!list.length) {
-      box.innerHTML = '<div style="color:#7893a9;font-size:12px;padding:16px">這個榜單目前沒有資料。</div>';
+      box.innerHTML = '<div style="color:#7893a9;font-size:12px;padding:16px">目前沒有可推薦機台；仍可輸入機台號碼或進入大廳。</div>';
       return;
+    }
+    if (usingFallback) {
+      const note = document.createElement('div');
+      note.style.cssText = 'color:#7893a9;font-size:11px;padding:2px 4px 6px';
+      note.textContent = '此分類暫無資料，先顯示綜合推薦';
+      box.appendChild(note);
     }
     list.slice(0, 12).forEach((item, index) => {
       const machine = item.machineNum == null ? '—' : String(item.machineNum);
@@ -315,6 +428,9 @@
       BOARD_LIST: boardList || null,
       GOOD_ROOMS: goodRooms,
       GAME_CODE: session.game,
+      GAME_ID: (GAME_META[session.game] || {}).gameId || null,
+      GAME_MECHANISM: (GAME_META[session.game] || {}).mechanism || '',
+      GAME_CHECKSUM: (GAME_META[session.game] || {}).checksum || '',
       SETH_ACCOUNT: session.account,
       APP_VER: APP_VERSION,
       AGENT_MODE: true
@@ -323,6 +439,8 @@
 
   async function enterGame(mode) {
     if (!session || !session.game) return;
+    const requestedGame = session.game;
+    const openSerial = ++gameOpenSerial;
     const buttons = [$('enterBtn'), $('skipBtn')];
     buttons.forEach(button => { button.disabled = true; });
     $('err2').style.color = '';
@@ -373,12 +491,20 @@
       let finalUrl = url;
       const tokenMatch = url.match(/[?&]t=([^&]+)/);
       if (tokenMatch) {
-        try { finalUrl = await directGameUrl(tokenMatch[1], session.game); }
-        catch (error) { log('直連交換失敗，改載入 ATG 大廳', error && error.message); }
+        try { finalUrl = await directGameUrl(tokenMatch[1], requestedGame); }
+        catch (error) { log('直連交換失敗，改載入 ATG 大廳', requestedGame, error && error.message); }
+      }
+      if (!session || session.game !== requestedGame || openSerial !== gameOpenSerial) return;
+      try {
+        const parsedFinal = new URL(finalUrl);
+        const returnedCode = parsedFinal.searchParams.get('gn');
+        if (returnedCode && returnedCode !== requestedGame) throw new Error('ATG 遊戲入口與目前選擇不一致，請再試一次');
+      } catch (error) {
+        if (error && /目前選擇/.test(String(error.message))) throw error;
       }
       const config = gameConfig(target, machineNum, boardName, boardList, targetKind);
       if (!window.ScarabWebLauncher) throw new Error('程式內遊戲載入器未就緒');
-      ScarabWebLauncher.open(finalUrl, { kind: 'atg', gameCode: session.game, cfg: config });
+      ScarabWebLauncher.open(finalUrl, { kind: 'atg', gameCode: requestedGame, gameMeta: GAME_META[requestedGame], cfg: config });
       $('err2').textContent = '';
     } catch (error) {
       $('err2').textContent = error && error.message ? error.message : '進入遊戲失敗';
@@ -392,7 +518,7 @@
     if (destination === 'home') showGameCenter();
     else {
       showOnly('roomView');
-      loadBoards();
+      loadBoards(session && session.game);
     }
   }
 

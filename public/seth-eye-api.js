@@ -128,7 +128,18 @@
   function logout() { TOKEN = null; }
 
   // 聖甲之心助手 game code → 聖甲之心助手 code
-  const GAME_MAP = { 'golden-seth': 'seth2', 'egyptian-mythology': 'seth1', 'hades': 'hades', 'scarlet-three-kingdoms': 'red3k', 'tiger-princess': 'tiger' };
+  const GAME_MAP = {
+    'golden-seth': 'seth2',
+    'egyptian-mythology': 'seth1',
+    'tiger-princess': 'tiger',
+    'hades': 'hades',
+    'scarlet-three-kingdoms': 'red3k',
+    // These four exact ATG codes are verified from the user's HARs.
+    'wuxia-caishen': 'wuxia-caishen',
+    'son-go-ku': 'son-go-ku',
+    'new-vampire-hunter': 'new-vampire-hunter',
+    'new-jinlian': 'new-jinlian'
+  };
   function eyeGame(game) { return GAME_MAP[game] || game; }
 
   // 三榜(扁平)：{composite, volatility, premium, updatedAt}。每台 roomId+machineNum+score+tier(精品)+rtp/bet/profit...
