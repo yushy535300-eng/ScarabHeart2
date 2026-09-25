@@ -3,7 +3,7 @@
 
   const $ = id => document.getElementById(id);
   const log = (...args) => { try { console.log('[ScarabHeart]', ...args); } catch (_) {} };
-  const APP_VERSION = 'v2.81-tiger-3000-range';
+  const APP_VERSION = 'v2.82-update-time-display';
   const GAMES = [
     ['golden-seth', '戰神賽特2 覺醒之力', 'media/game2.png'],
     ['egyptian-mythology', '戰神賽特', 'media/game8.png'],
@@ -758,7 +758,7 @@
       const simulated = normalizeBoards(instantSimBoards(game));
       boards = simulated;
       boardCache[game] = { at: Date.now(), value: simulated };
-      $('updTime').textContent = '估算';
+      $('updTime').textContent = '更新 ' + formatTime(simulated.updatedAt);
       renderBoard();
       return;
     }

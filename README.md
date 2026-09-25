@@ -349,3 +349,11 @@ All v2.79 loading-speed optimizations are preserved.
 - Tiger Princess simulated recommendation machine range updated to 1-3000.
 - Ten recommended machine numbers are spread across the range instead of clustering near 1500.
 - Other game ranges and all v2.80/v2.79 behavior remain unchanged.
+
+
+## v2.82 recommendation update-time display
+
+- The six generated recommendation titles now display the same update-time style as real recommendation data.
+- Example: `更新 01:41`.
+- Removed the `估算` / `測試資料` status text from the recommendation header.
+- All v2.81 machine ranges and v2.79 loading-speed optimizations remain unchanged.
