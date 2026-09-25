@@ -12,7 +12,7 @@ const { HttpsProxyAgent } = require('https-proxy-agent');
 const path = require('path');
 const crypto = require('crypto');
 const { adminPage } = require('./admin-page');
-const { authorizeWhitelist, listWhitelist, upsertWhitelist, setWhitelistEnabled, extendWhitelist, deleteWhitelist } = require('./whitelist');
+const { authorizeWhitelist, listWhitelist, upsertWhitelist, setWhitelistEnabled, extendWhitelist, setWhitelistPlatform, deleteWhitelist } = require('./whitelist');
 
 const app = express();
 const sessions = new Map();
@@ -106,6 +106,12 @@ app.post('/api/admin/whitelist/:id/extend-form',adminForm,requireAdmin,async(req
     adminRedirect(res,'已延長 30 天');
   }catch(e){adminRedirect(res,`操作失敗：${String(e&&e.message||e)}`);}
 });
+app.post('/api/admin/whitelist/:id/platform-form',adminForm,requireAdmin,async(req,res)=>{
+  try{
+    await setWhitelistPlatform(req.params.id,String(req.body&&req.body.platform||''));
+    adminRedirect(res,'平台已更新');
+  }catch(e){adminRedirect(res,`平台更新失敗：${String(e&&e.message||e)}`);}
+});
 app.post('/api/admin/whitelist/:id/delete-form',adminForm,requireAdmin,async(req,res)=>{
   try{
     await deleteWhitelist(req.params.id);
@@ -116,7 +122,7 @@ app.post('/api/access/login',accessJson,async(req,res)=>{try{const username=Stri
 app.get('/api/access/check',async(req,res)=>{const id=String(req.query.sessionId||''),current=accessSessions.get(id);if(!current)return res.status(401).json({valid:false,reason:'session_invalid'});try{const access=await authorizeWhitelist(current.username,current.platform);if(!access.allowed){accessSessions.delete(id);return res.status(403).json({valid:false,reason:access.reason});}res.json({valid:true,reason:'ok'});}catch(e){res.status(503).json({valid:false,reason:'database_unavailable',temporary:true});}});
 app.post('/api/access/logout',accessJson,(req,res)=>{const id=String(req.body&&req.body.sessionId||'');if(id)accessSessions.delete(id);res.json({success:true});});
 app.get('/healthz', (_req, res) => {
-  res.status(200).json({ ok: true, version: '2.92-full-whitelist-restored' });
+  res.status(200).json({ ok: true, version: '2.93-platform-whitelist-fix' });
 });
 
 app.use('/__api', express.raw({ type: '*/*', limit: '2mb' }), async (req, res) => {

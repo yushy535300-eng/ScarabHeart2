@@ -162,6 +162,24 @@ async function extendWhitelist(id, days){
   );
 }
 
+async function setWhitelistPlatform(id, platformRaw){
+  const db=getPool();
+  if(!db) throw new Error('DATABASE_URL 尚未設定');
+  await ensureWhitelistTables();
+  const platform=String(platformRaw||'').trim().toUpperCase();
+  if(!['TZ','OFA'].includes(platform)) throw new Error('平台只能是 TZ 或 OFA');
+  try{
+    await db.query(
+      `UPDATE tz_whitelist SET platform=$1,updated_at=NOW() WHERE id=$2`,
+      [platform,Number(id)]
+    );
+  }catch(e){
+    if(e && e.code==='23505') throw new Error('此平台與帳號已經存在');
+    throw e;
+  }
+}
+
+
 async function deleteWhitelist(id){
   const db=getPool();
   if(!db) throw new Error('DATABASE_URL 尚未設定');
@@ -175,5 +193,6 @@ module.exports={
   upsertWhitelist,
   setWhitelistEnabled,
   extendWhitelist,
+  setWhitelistPlatform,
   deleteWhitelist
 };
