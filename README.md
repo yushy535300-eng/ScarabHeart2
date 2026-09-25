@@ -375,3 +375,36 @@ All v2.79 loading-speed optimizations are preserved.
 - The clear foreground artwork remains centered with `object-fit: contain`.
 - This removes the dark empty side margins while keeping the cards from becoming too large.
 - Desktop / tablet / mobile layouts from v2.83 are preserved.
+
+
+## v2.85 lower simulated RTP
+
+Only the six simulated-recommendation titles were changed.
+
+New RTP distribution:
+- Rank 1: about 93.2%–95.69%
+- Rank 2: about 90.8%–93.09%
+- Rank 3: about 88.4%–90.59%
+- Rank 4–10: mostly mid-80s down to upper-60s
+- Hard maximum: 95.69%
+
+All v2.84 UI, blurred card backgrounds, machine ranges, auto-room, and load-speed changes are preserved.
+
+
+## v2.86 fake RTP redistribution
+
+Only the six simulated recommendation titles were adjusted.
+
+New RTP target:
+- Rank 1: about 94.6%–96.69%
+- Rank 2: about 91.2%–93.79%
+- Rank 3: about 84.5%–88.09%
+- Rank 4: about 78.8%–82.99%
+- Rank 5: about 72.6%–76.99%
+- Rank 6: about 66.4%–70.99%
+- Rank 7: about 59.8%–64.59%
+- Rank 8: about 53.2%–58.19%
+- Rank 9: about 46.8%–51.99%
+- Rank 10: about 40.5%–45.29%
+
+This keeps only the top 2 visibly high while the rest spread naturally down toward the 40% range.

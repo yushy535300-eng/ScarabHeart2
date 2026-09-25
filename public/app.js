@@ -3,7 +3,7 @@
 
   const $ = id => document.getElementById(id);
   const log = (...args) => { try { console.log('[ScarabHeart]', ...args); } catch (_) {} };
-  const APP_VERSION = 'v2.84-game-card-blur-bg';
+  const APP_VERSION = 'v2.86-fake-rtp-40-97-top2-high';
   const GAMES = [
     ['golden-seth', '戰神賽特2 覺醒之力', 'media/game2.png'],
     ['egyptian-mythology', '戰神賽特', 'media/game8.png'],
@@ -564,17 +564,20 @@
       // The rest deliberately spread down into normal-looking ranges.
       let rtp;
       if (rank === 0) {
-        rtp = 97.20 + (seed % 240) / 100;      // 97.20 ~ 99.59
+        rtp = 94.60 + (seed % 210) / 100;      // 94.60 ~ 96.69
       } else if (rank === 1) {
-        rtp = 95.40 + (seed % 230) / 100;      // 95.40 ~ 97.69
+        rtp = 91.20 + (seed % 260) / 100;      // 91.20 ~ 93.79
       } else if (rank === 2) {
-        rtp = 93.60 + (seed % 220) / 100;      // 93.60 ~ 95.79
+        rtp = 84.50 + (seed % 360) / 100;      // 84.50 ~ 88.09
       } else {
-        const floors = [90.2, 87.6, 84.8, 82.3, 79.4, 76.8, 73.5];
-        const base = floors[Math.min(rank - 3, floors.length - 1)];
-        rtp = base + (seed % 170) / 100;        // modest jitter only
+        const floors = [78.8, 72.6, 66.4, 59.8, 53.2, 46.8, 40.5];
+        const spans  = [4.2,  4.4,  4.6,  4.8,  5.0,  5.2,  4.8];
+        const idx = Math.min(rank - 3, floors.length - 1);
+        const base = floors[idx];
+        const span = spans[idx];
+        rtp = base + ((seed % Math.round(span * 100)) / 100);
       }
-      rtp = Math.min(99.59, Math.round(rtp * 100) / 100);
+      rtp = Math.min(96.69, Math.round(rtp * 100) / 100);
 
       // Scores also taper instead of clustering near 900.
       const scoreBands = [895, 874, 856, 822, 803, 785, 766, 748, 731, 715];
