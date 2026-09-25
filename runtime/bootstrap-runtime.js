@@ -124,7 +124,7 @@
 
   function forceManualRoom(){
     window.__SCARAB_FORCE_MANUAL_ROOM=true;
-    try { sessionStorage.setItem('SCARAB_FORCE_MANUAL_ROOM','1'); } catch (_) {}
+    try { sessionStorage.removeItem('SCARAB_FORCE_MANUAL_ROOM'); } catch (_) {}
     try {
       var e=window.__sethEngine;
       if(e){
@@ -158,7 +158,16 @@
       try {
         if (isRoomWait()) {
           if (!roomWaitSince) roomWaitSince=Date.now();
-          if (!window.__SCARAB_FORCE_MANUAL_ROOM && Date.now()-roomWaitSince>=ROOM_TIMEOUT_MS) forceManualRoom();
+          var payload=window.__SCARAB_WEB_PAYLOAD||{}, cfg=payload.cfg||{};
+          var exact=!!cfg.EXACT_ROOM;
+          if (!exact && !window.__SCARAB_FORCE_MANUAL_ROOM && Date.now()-roomWaitSince>=ROOM_TIMEOUT_MS) {
+            forceManualRoom();
+          } else if (exact && Date.now()-roomWaitSince>=ROOM_TIMEOUT_MS) {
+            // Do not throw away the selected room. Keep ATG interactive and continue
+            // exact matching in the background until the live table map is ready.
+            status('room-exact-wait','正在等待指定機台 '+String(cfg.MACHINENUM||'')+' 的即時房間資料');
+            roomWaitSince=Date.now();
+          }
         } else roomWaitSince=0;
         recoverOverlay();
       } catch (_) {}

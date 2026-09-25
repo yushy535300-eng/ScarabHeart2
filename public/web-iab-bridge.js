@@ -6,6 +6,14 @@
   var nativeFetch = window.fetch.bind(window);
   var NativeWebSocket = window.WebSocket;
   var loadTimer = null;
+
+  // One lightweight worker removes hundreds of slotFramework requests from Render.
+  // Registration failure is harmless; server routes remain the fallback.
+  try {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(function(){});
+    }
+  } catch (_) {}
   var frameLoaded = false;
   var currentOpenId = 0;
 
@@ -86,6 +94,11 @@
   }
 
   function openInApp(raw, payload) {
+    try {
+      sessionStorage.removeItem('SCARAB_FORCE_MANUAL_ROOM');
+      sessionStorage.removeItem('scarab_force_manual_room');
+      sessionStorage.removeItem('SCARAB_ROOM_FALLBACK');
+    } catch (_) {}
     var source;
     try {
       source = new URL(raw, location.href);
@@ -150,6 +163,8 @@
         setLoading(data.message || '遊戲載入中…', frameLoaded);
       } else if (data.state === 'room-fallback') {
         setLoading(data.message || '已切換手動選房', true);
+      } else if (data.state === 'room-exact-wait') {
+        setLoading(data.message || '正在等待指定機台資料', true);
       } else if (data.state === 'engine-error') {
         // Assistant failure must never take down the real ATG game.
         setLoading('遊戲可繼續操作；懸浮工具暫時未連線', true);

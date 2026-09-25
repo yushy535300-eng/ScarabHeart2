@@ -99,6 +99,12 @@ app.use('/__api', express.raw({ type: '*/*', limit: '2mb' }), async (req, res) =
 });
 
 // Only the three ATG runtime files required by the in-app game are exposed.
+app.get('/sw.js', (_req, res) => {
+  res.set('Cache-Control', 'no-store, max-age=0');
+  res.set('Service-Worker-Allowed', '/');
+  res.sendFile(path.join(publicDir, 'sw.js'));
+});
+
 app.get('/__runtime/atg-engine-runtime.js', (_req, res) => {
   res.sendFile(path.join(runtimeDir, 'atg-engine-runtime.js'));
 });

@@ -3,7 +3,7 @@
 
   const $ = id => document.getElementById(id);
   const log = (...args) => { try { console.log('[ScarabHeart]', ...args); } catch (_) {} };
-  const APP_VERSION = 'v2.59-all-games-smooth';
+  const APP_VERSION = 'v2.60-exact-room-smooth';
   const GAMES = [
     ['golden-seth', '戰神賽特2 覺醒之力', 'media/game2.png'],
     ['egyptian-mythology', '戰神賽特', 'media/game8.png'],
@@ -431,6 +431,8 @@
       GAME_ID: (GAME_META[session.game] || {}).gameId || null,
       GAME_MECHANISM: (GAME_META[session.game] || {}).mechanism || '',
       GAME_CHECKSUM: (GAME_META[session.game] || {}).checksum || '',
+      FULL_ROOM_ID: pendingPick && pendingPick.roomId ? String(pendingPick.roomId) : '',
+      EXACT_ROOM: !!(pendingPick && pendingPick.roomId),
       SETH_ACCOUNT: session.account,
       APP_VER: APP_VERSION,
       AGENT_MODE: true
@@ -439,6 +441,12 @@
 
   async function enterGame(mode) {
     if (!session || !session.game) return;
+    // A previous room timeout must never disable the next exact-room request.
+    try {
+      sessionStorage.removeItem('SCARAB_FORCE_MANUAL_ROOM');
+      sessionStorage.removeItem('scarab_force_manual_room');
+      sessionStorage.removeItem('SCARAB_ROOM_FALLBACK');
+    } catch (_) {}
     const requestedGame = session.game;
     const openSerial = ++gameOpenSerial;
     const buttons = [$('enterBtn'), $('skipBtn')];
@@ -454,7 +462,9 @@
       if (mode === 'manual') {
         target = '';
       } else if (pendingPick && String($('room').value).trim() === pendingPick.machineNum) {
-        target = pendingPick.roomId || pendingPick.machineNum;
+        target = pendingPick.roomId
+          ? String(pendingPick.roomId).replace(/^.*_/, '')
+          : pendingPick.machineNum;
         machineNum = pendingPick.machineNum;
         targetKind = pendingPick.roomId ? 'roomId' : null;
         boardName = pendingPick.boardName;

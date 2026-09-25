@@ -21,3 +21,15 @@
 - Game iframe becomes usable immediately after page load. `engine-wait` / overlay failures never re-block the real game.
 - Auto room targeting falls back to manual room selection after 12 seconds instead of holding the game for 35 seconds.
 - Existing overlay, speed, auto functions, FREE, stop-profit/stop-loss and machine control runtimes are retained.
+
+
+## v2.60 EXACT ROOM + SMOOTH ATG fix
+
+HAR findings addressed:
+- Selected recommendation 3557 was correctly passed as roomId `seth2_353157` / machine `3557`.
+- The failure was downstream: exact-room targeting could be abandoned when the live room table was late.
+- Room fallback state no longer persists between game entries.
+- Recommendation room ids are normalized to the numeric ATG room id before engine targeting.
+- Exact recommendation requests remain exact; after timeout the game stays usable while room matching continues.
+- A root service worker redirects versioned `/slotFramework/<hash>/...` resources directly to ATG.
+  This prevents the repeated Render/Cloudflare 429, 502 and 503 bursts observed in the uploaded HAR.
