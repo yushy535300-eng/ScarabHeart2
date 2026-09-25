@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://socket.godeebxp.com" crossorigin>
   <link rel="dns-prefetch" href="//play.godeebxp.com">
   <link rel="dns-prefetch" href="//socket.godeebxp.com">
-<title>聖甲之心｜ATG 遊戲助手</title>
+<title>聖甲之心助手</title>
   <style>
     :root{color-scheme:dark;--bg:#020711;--panel:rgba(7,17,31,.94);--line:rgba(95,165,210,.24);--cyan:#52e4ff;--blue:#557cff;--gold:#f2cb70;--text:#edf8ff;--muted:#7893a9;--danger:#ff7e89;--ok:#70e7b0}
     *{box-sizing:border-box}html,body{min-height:100%;margin:0}body{color:var(--text);font-family:Inter,"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;background:radial-gradient(circle at 16% 42%,rgba(0,154,216,.16),transparent 28rem),radial-gradient(circle at 78% 18%,rgba(61,80,190,.12),transparent 30rem),linear-gradient(145deg,#02050c,#061321 52%,#020711);overflow-x:hidden}button,input,select{font:inherit}button{cursor:pointer}.hide{display:none!important}.app-shell{width:min(1180px,calc(100% - 36px));margin:0 auto}
@@ -195,6 +195,36 @@
     transform: scale(1.12) !important;
   }
 }
+</style>
+
+
+  <!-- v2.89 iPhone / iPad Home Screen App -->
+  <meta name="application-name" content="聖甲之心助手">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="聖甲之心助手">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="format-detection" content="telephone=no">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="apple-touch-icon" sizes="180x180" href="/pwa-icons/apple-touch-icon-180.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="/pwa-icons/icon-192.png">
+
+
+<style id="v289-home-screen-mode">
+  @media (display-mode: standalone), (display-mode: fullscreen) {
+    html, body {
+      width: 100%;
+      min-height: 100dvh;
+      margin: 0;
+      overscroll-behavior: none;
+    }
+    body {
+      padding-top: env(safe-area-inset-top);
+      padding-right: env(safe-area-inset-right);
+      padding-bottom: env(safe-area-inset-bottom);
+      padding-left: env(safe-area-inset-left);
+    }
+  }
 </style>
 
 </head>

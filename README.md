@@ -428,3 +428,15 @@ This keeps only the top 2 visibly high while the rest spread naturally down towa
 - Mobile (<=700px) returns the floating assistant and opened panes to compact dimensions.
 - Mobile room-search/loading/success/error/FREE/spoiler notices remain compact.
 - Both desktop and mobile use improved glass/translucent styling, finer borders, subtle glow and stronger typography hierarchy.
+
+
+## v2.89 — Home Screen App mode
+
+- iPhone / iPad 主畫面名稱：`聖甲之心助手`
+- 主畫面圖示：使用現有聖甲之心聖甲蟲 Logo
+- 新增 iOS `apple-mobile-web-app-capable`
+- 新增 Web App Manifest
+- 從 Safari「加入主畫面」後，再從主畫面圖示啟動，會以獨立 App 視窗開啟
+- 獨立 App 視窗不顯示 Safari 網址列與分頁列
+- 保留登入、遊戲中心、返回按鈕、懸浮輔助與所有 ATG 遊戲流程
+- 不修改 WebSocket、遊戲代理、選房、自動進房等核心連線邏輯
