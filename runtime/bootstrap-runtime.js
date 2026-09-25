@@ -57,6 +57,8 @@
   var READY_STABLE_MS = 650;
   var GAME_READY_TIMEOUT_MS = 90000;
   var roomWaitSince = 0;
+  var portraitWasWaiting = false;
+  var portraitClearSince = 0;
   var overlayRecovering = false;
   var loaded = Object.create(null);
   var watchdogTimer = null;
@@ -206,20 +208,38 @@
     if(watchdogTimer) return;
     watchdogTimer=setInterval(function(){
       try {
-        if (isRoomWait()) {
+        var waiting=isRoomWait();
+        var payload=window.__SCARAB_WEB_PAYLOAD||{}, cfg=payload.cfg||{};
+        var portraitRoom=!!cfg.PORTRAIT_ROOM_MODE && !!String(cfg.MACHINENUM||'');
+        if (waiting) {
           if (!roomWaitSince) roomWaitSince=Date.now();
-          var payload=window.__SCARAB_WEB_PAYLOAD||{}, cfg=payload.cfg||{};
+          if(portraitRoom){
+            portraitWasWaiting=true;
+            portraitClearSince=0;
+            // Portrait room pages can take longer to build their table/page map.
+            // Never let the generic watchdog cancel the user's exact machine.
+            window.__SCARAB_FORCE_MANUAL_ROOM=false;
+            status('room-searching','正在定位機台 #'+String(cfg.MACHINENUM||'')+'…');
+          }
 
           var exact=!!cfg.EXACT_ROOM;
-          if (!exact && !window.__SCARAB_FORCE_MANUAL_ROOM && Date.now()-roomWaitSince>=ROOM_TIMEOUT_MS) {
+          if (!exact && !portraitRoom && !window.__SCARAB_FORCE_MANUAL_ROOM && Date.now()-roomWaitSince>=ROOM_TIMEOUT_MS) {
             forceManualRoom();
-          } else if (exact && Date.now()-roomWaitSince>=ROOM_TIMEOUT_MS) {
-            // Do not throw away the selected room. Keep ATG interactive and continue
-            // exact matching in the background until the live table map is ready.
-            status('room-exact-wait','正在等待指定機台 '+String(cfg.MACHINENUM||'')+' 的即時房間資料');
+          } else if ((exact||portraitRoom) && Date.now()-roomWaitSince>=ROOM_TIMEOUT_MS) {
+            status('room-exact-wait','正在等待指定機台 #'+String(cfg.MACHINENUM||'')+' 的即時房間資料');
             roomWaitSince=Date.now();
           }
-        } else roomWaitSince=0;
+        } else {
+          roomWaitSince=0;
+          if(portraitRoom&&portraitWasWaiting){
+            if(!portraitClearSince) portraitClearSince=Date.now();
+            if(Date.now()-portraitClearSince>=1600){
+              portraitWasWaiting=false;
+              portraitClearSince=0;
+              status('room-entered','已完成指定機台定位');
+            }
+          } else portraitClearSince=0;
+        }
         recoverOverlay();
       } catch (_) {}
     },1000);

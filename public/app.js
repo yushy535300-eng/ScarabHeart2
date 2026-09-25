@@ -3,7 +3,7 @@
 
   const $ = id => document.getElementById(id);
   const log = (...args) => { try { console.log('[ScarabHeart]', ...args); } catch (_) {} };
-  const APP_VERSION = 'v2.98-original-room-flow-session-guard';
+  const APP_VERSION = 'v2.99-portrait-room-orientation-promo-fix';
   const GAMES = [
     ['golden-seth', '戰神賽特2 覺醒之力', 'media/game2.png'],
     ['egyptian-mythology', '戰神賽特', 'media/game8.png'],
@@ -18,6 +18,16 @@
   // 2026-09-25: verified from the user's ATG HAR captures.
   // Keeping the real ATG identity beside each game prevents stale/foreign
   // room state from being reused when switching games quickly.
+  // v2.99: these ATG titles use the portrait room/game layout.
+  // Keep the proven v2.98 room flow, but never let the generic 12-second
+  // landscape watchdog cancel an exact machine selection for these games.
+  const PORTRAIT_ROOM_GAMES = new Set([
+    'wuxia-caishen',
+    'son-go-ku',
+    'new-vampire-hunter',
+    'new-jinlian'
+  ]);
+
   const GAME_META = {
     'golden-seth': { gameId: 123, mechanism: 'slot-erase-any-times-2', checksum: '3d2f2320da720b4a5c0da29079776e107daa3a79' },
     'new-jinlian': { gameId: 134, mechanism: 'slot-expanding-wild-1', checksum: 'f8d1b0cae05078122191ba04093254c6b9efb09a' },
@@ -249,11 +259,51 @@
     ['loginView', 'gameCenterView', 'roomView'].forEach(view => $(view).classList.toggle('hide', view !== id));
   }
 
+  function syncShellOrientation() {
+    const portrait = window.innerHeight >= window.innerWidth;
+    document.documentElement.classList.toggle('scarab-portrait', portrait);
+    document.documentElement.classList.toggle('scarab-landscape', !portrait);
+    document.body.classList.toggle('scarab-portrait', portrait);
+    document.body.classList.toggle('scarab-landscape', !portrait);
+    return portrait;
+  }
+
+  function resetShellLayout() {
+    syncShellOrientation();
+    // ATG itself may have just been landscape/full-screen. Never let any stale
+    // inline dimensions/transforms leak into the app shell after closing it.
+    ['gameCenterView','roomView','gcGames'].forEach(id => {
+      const el = $(id);
+      if (!el) return;
+      ['width','height','minWidth','minHeight','maxWidth','maxHeight','transform','zoom','position','left','right','top','bottom','overflow'].forEach(k => {
+        try { el.style[k] = ''; } catch (_) {}
+      });
+    });
+    document.querySelectorAll('#gcGames .game-card').forEach(card => {
+      ['height','minHeight','maxHeight','transform','top','left','right','bottom','position'].forEach(k => {
+        try { card.style[k] = ''; } catch (_) {}
+      });
+    });
+    // Recreate the grid formatting context after iOS rotates back from an ATG
+    // landscape document. This avoids the stacked/overlapping card state.
+    const grid = $('gcGames');
+    if (grid && !$('gameCenterView').classList.contains('hide')) {
+      const prior = grid.style.display;
+      grid.style.display = 'none';
+      void grid.offsetHeight;
+      grid.style.display = prior || '';
+    }
+  }
+
   function showGameCenter() {
     stopRecommendationProbe();
     showOnly('gameCenterView');
     $('gcWho').textContent = '● ' + (session ? session.platform : loginPlatform) + ' ONLINE';
     renderGames();
+    resetShellLayout();
+    requestAnimationFrame(resetShellLayout);
+    setTimeout(resetShellLayout, 220);
+    setTimeout(resetShellLayout, 520);
     window.scrollTo(0, 0);
   }
 
@@ -1033,6 +1083,27 @@
     }
   }
 
+  function showRoomPickToast(machineNum, gameCode) {
+    const toast = $('roomPickToast');
+    const num = String(machineNum || '').trim();
+    if (!toast) return;
+    const portraitGame = PORTRAIT_ROOM_GAMES.has(String(gameCode || ''));
+    if (!portraitGame || !num) {
+      toast.classList.add('hide');
+      return;
+    }
+    const n = $('roomPickNumber');
+    const s = $('roomPickState');
+    if (n) n.textContent = '#' + num;
+    if (s) s.textContent = '正在定位機台中…';
+    toast.classList.remove('hide');
+  }
+
+  function hideRoomPickToast() {
+    const toast = $('roomPickToast');
+    if (toast) toast.classList.add('hide');
+  }
+
   function gameConfig(target, machineNum, boardName, boardList, targetKind) {
     const goodRooms = ((boards && boards.composite) || []).filter(x => x && x.machineNum != null).slice(0, 3).map(x => ({
       roomId: x.roomId,
@@ -1060,7 +1131,8 @@
       GAME_MECHANISM: (GAME_META[session.game] || {}).mechanism || '',
       GAME_CHECKSUM: (GAME_META[session.game] || {}).checksum || '',
       FULL_ROOM_ID: pendingPick && pendingPick.roomId ? String(pendingPick.roomId) : '',
-      EXACT_ROOM: false,
+      EXACT_ROOM: PORTRAIT_ROOM_GAMES.has(String(session.game || '')) && !!String(machineNum || '').trim(),
+      PORTRAIT_ROOM_MODE: PORTRAIT_ROOM_GAMES.has(String(session.game || '')),
       VISUAL_TARGET: String(machineNum || target || ''),
       VISUAL_TARGET_KIND: 'machineNum',
       ROOM_SESSION_ID: currentRoomSessionId,
@@ -1135,9 +1207,11 @@
       }
       const config = gameConfig(target, machineNum, boardName, boardList, targetKind);
       if (!window.ScarabWebLauncher) throw new Error('程式內遊戲載入器未就緒');
+      showRoomPickToast(machineNum, requestedGame);
       ScarabWebLauncher.open(finalUrl, { kind: 'atg', gameCode: requestedGame, gameMeta: GAME_META[requestedGame], cfg: config });
       $('err2').textContent = '';
     } catch (error) {
+      hideRoomPickToast();
       $('err2').textContent = error && error.message ? error.message : '進入遊戲失敗';
     } finally {
       buttons.forEach(button => { button.disabled = false; });
@@ -1146,6 +1220,7 @@
 
   function closeGame(destination) {
     clearPreparedGameEntry();
+    hideRoomPickToast();
     // Invalidate async work from the game instance that is being closed.
     // This does NOT alter room selection/fallback logic; it only prevents
     // an old iframe/session from taking control after the user picks again.
@@ -1161,6 +1236,9 @@
     if (destination === 'home') showGameCenter();
     else {
       showOnly('roomView');
+      resetShellLayout();
+      requestAnimationFrame(resetShellLayout);
+      setTimeout(resetShellLayout, 220);
       pendingPick = null;
       $('room').value = '';
       $('err2').style.color = '';
@@ -1210,28 +1288,16 @@
   }
 
   async function loadAnnouncement() {
-    if (!window.SethEyeAPI || !SethEyeAPI.announcement) return;
-    try {
-      const item = await SethEyeAPI.announcement();
-      if (!item || !item.enabled) return;
-      const box = $('announce');
-      const title = String(item.title || '').trim();
-      const text = String(item.text || '').trim();
-      const image = safeAnnouncementUrl(item.imageUrl);
-      const action = safeAnnouncementUrl(item.buttonUrl);
-      if (title) { $('announceTitle').textContent = title; $('announceTitle').classList.remove('hide'); }
-      if (text) { $('announceText').textContent = text; $('announceText').classList.remove('hide'); }
-      if (image) {
-        $('announceImg').onload = () => $('announceImg').classList.remove('hide');
-        $('announceImg').src = image;
-      }
-      if (action && item.buttonText) {
-        $('announceBtn').href = action;
-        $('announceBtn').textContent = String(item.buttonText);
-        $('announceBtn').classList.remove('hide');
-      }
-      if (title || text || image || (action && item.buttonText)) box.classList.remove('hide');
-    } catch (_) {}
+    const box = $('announce');
+    if (!box) return;
+    $('announceImg').src = 'media/scarab-heart-launch.png';
+    $('announceImg').classList.remove('hide');
+    $('announceTitle').textContent = '🔥 聖甲之心 正式登場 🛡️';
+    $('announceTitle').classList.remove('hide');
+    $('announceText').textContent = '全新遊戲現已開放！點擊遊戲，立即進入《聖甲之心》!!';
+    $('announceText').classList.remove('hide');
+    $('announceBtn').classList.add('hide');
+    box.classList.remove('hide');
   }
 
   $('platformPicker').onclick = function () {
@@ -1268,6 +1334,24 @@
   $('skipBtn').onclick = () => enterGame('manual');
   $('gameExit').onclick = () => closeGame('rooms');
   window.addEventListener('scarab:web-command', event => handleGameCommand(event && event.detail && event.detail.url));
+
+  syncShellOrientation();
+  window.addEventListener('resize', () => {
+    syncShellOrientation();
+    if (!$('gameCenterView').classList.contains('hide')) {
+      requestAnimationFrame(resetShellLayout);
+    }
+  }, { passive: true });
+  window.addEventListener('orientationchange', () => {
+    setTimeout(resetShellLayout, 120);
+    setTimeout(resetShellLayout, 360);
+    setTimeout(resetShellLayout, 700);
+  }, { passive: true });
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', () => {
+      if (!$('gameCenterView').classList.contains('hide')) requestAnimationFrame(resetShellLayout);
+    }, { passive: true });
+  }
 
   try {
     const saved = JSON.parse(localStorage.getItem('scarab_login') || 'null');
