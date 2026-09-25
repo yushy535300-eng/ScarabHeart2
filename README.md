@@ -217,3 +217,32 @@ Fix:
 - The manual Refresh button also bypasses the in-memory 15-second board cache.
 - This keeps the recommendation connection separate from the active game and
   ensures the next visible list is recalculated after returning.
+
+
+## v2.74 REAL ATG all-games recommendations
+
+This version removes the assumption that `seth-eye /boards` supports every ATG title.
+
+Real recommendation source:
+- Recommendation page obtains a fresh ATG game token for the selected title.
+- A short-lived hidden probe loads that title in `table=1` mode.
+- The probe observes the authenticated ATG WebSocket and decodes the same deflate
+  machine-table packet already proven in the supplied HARs/runtime.
+- Real fields used: `roomId`, `number`, `status`, `isLocked`, `today.win`,
+  `today.bet`, `win`, `bet` (and free-game fields when ATG exposes them).
+- As soon as >=10 real machines are captured, the probe iframe is destroyed.
+- The probe never selects a room or spins.
+- Before formal game entry the probe is forcibly destroyed; it never remains
+  connected at the same time as the real game.
+- Returning to the recommendation page creates a new probe and recalculates the list.
+
+Ranking:
+- Composite: real RTP + real play volume + real profit rank.
+- Burst: highest live RTP (real ATG values).
+- Premium: highest real play volume, then RTP.
+- Free-game tab uses real free-game count when the title exposes it; otherwise it
+  uses only real low-payout/high-volume table statistics and never invents a count.
+- Up to 10 unique real machine numbers are displayed per tab.
+
+`seth-eye /boards` remains only as a secondary fallback; it is no longer the
+primary source for titles that were returning empty lists.

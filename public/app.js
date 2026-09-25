@@ -3,7 +3,7 @@
 
   const $ = id => document.getElementById(id);
   const log = (...args) => { try { console.log('[ScarabHeart]', ...args); } catch (_) {} };
-  const APP_VERSION = 'v2.73-refresh-on-return';
+  const APP_VERSION = 'v2.74-real-atg-all-games-top10';
   const GAMES = [
     ['golden-seth', '戰神賽特2 覺醒之力', 'media/game2.png'],
     ['egyptian-mythology', '戰神賽特', 'media/game8.png'],
@@ -44,6 +44,8 @@
   let boardLoadSerial = 0;
   let gameOpenSerial = 0;
   let roomSessionSerial = 0;
+  let recommendationProbe = null;
+  let recommendationProbeSerial = 0;
   let currentRoomSessionId = '';
   const boardCache = Object.create(null);
   const BOARD_CACHE_MS = 15000;
@@ -215,6 +217,7 @@
   }
 
   function showGameCenter() {
+    stopRecommendationProbe();
     showOnly('gameCenterView');
     $('gcWho').textContent = '● ' + (session ? session.platform : loginPlatform) + ' ONLINE';
     renderGames();
@@ -283,6 +286,7 @@
 
   async function chooseGame(code) {
     if (!session || !GAME_META[code]) return;
+    stopRecommendationProbe();
     // Invalidate every async result belonging to the previous game first.
     boardLoadSerial++;
     gameOpenSerial++;
@@ -304,43 +308,215 @@
     return session && session.platform === 'OFA' ? 'ofa' : '';
   }
 
+  function probeBase64url(value) {
+    const bytes = new TextEncoder().encode(JSON.stringify(value || {}));
+    let binary = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) {
+      binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    }
+    return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+  }
+
+  function stopRecommendationProbe() {
+    const p = recommendationProbe;
+    recommendationProbe = null;
+    recommendationProbeSerial++;
+    if (!p) return;
+    try { clearTimeout(p.timer); } catch (_) {}
+    try { window.removeEventListener('message', p.listener); } catch (_) {}
+    try { if (p.frame) { p.frame.src = 'about:blank'; p.frame.remove(); } } catch (_) {}
+    try { if (p.reject) p.reject(new Error('probe-cancelled')); } catch (_) {}
+  }
+
+  async function requestAtgLobbyUrl() {
+    if (!session) throw new Error('尚未登入');
+    const request = async token => {
+      const body = session.platform === 'OFA'
+        ? { game_return_url: 'https://www.ofa1188.net', game_kind: 'SLOT', game_device: 'Desktop', game_money: '' }
+        : { game_return_url: session.base, game_kind: '', game_type: '', game_device: 'Desktop' };
+      const result = await postJson(session.base + '/api/v2/game/ATG/login', body, token);
+      return result && result.data && result.data.game_url;
+    };
+    let url = await request(session.token);
+    if (!url) {
+      const relogin = await postJson(session.base + '/api/v1/login', {
+        username: session.account,
+        password: session.password,
+        device_id: deviceId()
+      });
+      const token = relogin && relogin.data && relogin.data.token;
+      if (!token) throw new Error('登入已過期，請重新登入');
+      session.token = token;
+      url = await request(token);
+    }
+    if (!url) throw new Error('ATG 沒有回傳遊戲網址');
+    return url;
+  }
+
+  async function resolveAtgGameUrl(gameCode) {
+    const lobbyUrl = await requestAtgLobbyUrl();
+    const tokenMatch = lobbyUrl.match(/[?&]t=([^&]+)/);
+    if (!tokenMatch) return lobbyUrl;
+    return directGameUrl(tokenMatch[1], gameCode);
+  }
+
+  function rankPercent(rows, getter, descending) {
+    const sorted = rows.slice().sort((a,b) => {
+      const av = Number(getter(a) || 0), bv = Number(getter(b) || 0);
+      return descending === false ? av - bv : bv - av;
+    });
+    const map = new Map();
+    const denom = Math.max(1, sorted.length - 1);
+    sorted.forEach((row, i) => map.set(row.machineNum, 1 - i / denom));
+    return map;
+  }
+
+  function realBoardsFromTables(tables) {
+    const rows = (Array.isArray(tables) ? tables : []).map(raw => {
+      const machineNum = String(raw.machineNum == null ? '' : raw.machineNum);
+      const roomId = String(raw.roomId == null ? '' : raw.roomId);
+      const status = String(raw.status || '');
+      const todayBet = Number(raw.todayBet || 0);
+      const todayWin = Number(raw.todayWin || 0);
+      const bet = Number(raw.bet || 0);
+      const win = Number(raw.win || 0);
+      const liveBet = todayBet > 0 ? todayBet : bet;
+      const liveWin = todayBet > 0 ? todayWin : win;
+      const rtp = liveBet > 0 ? liveWin / liveBet * 100 : 0;
+      return {
+        roomId,
+        machineNum,
+        status,
+        isLocked: !!raw.isLocked || /locked/i.test(status),
+        available: !raw.isLocked && !/locked/i.test(status) && !/full/i.test(status),
+        rtp: Number.isFinite(rtp) ? Math.round(rtp * 100) / 100 : 0,
+        bet: liveBet,
+        win: liveWin,
+        profit: liveWin - liveBet,
+        rawFree: raw.rawFree == null ? null : Number(raw.rawFree)
+      };
+    }).filter(x => /^\d+$/.test(x.machineNum) && x.roomId);
+
+    const unique = [];
+    const seen = new Set();
+    rows.forEach(row => { if (!seen.has(row.machineNum)) { seen.add(row.machineNum); unique.push(row); } });
+    const available = unique.filter(x => x.available);
+    const pool = available.length >= 10 ? available : unique.filter(x => !x.isLocked);
+    if (!pool.length) return emptyBoards();
+
+    const rtpRank = rankPercent(pool, x => x.rtp, true);
+    const betRank = rankPercent(pool, x => Math.log10(Math.max(1, x.bet)), true);
+    const profitRank = rankPercent(pool, x => x.profit, true);
+    const lowProfitRank = rankPercent(pool, x => x.profit, false);
+
+    pool.forEach(row => {
+      const rr = rtpRank.get(row.machineNum) || 0;
+      const br = betRank.get(row.machineNum) || 0;
+      const pr = profitRank.get(row.machineNum) || 0;
+      row.score = Math.round(600 + rr * 240 + br * 120 + pr * 39);
+    });
+
+    const cloneRank = (sorter, label) => pool.slice().sort(sorter).slice(0,10).map(x => Object.assign({}, x, {source:'ATG', metric:label}));
+    const composite = cloneRank((a,b) => b.score - a.score, '即時綜合');
+    const volatility = cloneRank((a,b) => (b.rtp - a.rtp) || (b.bet - a.bet), '即時RTP');
+    const premium = cloneRank((a,b) => (b.bet - a.bet) || (b.rtp - a.rtp), '投注熱度');
+    let freegame;
+    if (pool.some(x => x.rawFree != null && Number.isFinite(x.rawFree))) {
+      freegame = cloneRank((a,b) => (Number(a.rawFree || 0) - Number(b.rawFree || 0)) || (b.bet - a.bet), '免遊次數');
+    } else {
+      // ATG table packets do not expose free-game history for every title.
+      // Keep this tab real-data-only by ranking low paid-out profit with high play volume;
+      // never fabricate a free-game count.
+      freegame = pool.slice().sort((a,b) => {
+        const al = lowProfitRank.get(a.machineNum) || 0, bl = lowProfitRank.get(b.machineNum) || 0;
+        const ab = betRank.get(a.machineNum) || 0, bb = betRank.get(b.machineNum) || 0;
+        return (bl * .7 + bb * .3) - (al * .7 + ab * .3);
+      }).slice(0,10).map(x => Object.assign({}, x, {source:'ATG', metric:'即時低派彩/高投注'}));
+    }
+    return { composite, volatility, premium, freegame, updatedAt: Date.now(), source: 'ATG_REALTIME' };
+  }
+
+  async function probeAtgTables(gameCode) {
+    stopRecommendationProbe();
+    const serial = ++recommendationProbeSerial;
+    const finalUrl = await resolveAtgGameUrl(gameCode);
+    if (!session || session.game !== gameCode || serial !== recommendationProbeSerial) throw new Error('probe-cancelled');
+
+    const target = new URL(finalUrl);
+    target.searchParams.set('table', '1');
+    const payload = { kind:'atg', probe:true, gameCode:gameCode, gameMeta:GAME_META[gameCode] || {}, cfg:{ GAME_CODE:gameCode, PROBE:true } };
+    const encoded = probeBase64url(payload);
+
+    return new Promise((resolve, reject) => {
+      const frame = document.createElement('iframe');
+      frame.setAttribute('aria-hidden','true');
+      frame.tabIndex = -1;
+      frame.style.cssText = 'position:fixed!important;left:-10000px!important;top:-10000px!important;width:16px!important;height:16px!important;opacity:0!important;pointer-events:none!important;border:0!important;';
+      const cleanup = () => {
+        try { clearTimeout(timer); } catch (_) {}
+        try { window.removeEventListener('message', listener); } catch (_) {}
+        try { frame.src='about:blank'; frame.remove(); } catch (_) {}
+        if (recommendationProbe && recommendationProbe.frame === frame) recommendationProbe = null;
+      };
+      const listener = event => {
+        if (event.source !== frame.contentWindow) return;
+        const data = event.data;
+        if (!data || data.__scarabRecommendationProbe !== true || String(data.gameCode || '') !== gameCode) return;
+        if (data.ok && Array.isArray(data.tables) && data.tables.length >= 10) {
+          cleanup(); resolve(data.tables);
+        } else if (data.ok === false) {
+          cleanup(); reject(new Error(data.error || 'ATG 即時機台資料讀取失敗'));
+        }
+      };
+      const timer = setTimeout(() => { cleanup(); reject(new Error('ATG 即時機台資料逾時')); }, 22000);
+      recommendationProbe = {frame, listener, timer, reject};
+      window.addEventListener('message', listener);
+      document.body.appendChild(frame);
+      frame.src = '/__game/open?url=' + encodeURIComponent(target.href) + '&cfg=' + encodeURIComponent(encoded);
+    });
+  }
+
   async function loadBoards(gameCode, options) {
     const game = String(gameCode || (session && session.game) || '');
-    const force = !!(options && options.force);
     if (!game || !session || session.game !== game) return;
     const serial = ++boardLoadSerial;
     const box = $('recommend');
-    const cached = force ? null : boardCache[game];
-    if (cached && Date.now() - cached.at < BOARD_CACHE_MS) {
-      boards = cached.value;
-      $('updTime').textContent = '更新 ' + formatTime(boards.updatedAt);
-      renderBoard();
-    } else {
-      box.innerHTML = '<div style="color:#7893a9;font-size:12px;padding:16px">正在取得即時排行…</div>';
-    }
+    boards = null;
+    pendingPick = null;
+    box.innerHTML = '<div style="color:#7893a9;font-size:12px;padding:16px">正在讀取 ATG 即時機台資料…</div>';
+    $('updTime').textContent = '讀取中';
+
     try {
-      if (!window.SethEyeAPI || !SethEyeAPI.boards) throw new Error('排行服務未載入');
-      const result = normalizeBoards(await SethEyeAPI.boards(game, operatorCode()));
-      // Ignore a late response from a game the user already left.
+      const tables = await probeAtgTables(game);
       if (!session || session.game !== game || serial !== boardLoadSerial) return;
-      const previous = boardCache[game] && boardCache[game].value;
-      // A transient empty response must not wipe a good recommendation list.
-      const next = usableBoardCount(result) > 0 || !previous ? result : previous;
-      boards = next;
-      boardCache[game] = { at: Date.now(), value: next };
-      $('updTime').textContent = '更新 ' + formatTime(next.updatedAt);
+      const real = normalizeBoards(realBoardsFromTables(tables));
+      if (usableBoardCount(real) < 1) throw new Error('ATG 沒有回傳可用機台');
+      boards = real;
+      boardCache[game] = { at: Date.now(), value: real };
+      $('updTime').textContent = '更新 ' + formatTime(real.updatedAt);
+      renderBoard();
+      return;
+    } catch (probeError) {
+      if (String(probeError && probeError.message || '') === 'probe-cancelled') return;
+      log('ATG 即時推薦讀取失敗，嘗試推薦 API 備援', game, probeError && probeError.message);
+    }
+
+    // Secondary fallback only. It is never allowed to fabricate rows.
+    try {
+      if (!window.SethEyeAPI || !SethEyeAPI.boards) throw new Error('推薦 API 未載入');
+      const fallback = normalizeBoards(await SethEyeAPI.boards(game, operatorCode()));
+      if (!session || session.game !== game || serial !== boardLoadSerial) return;
+      if (usableBoardCount(fallback) < 1) throw new Error('此遊戲目前沒有真實推薦資料');
+      boards = fallback;
+      boardCache[game] = { at: Date.now(), value: fallback };
+      $('updTime').textContent = '更新 ' + formatTime(fallback.updatedAt);
       renderBoard();
     } catch (error) {
       if (!session || session.game !== game || serial !== boardLoadSerial) return;
-      const fallback = boardCache[game] && boardCache[game].value;
-      boards = fallback || emptyBoards();
-      if (usableBoardCount(boards) > 0) {
-        $('updTime').textContent = '快取 ' + formatTime(boards.updatedAt);
-        renderBoard();
-      } else {
-        box.innerHTML = '<div style="color:#ff9a82;font-size:12px;padding:16px">推薦資料同步中；稍後按「刷新」會自動重試，你也可以輸入機台號碼或進入大廳。</div>';
-      }
-      log('排行讀取失敗', game, error && error.message);
+      boards = emptyBoards();
+      $('updTime').textContent = '讀取失敗';
+      box.innerHTML = '<div style="color:#ff9a82;font-size:12px;padding:16px">ATG 即時機台資料讀取失敗，請按「刷新」重試。</div>';
+      log('真實推薦資料失敗', game, error && error.message);
     }
   }
 
@@ -372,10 +548,11 @@
     }
     list.slice(0, 10).forEach((item, index) => {
       const machine = item.machineNum == null ? '—' : String(item.machineNum);
-      const locked = !item.roomId;
+      const locked = !item.roomId || item.isLocked === true;
       const row = document.createElement('div');
       row.className = 'room-card';
-      row.innerHTML = '<span class="room-rank">' + (index + 1) + '</span><span><b>' + (locked ? '🔒 精品機台' : machine.padStart(3, '0') + ' 號機台') + '</b><small>' + BOARD_META[activeBoard][0] + (item.rtp != null ? ' · RTP ' + item.rtp + '%' : '') + '</small></span><span class="score">' + (item.score == null ? '—' : item.score) + '</span>';
+      const metric = item.metric ? ' · ' + item.metric : '';
+      row.innerHTML = '<span class="room-rank">' + (index + 1) + '</span><span><b>' + (locked ? '🔒 ' + machine.padStart(3, '0') + ' 號機台' : machine.padStart(3, '0') + ' 號機台') + '</b><small>' + BOARD_META[activeBoard][0] + (item.rtp != null ? ' · RTP ' + item.rtp + '%' : '') + metric + '</small></span><span class="score">' + (item.score == null ? '—' : item.score) + '</span>';
       if (!locked) {
         row.style.cursor = 'pointer';
         row.setAttribute('role', 'button');
@@ -538,6 +715,7 @@
 
   async function enterGame(mode) {
     if (!session || !session.game) return;
+    stopRecommendationProbe();
     // A previous room timeout must never disable the next exact-room request.
     try {
       sessionStorage.removeItem('SCARAB_FORCE_MANUAL_ROOM');
@@ -582,33 +760,11 @@
         targetKind = 'roomId';
       }
 
-      const requestGameUrl = async token => {
-        const body = session.platform === 'OFA'
-          ? { game_return_url: 'https://www.ofa1188.net', game_kind: 'SLOT', game_device: 'Desktop', game_money: '' }
-          : { game_return_url: session.base, game_kind: '', game_type: '', game_device: 'Desktop' };
-        const result = await postJson(session.base + '/api/v2/game/ATG/login', body, token);
-        return result && result.data && result.data.game_url;
-      };
-
-      let url = await requestGameUrl(session.token);
-      if (!url) {
-        const relogin = await postJson(session.base + '/api/v1/login', {
-          username: session.account,
-          password: session.password,
-          device_id: deviceId()
-        });
-        const token = relogin && relogin.data && relogin.data.token;
-        if (!token) throw new Error('登入已過期，請重新登入');
-        session.token = token;
-        url = await requestGameUrl(token);
-      }
-      if (!url) throw new Error('ATG 沒有回傳遊戲網址');
-
-      let finalUrl = url;
-      const tokenMatch = url.match(/[?&]t=([^&]+)/);
-      if (tokenMatch) {
-        try { finalUrl = await directGameUrl(tokenMatch[1], requestedGame); }
-        catch (error) { log('直連交換失敗，改載入 ATG 大廳', requestedGame, error && error.message); }
+      let finalUrl;
+      try { finalUrl = await resolveAtgGameUrl(requestedGame); }
+      catch (error) {
+        log('ATG 遊戲入口取得失敗', requestedGame, error && error.message);
+        finalUrl = await requestAtgLobbyUrl();
       }
       if (!session || session.game !== requestedGame || openSerial !== gameOpenSerial) return;
       try {
@@ -728,7 +884,7 @@
   $('refreshBtn').onclick = async function () {
     this.disabled = true;
     this.textContent = '刷新中…';
-    await loadBoards();
+    await loadBoards(session && session.game, { force: true });
     await refreshMember();
     this.disabled = false;
     this.textContent = '↻ 刷新';

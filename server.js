@@ -135,6 +135,10 @@ app.get('/__runtime/atg-engine-runtime.js', (_req, res) => {
 app.get('/__runtime/atg-live-adapter.js', (_req, res) => {
   res.sendFile(path.join(runtimeDir, 'atg-live-adapter.js'));
 });
+app.get('/__runtime/atg-recommendation-probe.js', (_req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.sendFile(path.join(runtimeDir, 'atg-recommendation-probe.js'));
+});
 app.get('/__runtime/overlay-runtime.js', (_req, res) => {
   res.sendFile(path.join(runtimeDir, 'overlay-runtime.js'));
 });
@@ -173,15 +177,20 @@ function gameBoot(sid, originalHref, session, withRuntime) {
 
   if (!withRuntime) return proxyBoot;
 
-  const runtimeBoot = '<script>' +
+  const commonRuntimeBoot = '<script>' +
     'window.__SCARAB_WEB_ACTIVE=true;' +
     'window.__SCARAB_WEB_PAYLOAD=' + scriptJson(payload) + ';' +
     'window.__SC_GAME_CODE=' + scriptJson(String(payload.gameCode || config.GAME_CODE || '')) + ';' +
     'window.__SC_GOOD_ROOMS=' + scriptJson(config.GOOD_ROOMS || []) + ';' +
     'window.__SC_ROOM_SESSION_ID=' + scriptJson(String(config.ROOM_SESSION_ID || '')) + ';' +
     'window.__SCARAB_FORCE_MANUAL_ROOM=false;' +
-    'try{parent.postMessage({__scarabStatus:true,state:"engine-wait"},location.origin)}catch(e){}' +
-    '<\/script>' +
+    '<\/script>';
+  if (payload && payload.probe === true) {
+    return proxyBoot + commonRuntimeBoot +
+      '<script>(function(){var s=document.createElement("script");s.src=location.origin+"/__runtime/atg-recommendation-probe.js?v=274";s.defer=false;(document.head||document.documentElement).appendChild(s)})()<\/script>';
+  }
+  const runtimeBoot = commonRuntimeBoot +
+    '<script>try{parent.postMessage({__scarabStatus:true,state:"engine-wait"},location.origin)}catch(e){}<\/script>' +
     '<script>(function(){var s=document.createElement("script");s.src=location.origin+"/__runtime/bootstrap-runtime.js";s.defer=true;(document.head||document.documentElement).appendChild(s)})()<\/script>';
   return proxyBoot + runtimeBoot;
 }
