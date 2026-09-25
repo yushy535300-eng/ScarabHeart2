@@ -207,3 +207,13 @@ Fix:
 - Last successful recommendation data is cached locally for 30 minutes.
 - Render `/__api` now caches board responses for 15 seconds and can serve a recent
   stale response during transient 429/5xx errors, reducing blank recommendation pages.
+
+
+## v2.73 refresh recommendations on return
+
+- Recommendation data is not refreshed while the user is inside ATG.
+- Returning from the game to the recommendation/room page clears the previous
+  selection and in-memory board list, then forces a new recommendation fetch.
+- The manual Refresh button also bypasses the in-memory 15-second board cache.
+- This keeps the recommendation connection separate from the active game and
+  ensures the next visible list is recalculated after returning.

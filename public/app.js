@@ -3,7 +3,7 @@
 
   const $ = id => document.getElementById(id);
   const log = (...args) => { try { console.log('[ScarabHeart]', ...args); } catch (_) {} };
-  const APP_VERSION = 'v2.72-all-games-top10-click-enter';
+  const APP_VERSION = 'v2.73-refresh-on-return';
   const GAMES = [
     ['golden-seth', '戰神賽特2 覺醒之力', 'media/game2.png'],
     ['egyptian-mythology', '戰神賽特', 'media/game8.png'],
@@ -304,12 +304,13 @@
     return session && session.platform === 'OFA' ? 'ofa' : '';
   }
 
-  async function loadBoards(gameCode) {
+  async function loadBoards(gameCode, options) {
     const game = String(gameCode || (session && session.game) || '');
+    const force = !!(options && options.force);
     if (!game || !session || session.game !== game) return;
     const serial = ++boardLoadSerial;
     const box = $('recommend');
-    const cached = boardCache[game];
+    const cached = force ? null : boardCache[game];
     if (cached && Date.now() - cached.at < BOARD_CACHE_MS) {
       boards = cached.value;
       $('updTime').textContent = '更新 ' + formatTime(boards.updatedAt);
@@ -639,7 +640,17 @@
     if (destination === 'home') showGameCenter();
     else {
       showOnly('roomView');
-      loadBoards(session && session.game);
+      pendingPick = null;
+      $('room').value = '';
+      $('err2').style.color = '';
+      $('err2').textContent = '';
+      // Returning from a real ATG session must always calculate a fresh
+      // recommendation set. Never reuse the pre-game in-memory list.
+      if (session && session.game) {
+        delete boardCache[session.game];
+        boards = null;
+        loadBoards(session.game, { force: true });
+      }
     }
   }
 
