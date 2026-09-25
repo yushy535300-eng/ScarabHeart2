@@ -289,107 +289,353 @@ body.scarab-portrait #gameCenterView .game-card {
 
 
 
-<style id="v302-pro-mobile-login-no-crop">
+
+
+<style id="v303-mobile-login-clean-fit">
+.mobile-login-brand{display:none}
+
 @media (max-width:700px){
-  html,body{width:100%;height:100%;min-height:100%;overflow-x:hidden}
-  body:has(#loginView:not(.hide)){height:100dvh!important;min-height:100dvh!important;overflow:hidden!important}
+  html,body{
+    margin:0;
+    width:100%;
+    min-height:100%;
+    overflow-x:hidden;
+  }
+
+  body:has(#loginView:not(.hide)){
+    height:100dvh!important;
+    min-height:100dvh!important;
+    overflow:hidden!important;
+  }
 
   #loginView.login-page:not(.hide){
-    width:100%!important;height:100dvh!important;min-height:100dvh!important;max-height:100dvh!important;
-    display:grid!important;grid-template-columns:1fr!important;grid-template-rows:88px minmax(0,1fr)!important;
-    overflow:hidden!important;background:#06101c!important
+    display:block!important;
+    width:100%!important;
+    height:100dvh!important;
+    min-height:100dvh!important;
+    max-height:100dvh!important;
+    overflow:hidden!important;
+    background:linear-gradient(180deg,#061525 0%,#030b14 100%)!important;
   }
 
-  /* Compact professional brand bar */
+  /* Mobile no longer uses the huge desktop hero block. */
   #loginView .hero{
-    min-height:0!important;height:88px!important;padding:max(7px,env(safe-area-inset-top)) 18px 7px!important;
-    display:block!important;border:0!important;border-bottom:1px solid rgba(110,170,210,.10)!important;
-    overflow:hidden!important;background:linear-gradient(180deg,rgba(7,24,42,.98),rgba(5,17,31,.98))!important
+    display:none!important;
   }
-  #loginView .hero:before,#loginView .hero:after{display:none!important}
-  #loginView .hero-content{
-    width:100%!important;height:100%!important;display:grid!important;
-    grid-template-columns:58px minmax(0,1fr)!important;grid-template-rows:1fr 1fr!important;
-    column-gap:12px!important;align-items:center!important;text-align:left!important
-  }
-  #loginView .hero-logo{
-    grid-column:1!important;grid-row:1/3!important;width:58px!important;height:58px!important;max-width:none!important;
-    margin:0!important;object-fit:contain!important;filter:drop-shadow(0 8px 18px rgba(0,0,0,.4))!important
-  }
-  #loginView .hero-kicker{
-    grid-column:2!important;grid-row:1!important;align-self:end!important;margin:0 0 3px!important;
-    color:#79dff1!important;font-size:8px!important;line-height:1!important;letter-spacing:.32em!important
-  }
-  #loginView .hero-title{
-    grid-column:2!important;grid-row:2!important;align-self:start!important;margin:3px 0 0!important;
-    font:800 19px/1.05 Georgia,serif!important;letter-spacing:.16em!important;color:#eef8ff!important
-  }
-  #loginView .hero-copy{display:none!important}
 
-  /* Main login area */
   #loginView .login-side{
-    min-height:0!important;height:100%!important;max-height:100%!important;padding:7px 16px max(6px,env(safe-area-inset-bottom))!important;
-    display:block!important;overflow:hidden!important
+    box-sizing:border-box!important;
+    width:100%!important;
+    height:100dvh!important;
+    min-height:0!important;
+    padding:max(18px,env(safe-area-inset-top)) 18px max(10px,env(safe-area-inset-bottom))!important;
+    display:flex!important;
+    justify-content:center!important;
+    align-items:stretch!important;
+    overflow:hidden!important;
   }
+
   #loginView .login-card{
-    width:min(100%,520px)!important;height:100%!important;margin:0 auto!important;display:flex!important;flex-direction:column!important;
-    min-height:0!important;overflow:hidden!important
+    position:relative!important;
+    box-sizing:border-box!important;
+    width:min(100%,560px)!important;
+    height:100%!important;
+    min-height:0!important;
+    margin:0 auto!important;
+    display:flex!important;
+    flex-direction:column!important;
+    overflow:hidden!important;
   }
-  #loginView .online-row{min-height:29px!important;height:29px!important;margin:0 0 3px!important;justify-content:flex-end!important;flex:0 0 29px!important}
+
+  /* Clean compact brand header */
+  #loginView .mobile-login-brand{
+    display:flex!important;
+    align-items:center!important;
+    gap:12px!important;
+    height:62px!important;
+    min-height:62px!important;
+    flex:0 0 62px!important;
+    padding-right:132px!important;
+    margin:0 0 8px!important;
+  }
+
+  #loginView .mobile-login-brand img{
+    display:block!important;
+    width:58px!important;
+    height:58px!important;
+    object-fit:contain!important;
+    filter:drop-shadow(0 6px 16px rgba(0,0,0,.35))!important;
+  }
+
+  #loginView .mobile-brand-en{
+    color:#76dbea!important;
+    font-size:9px!important;
+    line-height:1!important;
+    letter-spacing:.30em!important;
+    margin-bottom:7px!important;
+    white-space:nowrap!important;
+  }
+
+  #loginView .mobile-brand-zh{
+    color:#f3f8fc!important;
+    font:800 20px/1 Georgia,serif!important;
+    letter-spacing:.14em!important;
+    white-space:nowrap!important;
+  }
+
+  /* Keep platform selector in the same header line */
+  #loginView .online-row{
+    position:absolute!important;
+    z-index:20!important;
+    right:0!important;
+    top:12px!important;
+    width:auto!important;
+    height:36px!important;
+    min-height:36px!important;
+    margin:0!important;
+    display:block!important;
+  }
+
   #loginView .brand-mini{display:none!important}
-  #loginView .platform-picker{height:29px!important;min-height:29px!important;padding:0 11px!important;font-size:9.5px!important;gap:7px!important}
-  #loginView .platform-picker .dot{width:6px!important;height:6px!important}
 
-  #loginView .login-eyebrow{margin:0!important;font-size:8.5px!important;line-height:1!important;letter-spacing:.24em!important;flex:0 0 auto!important}
-  #loginView .login-title{margin:3px 0 1px!important;font-size:27px!important;line-height:1.05!important;letter-spacing:.1em!important;flex:0 0 auto!important}
-  #loginView .login-sub{margin:0 0 4px!important;font-size:10.5px!important;line-height:1.25!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;flex:0 0 auto!important}
-
-  /* Announcement: FULL image, no cropping */
-  #loginView .announce{margin:0 0 5px!important;padding:5px!important;border-radius:11px!important;flex:0 0 auto!important}
-  #loginView .announce-img{
-    display:block!important;width:100%!important;height:auto!important;max-height:none!important;aspect-ratio:16/9!important;
-    object-fit:contain!important;object-position:center!important;margin:0 0 4px!important;border-radius:7px!important;background:#050b12!important
+  #loginView .platform-wrap{
+    height:36px!important;
   }
-  #loginView .announce-title{margin:0 0 1px!important;font-size:10.5px!important;line-height:1.2!important}
-  #loginView .announce-text{margin:0!important;font-size:8.8px!important;line-height:1.2!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
 
-  #loginView .field{margin:0 0 4px!important;flex:0 0 auto!important}
-  #loginView .field label{margin:0 0 2px!important;font-size:9px!important;line-height:1!important}
-  #loginView .input-wrap input{height:40px!important;min-height:40px!important;border-radius:10px!important;padding:0 42px 0 13px!important;font-size:16px!important}
-  #loginView .input-icon{right:13px!important}
-  #loginView .login-options{height:22px!important;min-height:22px!important;margin:0 1px 4px!important;font-size:10px!important;flex:0 0 22px!important}
-  #loginView .remember{gap:6px!important}
-  #loginView .primary{height:41px!important;min-height:41px!important;border-radius:11px!important;font-size:13px!important;flex:0 0 41px!important;box-shadow:0 9px 24px rgba(45,135,255,.18)!important}
-  #loginView .err{min-height:0!important;height:auto!important;margin:2px 0 0!important;font-size:9px!important;line-height:1.1!important;flex:0 0 auto!important}
+  #loginView .platform-picker{
+    height:36px!important;
+    min-height:36px!important;
+    padding:0 12px!important;
+    gap:7px!important;
+    font-size:10.5px!important;
+  }
+
+  #loginView .login-eyebrow{
+    margin:0!important;
+    font-size:9px!important;
+    line-height:1.1!important;
+    letter-spacing:.23em!important;
+    flex:0 0 auto!important;
+  }
+
+  #loginView .login-title{
+    margin:5px 0 2px!important;
+    font-size:clamp(29px,7.3vw,36px)!important;
+    line-height:1!important;
+    letter-spacing:.09em!important;
+    flex:0 0 auto!important;
+  }
+
+  #loginView .login-sub{
+    margin:0 0 9px!important;
+    color:#7694aa!important;
+    font-size:11px!important;
+    line-height:1.3!important;
+    flex:0 0 auto!important;
+  }
+
+  /* Full 16:9 artwork: never crop, never stretch. */
+  #loginView .announce{
+    box-sizing:border-box!important;
+    margin:0 0 10px!important;
+    padding:7px!important;
+    border-radius:13px!important;
+    background:linear-gradient(180deg,rgba(38,32,18,.40),rgba(15,23,31,.78))!important;
+    flex:0 0 auto!important;
+  }
+
+  #loginView .announce-img{
+    display:block!important;
+    width:100%!important;
+    height:auto!important;
+    max-height:none!important;
+    aspect-ratio:16/9!important;
+    object-fit:contain!important;
+    object-position:center!important;
+    margin:0 0 6px!important;
+    border-radius:9px!important;
+    background:#050b12!important;
+  }
+
+  #loginView .announce-title{
+    margin:0 0 2px!important;
+    font-size:11px!important;
+    line-height:1.2!important;
+  }
+
+  #loginView .announce-text{
+    margin:0!important;
+    font-size:9.5px!important;
+    line-height:1.25!important;
+    white-space:normal!important;
+  }
+
+  #loginView .field{
+    margin:0 0 7px!important;
+    flex:0 0 auto!important;
+  }
+
+  #loginView .field label{
+    display:block!important;
+    margin:0 0 4px!important;
+    font-size:9.5px!important;
+    line-height:1!important;
+  }
+
+  #loginView .input-wrap input{
+    box-sizing:border-box!important;
+    width:100%!important;
+    height:48px!important;
+    min-height:48px!important;
+    padding:0 44px 0 15px!important;
+    border-radius:12px!important;
+    font-size:16px!important;
+  }
+
+  #loginView .input-icon{
+    right:14px!important;
+  }
+
+  #loginView .login-options{
+    height:27px!important;
+    min-height:27px!important;
+    margin:0 2px 7px!important;
+    font-size:10.5px!important;
+    flex:0 0 27px!important;
+  }
+
+  #loginView .primary{
+    height:50px!important;
+    min-height:50px!important;
+    border-radius:13px!important;
+    font-size:14px!important;
+    flex:0 0 50px!important;
+  }
+
+  #loginView .err{
+    min-height:0!important;
+    height:auto!important;
+    margin:3px 0 0!important;
+    font-size:9px!important;
+    line-height:1.1!important;
+    flex:0 0 auto!important;
+  }
+
   #loginView .err:empty{display:none!important}
-  #loginView .quick-links{grid-template-columns:repeat(3,1fr)!important;gap:5px!important;margin-top:4px!important;flex:0 0 auto!important}
-  #loginView .quick-links button{height:29px!important;min-height:29px!important;border-radius:8px!important;padding:0 3px!important;font-size:8.5px!important}
-  #loginView .secure{margin-top:3px!important;font-size:6.5px!important;line-height:1!important;letter-spacing:.10em!important;flex:0 0 auto!important}
+
+  #loginView .quick-links{
+    grid-template-columns:repeat(3,1fr)!important;
+    gap:6px!important;
+    margin-top:8px!important;
+    flex:0 0 auto!important;
+  }
+
+  #loginView .quick-links button{
+    height:38px!important;
+    min-height:38px!important;
+    padding:0 4px!important;
+    border-radius:10px!important;
+    font-size:9.5px!important;
+  }
+
+  #loginView .secure{
+    margin-top:6px!important;
+    font-size:6.8px!important;
+    line-height:1!important;
+    letter-spacing:.10em!important;
+    flex:0 0 auto!important;
+  }
 }
 
-/* Extra-short displays: reduce only spacing/type, never crop the promo image. */
-@media (max-width:700px) and (max-height:740px){
-  #loginView.login-page:not(.hide){grid-template-rows:76px minmax(0,1fr)!important}
-  #loginView .hero{height:76px!important;padding-top:max(5px,env(safe-area-inset-top))!important}
-  #loginView .hero-content{grid-template-columns:50px minmax(0,1fr)!important;column-gap:10px!important}
-  #loginView .hero-logo{width:50px!important;height:50px!important}
-  #loginView .hero-title{font-size:17px!important}
-  #loginView .hero-kicker{font-size:7px!important}
-  #loginView .login-side{padding-top:5px!important}
-  #loginView .online-row{height:26px!important;min-height:26px!important;flex-basis:26px!important;margin-bottom:2px!important}
-  #loginView .platform-picker{height:26px!important;min-height:26px!important}
-  #loginView .login-title{font-size:24px!important}
-  #loginView .login-sub{font-size:9.5px!important;margin-bottom:3px!important}
-  #loginView .announce{padding:4px!important;margin-bottom:3px!important}
-  #loginView .announce-title{font-size:9.5px!important}
-  #loginView .announce-text{font-size:8px!important}
-  #loginView .field{margin-bottom:3px!important}
-  #loginView .input-wrap input{height:36px!important;min-height:36px!important}
-  #loginView .login-options{height:19px!important;min-height:19px!important;flex-basis:19px!important;margin-bottom:3px!important}
-  #loginView .primary{height:37px!important;min-height:37px!important;flex-basis:37px!important}
-  #loginView .quick-links{margin-top:3px!important}
-  #loginView .quick-links button{height:25px!important;min-height:25px!important;font-size:8px!important}
-  #loginView .secure{margin-top:2px!important;font-size:6px!important}
+/* Short mobile viewports get one controlled compact pass. */
+@media (max-width:700px) and (max-height:780px){
+  #loginView .login-side{
+    padding-top:max(10px,env(safe-area-inset-top))!important;
+  }
+
+  #loginView .mobile-login-brand{
+    height:54px!important;
+    min-height:54px!important;
+    flex-basis:54px!important;
+    margin-bottom:5px!important;
+  }
+
+  #loginView .mobile-login-brand img{
+    width:50px!important;
+    height:50px!important;
+  }
+
+  #loginView .mobile-brand-en{
+    font-size:7.5px!important;
+    margin-bottom:5px!important;
+  }
+
+  #loginView .mobile-brand-zh{
+    font-size:18px!important;
+  }
+
+  #loginView .online-row{top:9px!important}
+
+  #loginView .platform-picker{
+    height:32px!important;
+    min-height:32px!important;
+  }
+
+  #loginView .login-title{
+    margin-top:3px!important;
+    font-size:26px!important;
+  }
+
+  #loginView .login-sub{
+    margin-bottom:6px!important;
+    font-size:10px!important;
+  }
+
+  #loginView .announce{
+    padding:5px!important;
+    margin-bottom:6px!important;
+  }
+
+  #loginView .announce-img{
+    margin-bottom:4px!important;
+  }
+
+  #loginView .announce-title{font-size:10px!important}
+  #loginView .announce-text{font-size:8.5px!important}
+
+  #loginView .field{margin-bottom:5px!important}
+  #loginView .field label{margin-bottom:3px!important}
+
+  #loginView .input-wrap input{
+    height:43px!important;
+    min-height:43px!important;
+  }
+
+  #loginView .login-options{
+    height:23px!important;
+    min-height:23px!important;
+    flex-basis:23px!important;
+    margin-bottom:5px!important;
+  }
+
+  #loginView .primary{
+    height:44px!important;
+    min-height:44px!important;
+    flex-basis:44px!important;
+  }
+
+  #loginView .quick-links{margin-top:5px!important}
+
+  #loginView .quick-links button{
+    height:31px!important;
+    min-height:31px!important;
+    font-size:8.5px!important;
+  }
+
+  #loginView .secure{
+    margin-top:4px!important;
+    font-size:6px!important;
+  }
 }
 </style>
 
@@ -401,6 +647,7 @@ body.scarab-portrait #gameCenterView .game-card {
     </section>
     <section class="login-side">
       <div class="login-card">
+        <div class="mobile-login-brand"><img src="logo.png" alt="聖甲之心"><div><div class="mobile-brand-en">SCARAB HEART</div><div class="mobile-brand-zh">聖甲之心</div></div></div>
         <div class="online-row"><div class="brand-mini">SECURE ACCESS</div><div class="platform-wrap"><button id="platformPicker" class="platform-picker" type="button" aria-haspopup="true" aria-expanded="false"><span class="dot"></span><span id="platformPickerText">TZ ONLINE</span><span>⌄</span></button><div id="platformMenu" class="platform-menu hide"><button type="button" data-platform="TZ"><span class="dot"></span>TZ ONLINE</button><button type="button" data-platform="OFA"><span class="dot"></span>OFA ONLINE</button></div></div></div>
         <div class="login-eyebrow">MEMBER LOGIN</div><h2 class="login-title">登入助手</h2><p class="login-sub">使用你的娛樂城帳號登入，進入 ATG 遊戲中心。</p>
         <div id="announce" class="announce"><img id="announceImg" class="announce-img" src="media/scarab-heart-launch.png" alt="聖甲之心 全新推出"><div id="announceTitle" class="announce-title">🔥 聖甲之心 正式登場 🛡️</div><div id="announceText" class="announce-text">全新遊戲現已開放！點擊遊戲，立即進入《聖甲之心》!!</div><a id="announceBtn" class="announce-btn hide" target="_blank" rel="noopener noreferrer"></a></div>
