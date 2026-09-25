@@ -169,3 +169,24 @@ Fix:
 - Static Cocos/slotFramework assets still go directly to ATG.
 - v2.68 5xx document guard, v2.67 legacy-panel removal, and v2.66 re-entry
   state reset remain preserved.
+
+
+## v2.71 keep seated state across ATG reload
+
+Observed:
+- Auto room selection succeeds.
+- ATG reloads/rebuilds the game document.
+- The assistant starts locating the same room again.
+
+Root cause:
+- The bootstrap cleared `seth_seated` / `seth_switched` every time the injected
+  ATG document loaded.
+- An ATG internal reload therefore looked like a brand-new program launch.
+
+Fix:
+- `ROOM_SESSION_ID` is now the boundary.
+- A new launch from the ScarabHeart room page gets a new ID and clears the old room state once.
+- Any ATG internal reload with the same ID preserves `seth_seated` / `seth_switched`.
+- After successful seating, a reload stays seated and will not run auto-room a second time.
+- Returning to the ScarabHeart room page and pressing Enter Game again still creates
+  a new ID, so auto-room runs again for the newly selected machine.

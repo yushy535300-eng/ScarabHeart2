@@ -1,27 +1,48 @@
 (function(){
   try {
     var p=window.__SCARAB_WEB_PAYLOAD||{}, c=p.cfg||{};
-    var sid=String(c.ROOM_SESSION_ID||Date.now());
+    var sid=String(c.ROOM_SESSION_ID||'');
+    var previousSid='';
+    try { previousSid=String(sessionStorage.getItem('SCARAB_ROOM_SESSION')||''); } catch (_) {}
+
+    // IMPORTANT:
+    // A new launch from the ScarabHeart room page gets a new ROOM_SESSION_ID.
+    // Only that event may clear the previous seated/switched state.
+    //
+    // ATG itself can reload the game document after a successful room selection.
+    // That reload keeps the same ROOM_SESSION_ID, so seth_seated/seth_switched
+    // MUST survive or the auto-room engine will search for the room a second time.
+    var freshLaunch = !!sid && previousSid !== sid;
+
     window.__SCARAB_ROOM_SESSION_ID=sid;
     window.__SCARAB_FORCE_MANUAL_ROOM=false;
-    window.__SCARAB_ROOM_DONE=false;
     window.__SCARAB_LAST_ROOM=null;
     window.__SCARAB_LAST_MACHINE=null;
+
     try {
-      sessionStorage.setItem('SCARAB_ROOM_SESSION',sid);
-      sessionStorage.removeItem('SCARAB_FORCE_MANUAL_ROOM');
-      sessionStorage.removeItem('scarab_force_manual_room');
-      sessionStorage.removeItem('SCARAB_ROOM_FALLBACK');
-      sessionStorage.removeItem('SCARAB_ROOM_DONE');
-      sessionStorage.removeItem('SCARAB_LAST_ROOM');
-      sessionStorage.removeItem('SCARAB_LAST_MACHINE');
-      // These are the two real persistence flags checked by atg-engine-runtime.
-      sessionStorage.removeItem('seth_seated');
-      sessionStorage.removeItem('seth_switched');
+      if (freshLaunch) {
+        sessionStorage.removeItem('seth_seated');
+        sessionStorage.removeItem('seth_switched');
+        sessionStorage.removeItem('SCARAB_ROOM_DONE');
+        sessionStorage.removeItem('SCARAB_LAST_ROOM');
+        sessionStorage.removeItem('SCARAB_LAST_MACHINE');
+        sessionStorage.removeItem('SCARAB_FORCE_MANUAL_ROOM');
+        sessionStorage.removeItem('scarab_force_manual_room');
+        sessionStorage.removeItem('SCARAB_ROOM_FALLBACK');
+      }
+      if (sid) sessionStorage.setItem('SCARAB_ROOM_SESSION',sid);
     } catch (_) {}
+
+    // Do not reset ROOM_DONE on an internal ATG reload.
+    try {
+      window.__SCARAB_ROOM_DONE =
+        sessionStorage.getItem('seth_seated') === '1' ||
+        sessionStorage.getItem('SCARAB_ROOM_DONE') === '1';
+    } catch (_) {
+      window.__SCARAB_ROOM_DONE=false;
+    }
+
     if(c.MACHINENUM){
-      // Keep TARGET/TARGET_KIND untouched. The ATG engine needs the roomId
-      // as TARGET and uses MACHINENUM only as the visible-machine fallback.
       c.VISUAL_TARGET=String(c.MACHINENUM);
       window.__SC_VISUAL_MACHINE=String(c.MACHINENUM);
     }
