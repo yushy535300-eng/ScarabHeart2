@@ -45,6 +45,20 @@ async function ensureWhitelistTables(){
   await db.query(`ALTER TABLE tz_whitelist ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`);
   await db.query(`ALTER TABLE tz_whitelist ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`);
 
+  // v2.94: v2.91 曾把舊白名單誤改成 ACCOUNT。
+  // 這批原始白名單預設就是 TZ，因此還原成 TZ。
+  await db.query(`DELETE FROM tz_whitelist a
+    WHERE UPPER(a.platform)='ACCOUNT'
+      AND EXISTS (
+        SELECT 1 FROM tz_whitelist b
+        WHERE UPPER(b.platform)='TZ'
+          AND LOWER(b.username)=LOWER(a.username)
+          AND b.id<>a.id
+      )`);
+  await db.query(`UPDATE tz_whitelist
+    SET platform='TZ', updated_at=NOW()
+    WHERE UPPER(platform)='ACCOUNT'`);
+
   // Restore the original MT database index model, without deleting any rows.
   await db.query(`DROP INDEX IF EXISTS tz_whitelist_username_ci`);
   await db.query(`DROP INDEX IF EXISTS tz_whitelist_username_lower_idx`);
@@ -65,12 +79,10 @@ async function authorizeWhitelist(usernameRaw, platformRaw='TZ'){
   const platform = String(platformRaw || 'TZ').trim().toUpperCase();
   if(!username) return { allowed:false, reason:'not_whitelisted' };
 
-  // Prefer the exact TZ/OFA row. v2.91 compatibility: ACCOUNT means shared account.
   const r = await db.query(
     `SELECT * FROM tz_whitelist
       WHERE LOWER(username)=LOWER($1)
-        AND (UPPER(platform)=UPPER($2) OR UPPER(platform)='ACCOUNT')
-      ORDER BY CASE WHEN UPPER(platform)=UPPER($2) THEN 0 ELSE 1 END
+        AND UPPER(platform)=UPPER($2)
       LIMIT 1`,
     [username, platform]
   );
@@ -193,6 +205,5 @@ module.exports={
   upsertWhitelist,
   setWhitelistEnabled,
   extendWhitelist,
-  setWhitelistPlatform,
   deleteWhitelist
 };
