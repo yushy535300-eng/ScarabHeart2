@@ -421,3 +421,10 @@ This keeps only the top 2 visibly high while the rest spread naturally down towa
 - 點開的功能面板放大：
   - 面板寬度、按鈕、狀態列、輸入框、字級一起放大
 - 面板加入一點點透明度，但仍維持可讀性
+
+## v2.88 mobile compact premium UI
+
+- Desktop keeps the larger v2.87 floating assistant and alert sizing.
+- Mobile (<=700px) returns the floating assistant and opened panes to compact dimensions.
+- Mobile room-search/loading/success/error/FREE/spoiler notices remain compact.
+- Both desktop and mobile use improved glass/translucent styling, finer borders, subtle glow and stronger typography hierarchy.
