@@ -138,6 +138,8 @@ function gameBoot(sid, originalHref, session, withRuntime) {
     'var SA=Element.prototype.setAttribute;Element.prototype.setAttribute=function(k,v){try{if(/^(?:src|href)$/i.test(String(k)))v=D(v)}catch(e){}return SA.call(this,k,v)};' +
     'function PS(C,k){try{var d=Object.getOwnPropertyDescriptor(C.prototype,k);if(!d||!d.set||!d.get)return;Object.defineProperty(C.prototype,k,{configurable:d.configurable,enumerable:d.enumerable,get:d.get,set:function(v){return d.set.call(this,D(v))}})}catch(e){}}' +
     '[HTMLImageElement,HTMLScriptElement,HTMLLinkElement,HTMLAudioElement,HTMLVideoElement,HTMLSourceElement].forEach(function(C){if(C)PS(C,C===HTMLLinkElement?"href":"src")});' +
+    'try{var FP=window.HTMLFormElement&&HTMLFormElement.prototype,fd=FP&&Object.getOwnPropertyDescriptor(FP,"action");if(fd&&fd.get&&fd.set){Object.defineProperty(FP,"action",{configurable:true,enumerable:fd.enumerable,get:fd.get,set:function(v){try{var x=U(v);if(x&&A(x))return fd.set.call(this,location.origin+P+x.pathname+x.search)}catch(e){}return fd.set.call(this,v)}})}}catch(e){}' +
+    'try{document.addEventListener("click",function(ev){var a=ev.target&&ev.target.closest&&ev.target.closest("a[href]");if(!a)return;try{var x=U(a.getAttribute("href"));if(x&&A(x)&&!S(x)&&!/^\/slotFramework\//i.test(x.pathname))a.setAttribute("href",P+x.pathname+x.search)}catch(e){}},true)}catch(e){}' +
     'if(window.Worker){var W=window.Worker;window.Worker=function(u,o){return new W(D(u),o)};window.Worker.prototype=W.prototype}' +
     'if(window.SharedWorker){var SW=window.SharedWorker;window.SharedWorker=function(u,o){return new SW(D(u),o)};window.SharedWorker.prototype=SW.prototype}' +
     'if(window.EventSource){var ES=window.EventSource;window.EventSource=function(u,o){return new ES(H(u),o)};window.EventSource.prototype=ES.prototype}' +
@@ -337,11 +339,13 @@ app.use('/__game/:sid/*', express.raw({ type: '*/*', limit: '16mb' }), async (re
         .replace(/<base\b[^>]*>/gi, '');
       const isLobby = /\/egames\/lobby\//i.test(finalUrl.pathname);
       const boot = gameBoot(sid, finalUrl.href, session, !isLobby);
-      // Critical: relative Cocos assets must resolve at ATG itself, not at Render.
-      // location.origin stays Render (so our injected runtime/API remain same-origin),
-      // while document.baseURI becomes the real ATG game directory.
-      const remoteBase = new URL('.', finalUrl).href;
-      const head = '<head><base href="' + remoteBase.replace(/"/g, '&quot;') + '">' +
+      // Keep document navigation inside the session proxy.
+      // Static assets are already rewritten to the real ATG origin by D()/H()
+      // and server directStatic/slotFramework handling. A remote <base> caused
+      // room-confirm/navigation actions to bypass the proxy and hit raw ATG nginx 500.
+      const remoteDir = new URL('.', finalUrl).pathname;
+      const proxyBase = '/__game/' + sid + remoteDir;
+      const head = '<head><base href="' + proxyBase.replace(/"/g, '&quot;') + '">' +
         '<meta name="viewport" content="width=device-width,height=device-height,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">' +
         '<style>html,body{margin:0!important;width:100%!important;height:100%!important;overflow:hidden!important;overscroll-behavior:none!important}</style>' +
         boot;

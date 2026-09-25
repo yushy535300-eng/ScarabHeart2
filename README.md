@@ -144,3 +144,28 @@ Fix:
 - The same protection is applied to `__remote` document navigations.
 - Legacy black/gold panel removal from v2.67 is preserved.
 - Seated/switched reset and second-entry auto-room behavior from v2.66 are preserved.
+
+
+## v2.70 machineNum truth + room 500 root fix
+
+Video evidence:
+- Program recommendation/current machine: 2169.
+- In-game auto-room popup: `你挑選的是 #23`.
+- The scanner then paged 1→9 and never entered 2169.
+
+Root cause:
+- Seth-eye `roomId` was being treated as ATG's live room id.
+- Those ids are not guaranteed to match ATG's current live room table.
+- That produced wrong derived targets such as `#23`.
+
+Fix:
+- Recommended auto-room targeting now trusts only `machineNum`.
+- TARGET is a non-numeric synthetic machine marker so the engine still enters
+  its auto-room path; MACHINENUM remains the real visible machine number.
+- Seth-eye roomId is retained only for diagnostics/board metadata.
+- `EXACT_ROOM` no longer treats Seth-eye roomId as authoritative.
+- Remote ATG `<base>` was replaced with a same-session proxy base so room
+  navigation/form actions cannot bypass the proxy and land on raw nginx 500.
+- Static Cocos/slotFramework assets still go directly to ATG.
+- v2.68 5xx document guard, v2.67 legacy-panel removal, and v2.66 re-entry
+  state reset remain preserved.

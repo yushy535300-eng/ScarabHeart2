@@ -3,7 +3,7 @@
 
   const $ = id => document.getElementById(id);
   const log = (...args) => { try { console.log('[ScarabHeart]', ...args); } catch (_) {} };
-  const APP_VERSION = 'v2.68-block-atg-500-navigation';
+  const APP_VERSION = 'v2.70-machinenum-truth';
   const GAMES = [
     ['golden-seth', '戰神賽特2 覺醒之力', 'media/game2.png'],
     ['egyptian-mythology', '戰神賽特', 'media/game8.png'],
@@ -434,7 +434,7 @@
       GAME_MECHANISM: (GAME_META[session.game] || {}).mechanism || '',
       GAME_CHECKSUM: (GAME_META[session.game] || {}).checksum || '',
       FULL_ROOM_ID: pendingPick && pendingPick.roomId ? String(pendingPick.roomId) : '',
-      EXACT_ROOM: !!(pendingPick && pendingPick.roomId),
+      EXACT_ROOM: false,
       VISUAL_TARGET: String(machineNum || target || ''),
       VISUAL_TARGET_KIND: 'machineNum',
       ROOM_SESSION_ID: currentRoomSessionId,
@@ -472,14 +472,15 @@
       if (mode === 'manual') {
         target = '';
       } else if (pendingPick && String($('room').value).trim() === pendingPick.machineNum) {
-        // The engine's native contract is:
-        // TARGET = internal roomId, MACHINENUM = visible machine number.
-        // It resolves roomId -> machineNum from the live ATG table map, and only
-        // falls back to MACHINENUM if that map is late. Do not replace TARGET
-        // with machineNum here.
-        target = pendingPick.roomId || pendingPick.machineNum;
-        machineNum = pendingPick.machineNum;
-        targetKind = pendingPick.roomId ? 'roomId' : 'roomId';
+        // Seth-eye roomId is NOT guaranteed to be ATG's current live roomId.
+        // The user's video proved this: recommended machine 2169 became "#23".
+        // Therefore machineNum is the only authoritative auto-room target.
+        //
+        // Keep TARGET non-numeric so the engine enters its auto-room path,
+        // but force its built-in machine fallback to the real visible machineNum.
+        machineNum = String(pendingPick.machineNum || '');
+        target = '__machine__' + machineNum;
+        targetKind = 'roomId';
         boardName = pendingPick.boardName;
         const source = (boards && boards[pendingPick.board]) || [];
         boardList = source.filter(x => x && x.roomId && x.machineNum != null).map(x => ({ roomId: String(x.roomId), machineNum: String(x.machineNum), score: x.score }));
