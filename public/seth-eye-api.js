@@ -127,28 +127,132 @@
 
   function logout() { TOKEN = null; }
 
-  // 聖甲之心助手 game code → 聖甲之心助手 code
-  const GAME_MAP = {
-    'golden-seth': 'seth2',
-    'egyptian-mythology': 'seth1',
-    'tiger-princess': 'tiger',
-    'hades': 'hades',
-    'scarlet-three-kingdoms': 'red3k',
-    // These four exact ATG codes are verified from the user's HARs.
-    'wuxia-caishen': 'wuxia-caishen',
-    'son-go-ku': 'son-go-ku',
-    'new-vampire-hunter': 'new-vampire-hunter',
-    'new-jinlian': 'new-jinlian'
+  // ATG game code -> recommendation backend aliases.
+  // The older client only knew the first five aliases. New ATG titles were
+  // sent using their raw ATG code, which is why several games returned empty boards.
+  const GAME_ALIASES = {
+    'golden-seth': ['seth2', 'golden-seth', '123'],
+    'egyptian-mythology': ['seth1', 'egyptian-mythology', '114'],
+    'tiger-princess': ['tiger', 'tiger-princess', '130'],
+    'hades': ['hades', 'baphomet', '127'],
+    'scarlet-three-kingdoms': ['red3k', 'scarlet-three-kingdoms', '122'],
+    'wuxia-caishen': ['wuxia', 'wuxia-caishen', '121'],
+    'son-go-ku': ['goku', 'son-go-ku', '118'],
+    'new-vampire-hunter': ['vampire', 'new-vampire-hunter', '133'],
+    'new-jinlian': ['jinlian', 'new-jinlian', '134']
   };
-  function eyeGame(game) { return GAME_MAP[game] || game; }
+  const RESOLVED_GAME = Object.create(null);
+
+  function aliasesFor(game) {
+    const list = GAME_ALIASES[game] || [String(game || '')];
+    const resolved = RESOLVED_GAME[game];
+    return Array.from(new Set((resolved ? [resolved] : []).concat(list).filter(Boolean)));
+  }
+
+  function eyeGame(game) {
+    return RESOLVED_GAME[game] || (GAME_ALIASES[game] && GAME_ALIASES[game][0]) || game;
+  }
+
+  function usableRows(board) {
+    if (!board || typeof board !== 'object') return 0;
+    return ['composite','volatility','freegame','premium'].reduce((n, key) => {
+      const arr = Array.isArray(board[key]) ? board[key] : [];
+      return n + arr.filter(x => x && x.machineNum != null).length;
+    }, 0);
+  }
+
+  function topTenBoard(board) {
+    board = board && typeof board === 'object' ? board : {};
+    const keys = ['composite','volatility','freegame','premium'];
+    keys.forEach(key => { if (!Array.isArray(board[key])) board[key] = []; });
+
+    // Build a same-game pool only from real rows returned by the backend.
+    // No fake machine numbers are created.
+    const seen = new Set();
+    const pool = [];
+    keys.forEach(key => {
+      board[key].forEach(item => {
+        if (!item || item.machineNum == null) return;
+        const id = String(item.machineNum);
+        if (seen.has(id)) return;
+        seen.add(id);
+        pool.push(item);
+      });
+    });
+    pool.sort((a,b) => Number(b.score || 0) - Number(a.score || 0));
+
+    // The main "綜合分數" recommendation list is always up to 10 unique
+    // actual machines from this game's returned ranking data.
+    const compositeSeen = new Set();
+    const composite = [];
+    (board.composite || []).concat(pool).forEach(item => {
+      if (!item || item.machineNum == null || composite.length >= 10) return;
+      const id = String(item.machineNum);
+      if (compositeSeen.has(id)) return;
+      compositeSeen.add(id);
+      composite.push(item);
+    });
+    composite.sort((a,b) => Number(b.score || 0) - Number(a.score || 0));
+    board.composite = composite.slice(0,10);
+    return board;
+  }
+
+  function cacheKey(game) {
+    return 'scarab_boards_v272_' + String(game || '');
+  }
+
+  function saveBoardCache(game, value) {
+    try {
+      localStorage.setItem(cacheKey(game), JSON.stringify({at:Date.now(),value:value}));
+    } catch (_) {}
+  }
+
+  function loadBoardCache(game) {
+    try {
+      const raw = JSON.parse(localStorage.getItem(cacheKey(game)) || 'null');
+      if (!raw || !raw.value || Date.now() - Number(raw.at || 0) > 30 * 60 * 1000) return null;
+      return raw.value;
+    } catch (_) { return null; }
+  }
 
   // 三榜(扁平)：{composite, volatility, premium, updatedAt}。每台 roomId+machineNum+score+tier(精品)+rtp/bet/profit...
   // premium 未解鎖→roomId=null(只遮編號)。占用狀態(空滿)不在這、由引擎解密 S.tables 讀。
   async function boards(game, operator) {
-    if (CFG.USE_MOCK) return mockBoards(game);
-    const eg = eyeGame(game);
-    // 代理版：帶 agent=1 + X-Agent-Key → 後端全解遮 premium，代理錄影能真的進精品台。一般版不帶、維持通行證解遮。
-    return http('/boards?game=' + encodeURIComponent(eg) + (operator ? '&operator=' + operator : '') + (AGENT ? '&agent=1' : ''), AGENT ? { agentKey: true } : undefined);
+    if (CFG.USE_MOCK) return topTenBoard(mockBoards(game));
+
+    const candidates = aliasesFor(game);
+    let lastError = null;
+    let emptyResult = null;
+
+    for (let i = 0; i < candidates.length; i++) {
+      const eg = candidates[i];
+      try {
+        const path = '/boards?game=' + encodeURIComponent(eg) +
+          (operator ? '&operator=' + encodeURIComponent(operator) : '') +
+          (AGENT ? '&agent=1' : '');
+        let result = await http(path, AGENT ? { agentKey: true } : undefined);
+        result = topTenBoard(result);
+
+        if (usableRows(result) > 0) {
+          RESOLVED_GAME[game] = eg;
+          saveBoardCache(game, result);
+          return result;
+        }
+        if (!emptyResult) emptyResult = result;
+      } catch (error) {
+        lastError = error;
+        // Small one-time pause after transient 429/5xx before trying the next
+        // known alias. This prevents rapid empty-state flashing.
+        if (i === 0) {
+          await new Promise(resolve => setTimeout(resolve, 450));
+        }
+      }
+    }
+
+    const cached = loadBoardCache(game);
+    if (cached && usableRows(cached) > 0) return topTenBoard(cached);
+    if (emptyResult) return topTenBoard(emptyResult);
+    throw lastError || new Error('此遊戲推薦資料尚未同步');
   }
 
   // 通行證狀態

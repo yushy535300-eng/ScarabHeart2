@@ -3,7 +3,7 @@
 
   const $ = id => document.getElementById(id);
   const log = (...args) => { try { console.log('[ScarabHeart]', ...args); } catch (_) {} };
-  const APP_VERSION = 'v2.71-reload-keep-seated';
+  const APP_VERSION = 'v2.72-all-games-top10-click-enter';
   const GAMES = [
     ['golden-seth', '戰神賽特2 覺醒之力', 'media/game2.png'],
     ['egyptian-mythology', '戰神賽特', 'media/game8.png'],
@@ -337,7 +337,7 @@
         $('updTime').textContent = '快取 ' + formatTime(boards.updatedAt);
         renderBoard();
       } else {
-        box.innerHTML = '<div style="color:#ff9a82;font-size:12px;padding:16px">推薦資料暫時無法同步；你仍可輸入機台號碼，或進入大廳自行選擇。</div>';
+        box.innerHTML = '<div style="color:#ff9a82;font-size:12px;padding:16px">推薦資料同步中；稍後按「刷新」會自動重試，你也可以輸入機台號碼或進入大廳。</div>';
       }
       log('排行讀取失敗', game, error && error.message);
     }
@@ -360,7 +360,7 @@
     }
     box.innerHTML = '';
     if (!list.length) {
-      box.innerHTML = '<div style="color:#7893a9;font-size:12px;padding:16px">目前沒有可推薦機台；仍可輸入機台號碼或進入大廳。</div>';
+      box.innerHTML = '<div style="color:#7893a9;font-size:12px;padding:16px">推薦資料正在同步；你也可以輸入機台號碼或進入大廳。</div>';
       return;
     }
     if (usingFallback) {
@@ -369,28 +369,118 @@
       note.textContent = '此分類暫無資料，先顯示綜合推薦';
       box.appendChild(note);
     }
-    list.slice(0, 12).forEach((item, index) => {
+    list.slice(0, 10).forEach((item, index) => {
       const machine = item.machineNum == null ? '—' : String(item.machineNum);
       const locked = !item.roomId;
       const row = document.createElement('div');
       row.className = 'room-card';
       row.innerHTML = '<span class="room-rank">' + (index + 1) + '</span><span><b>' + (locked ? '🔒 精品機台' : machine.padStart(3, '0') + ' 號機台') + '</b><small>' + BOARD_META[activeBoard][0] + (item.rtp != null ? ' · RTP ' + item.rtp + '%' : '') + '</small></span><span class="score">' + (item.score == null ? '—' : item.score) + '</span>';
-      if (!locked) row.onclick = () => selectRoom(item);
-      else row.style.opacity = '.58';
+      if (!locked) {
+        row.style.cursor = 'pointer';
+        row.setAttribute('role', 'button');
+        row.setAttribute('tabindex', '0');
+        row.setAttribute('aria-label', '選擇 ' + machine + ' 號機台');
+        row.onclick = () => selectRoom(item);
+        row.onkeydown = event => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            selectRoom(item);
+          }
+        };
+      } else row.style.opacity = '.58';
       box.appendChild(row);
     });
   }
 
-  function selectRoom(item) {
+  function ensureRoomConfirmModal() {
+    let modal = document.getElementById('roomConfirmModal');
+    if (modal) return modal;
+    modal = document.createElement('div');
+    modal.id = 'roomConfirmModal';
+    modal.className = 'hide';
+    modal.setAttribute('aria-hidden', 'true');
+    modal.innerHTML =
+      '<div class="room-confirm-backdrop"></div>' +
+      '<section class="room-confirm-card" role="dialog" aria-modal="true" aria-labelledby="roomConfirmTitle">' +
+        '<div id="roomConfirmTitle" class="room-confirm-title">確定選擇此機台嗎？</div>' +
+        '<div class="room-confirm-machine">編號 <b id="roomConfirmMachine">#—</b></div>' +
+        '<div class="room-confirm-actions">' +
+          '<button id="roomConfirmCancel" type="button" class="secondary">取消</button>' +
+          '<button id="roomConfirmOk" type="button" class="primary">確定</button>' +
+        '</div>' +
+      '</section>';
+    document.body.appendChild(modal);
+
+    const style = document.createElement('style');
+    style.id = 'roomConfirmStyle';
+    style.textContent =
+      '#roomConfirmModal{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;padding:20px}' +
+      '#roomConfirmModal.hide{display:none}' +
+      '#roomConfirmModal .room-confirm-backdrop{position:absolute;inset:0;background:rgba(0,8,18,.72);backdrop-filter:blur(5px)}' +
+      '#roomConfirmModal .room-confirm-card{position:relative;width:min(420px,calc(100vw - 36px));background:#071827;border:1px solid #1e4963;border-radius:18px;padding:28px 24px 22px;box-shadow:0 20px 70px rgba(0,0,0,.46);text-align:center}' +
+      '#roomConfirmModal .room-confirm-title{font-size:22px;font-weight:900;color:#eef8ff;margin-bottom:15px}' +
+      '#roomConfirmModal .room-confirm-machine{font-size:17px;color:#91aabd;margin-bottom:24px}' +
+      '#roomConfirmModal .room-confirm-machine b{display:inline-block;margin-left:5px;font-size:25px;color:#58d9ff;letter-spacing:.5px}' +
+      '#roomConfirmModal .room-confirm-actions{display:grid;grid-template-columns:1fr 1fr;gap:12px}' +
+      '#roomConfirmModal button{min-height:48px;font-size:16px;font-weight:850;border-radius:12px}' +
+      '@media(max-width:520px){#roomConfirmModal .room-confirm-card{padding:24px 18px 18px}#roomConfirmModal .room-confirm-title{font-size:20px}}';
+    document.head.appendChild(style);
+    return modal;
+  }
+
+  function confirmRoom(machineNum) {
+    return new Promise(resolve => {
+      const modal = ensureRoomConfirmModal();
+      const machine = document.getElementById('roomConfirmMachine');
+      const ok = document.getElementById('roomConfirmOk');
+      const cancel = document.getElementById('roomConfirmCancel');
+      const backdrop = modal.querySelector('.room-confirm-backdrop');
+      machine.textContent = '#' + String(machineNum || '');
+      modal.classList.remove('hide');
+      modal.setAttribute('aria-hidden', 'false');
+
+      let done = false;
+      const finish = value => {
+        if (done) return;
+        done = true;
+        modal.classList.add('hide');
+        modal.setAttribute('aria-hidden', 'true');
+        ok.removeEventListener('click', onOk);
+        cancel.removeEventListener('click', onCancel);
+        backdrop.removeEventListener('click', onCancel);
+        document.removeEventListener('keydown', onKey);
+        resolve(value);
+      };
+      const onOk = () => finish(true);
+      const onCancel = () => finish(false);
+      const onKey = event => {
+        if (event.key === 'Escape') finish(false);
+        else if (event.key === 'Enter') finish(true);
+      };
+      ok.addEventListener('click', onOk);
+      cancel.addEventListener('click', onCancel);
+      backdrop.addEventListener('click', onCancel);
+      document.addEventListener('keydown', onKey);
+      setTimeout(() => ok.focus(), 0);
+    });
+  }
+
+  async function selectRoom(item) {
+    if (!item || item.machineNum == null) return;
+    const machineNum = String(item.machineNum);
+    const accepted = await confirmRoom(machineNum);
+    if (!accepted) return;
+
     pendingPick = {
       roomId: String(item.roomId || ''),
-      machineNum: String(item.machineNum || ''),
+      machineNum,
       board: activeBoard,
       boardName: BOARD_META[activeBoard][0]
     };
-    $('room').value = pendingPick.machineNum;
+    $('room').value = machineNum;
     $('err2').style.color = '#70e7b0';
-    $('err2').textContent = '已選擇 ' + pendingPick.machineNum + ' 號機台，按下方按鈕進入。';
+    $('err2').textContent = '正在進入 #' + machineNum + ' 機台…';
+    await enterGame('target');
   }
 
   async function refreshMember() {

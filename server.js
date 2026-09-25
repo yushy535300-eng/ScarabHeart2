@@ -14,6 +14,7 @@ const crypto = require('crypto');
 
 const app = express();
 const sessions = new Map();
+const recommendationProxyCache = new Map();
 const publicDir = path.join(__dirname, 'public');
 const runtimeDir = path.join(__dirname, 'runtime');
 const outboundProxy = process.env.WSS_PROXY || process.env.wss_proxy ||
@@ -76,6 +77,16 @@ app.use('/__api', express.raw({ type: '*/*', limit: '2mb' }), async (req, res) =
   const url = apiUrl(req);
   if (!url) return res.status(403).json({ ok: false, error: 'API host is not allowed' });
   try {
+    const isBoardsGet = req.method === 'GET' && /\/api\/copilot\/boards$/i.test(url.pathname);
+    const cacheKey = isBoardsGet ? url.href : '';
+    const cached = cacheKey ? recommendationProxyCache.get(cacheKey) : null;
+    if (cached && Date.now() - cached.at < 15000) {
+      res.status(200);
+      res.type(cached.type || 'application/json');
+      res.set('Cache-Control', 'private, max-age=5');
+      return res.send(cached.bytes);
+    }
+
     const headers = {
       accept: req.headers.accept || 'application/json',
       'user-agent': req.headers['user-agent'] || 'Mozilla/5.0 Chrome/126 Safari/537.36',
@@ -91,8 +102,21 @@ app.use('/__api', express.raw({ type: '*/*', limit: '2mb' }), async (req, res) =
     }
     const upstream = await fetch(url, init);
     const bytes = Buffer.from(await upstream.arrayBuffer());
+    const responseType = upstream.headers.get('content-type') || 'application/octet-stream';
+
+    if (isBoardsGet && upstream.status >= 429 && cached && Date.now() - cached.at < 10 * 60 * 1000) {
+      res.status(200);
+      res.type(cached.type || 'application/json');
+      res.set('X-Scarab-Recommendation-Cache', 'stale');
+      res.set('Cache-Control', 'private, no-store');
+      return res.send(cached.bytes);
+    }
+    if (isBoardsGet && upstream.ok && /application\/json/i.test(responseType)) {
+      recommendationProxyCache.set(cacheKey, {at:Date.now(), bytes, type:responseType});
+    }
+
     res.status(upstream.status);
-    res.type(upstream.headers.get('content-type') || 'application/octet-stream');
+    res.type(responseType);
     res.set('Cache-Control', upstream.headers.get('cache-control') || 'no-store');
     res.send(bytes);
   } catch (error) {

@@ -190,3 +190,20 @@ Fix:
 - After successful seating, a reload stays seated and will not run auto-room a second time.
 - Returning to the ScarabHeart room page and pressing Enter Game again still creates
   a new ID, so auto-room runs again for the newly selected machine.
+
+
+## v2.72 all games / top 10 / click-to-enter
+
+- Every recommendation row is directly selectable.
+- Clicking a machine opens a confirmation dialog:
+  `確定選擇此機台嗎？ / 編號 #xxxxx / 確定 / 取消`.
+- Confirming immediately enters ATG and starts the existing auto-room flow.
+- Main composite recommendation list is expanded to up to 10 unique real machines
+  using only rows actually returned for the same game (no fabricated machine IDs).
+- Added recommendation backend aliases for all 9 ATG titles:
+  seth2/seth1/tiger/hades/red3k/wuxia/goku/vampire/jinlian plus raw ATG code
+  and numeric game-id fallbacks.
+- Once a working alias is found for a game it is reused for the rest of the session.
+- Last successful recommendation data is cached locally for 30 minutes.
+- Render `/__api` now caches board responses for 15 seconds and can serve a recent
+  stale response during transient 429/5xx errors, reducing blank recommendation pages.
