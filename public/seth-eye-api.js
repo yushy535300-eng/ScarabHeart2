@@ -119,7 +119,6 @@
   }
 
   // ★使用資格（按「開始」即時打、不快取）→ {eligible, reason}
-  //   game 選填：雷神(RSG)帶 'thor' 讓後端分辨遊戲商別；賽特(ATG)不帶、維持原行為。
   async function eligibility(game) {
     if (AGENT) return { eligible: true, reason: null };
     if (CFG.USE_MOCK) return { eligible: true, reason: null };

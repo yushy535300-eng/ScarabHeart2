@@ -1,14 +1,13 @@
 {
   "name": "scarabheart-web-render",
-  "version": "2.52.0",
+  "version": "2.53.0",
   "private": true,
   "engines": {
     "node": ">=20"
   },
   "scripts": {
     "start": "node server.js",
-    "build:extension": "node scripts/build-extension.js",
-    "check": "npm run build:extension && node --check server.js && node --check public/web-iab-bridge.js && node --check public/app.js && node --check extension/injector.js && node --check extension/runtime/atg-engine-runtime.js && node --check extension/runtime/thor-engine-runtime.js && node --check extension/runtime/overlay-runtime.js"
+    "check": "node --check server.js && node --check public/web-iab-bridge.js && node --check public/app.js && node --check public/seth-eye-api.js && node --check runtime/atg-engine-runtime.js && node --check runtime/atg-live-adapter.js && node --check runtime/overlay-runtime.js"
   },
   "dependencies": {
     "express": "4.21.2",

@@ -1,4 +1,5 @@
 'use strict';
+
 const express = require('express');
 const { WebSocket, WebSocketServer } = require('ws');
 const { HttpsProxyAgent } = require('https-proxy-agent');
@@ -8,178 +9,330 @@ const crypto = require('crypto');
 const app = express();
 const sessions = new Map();
 const publicDir = path.join(__dirname, 'public');
-const outboundProxy = process.env.WSS_PROXY || process.env.wss_proxy || process.env.HTTPS_PROXY || process.env.https_proxy;
-const websocketAgent = /^https?:\/\//i.test(String(outboundProxy || '')) ? new HttpsProxyAgent(outboundProxy) : undefined;
+const runtimeDir = path.join(__dirname, 'runtime');
+const outboundProxy = process.env.WSS_PROXY || process.env.wss_proxy ||
+  process.env.HTTPS_PROXY || process.env.https_proxy;
+const websocketAgent = /^https?:\/\//i.test(String(outboundProxy || ''))
+  ? new HttpsProxyAgent(outboundProxy)
+  : undefined;
 
-function allowed(u) {
-  if (u.protocol !== 'https:' && u.protocol !== 'wss:') return false;
-  const h = u.hostname.toLowerCase();
-  return h === 'tz6868.cc' || h.endsWith('.tz6868.cc') ||
-    h === 'godeebxp.com' || h.endsWith('.godeebxp.com') ||
-    /(^|\.)rsgaming[\w-]*\.com$/.test(h) ||
-    /(^|\.)royalgaming[\w-]*\.com$/.test(h);
+function gameAllowed(url) {
+  if (!url || (url.protocol !== 'https:' && url.protocol !== 'wss:')) return false;
+  const host = url.hostname.toLowerCase();
+  return host === 'godeebxp.com' || host.endsWith('.godeebxp.com');
 }
 
-function apiAllowed(u) {
-  if (u.protocol !== 'https:') return false;
-  const h = u.hostname.toLowerCase();
-  return h === 'seth-eye.com' || h.endsWith('.seth-eye.com') ||
-    h === 'tz6868.cc' || h.endsWith('.tz6868.cc') ||
-    h === 'ofa1188.net' || h.endsWith('.ofa1188.net');
+function apiAllowed(url) {
+  if (!url || url.protocol !== 'https:') return false;
+  const host = url.hostname.toLowerCase();
+  return host === 'seth-eye.com' || host.endsWith('.seth-eye.com');
 }
 
-function apiURL(req) {
+function apiUrl(req) {
   try {
-    const u = new URL(String(req.query.url || ''));
-    return apiAllowed(u) ? u : null;
-  } catch (_) { return null; }
+    const url = new URL(String(req.query.url || ''));
+    return apiAllowed(url) ? url : null;
+  } catch (_) {
+    return null;
+  }
 }
 
-app.get('/healthz', (req, res) => res.status(200).json({ ok: true, version: '2.52-official-game-extension' }));
+function decodePayload(raw) {
+  try {
+    const input = String(raw || '');
+    if (!input || input.length > 180000) return null;
+    const normalized = input.replace(/-/g, '+').replace(/_/g, '/');
+    const json = Buffer.from(normalized, 'base64').toString('utf8');
+    const payload = JSON.parse(json);
+    if (!payload || payload.kind !== 'atg' || !payload.cfg ||
+        typeof payload.cfg !== 'object' || Array.isArray(payload.cfg)) return null;
+    return payload;
+  } catch (_) {
+    return null;
+  }
+}
+
+function scriptJson(value) {
+  return JSON.stringify(value)
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
+}
+
+app.disable('x-powered-by');
+app.get('/healthz', (_req, res) => {
+  res.status(200).json({ ok: true, version: '2.53-atg-inapp' });
+});
 
 app.use('/__api', express.raw({ type: '*/*', limit: '2mb' }), async (req, res) => {
-  const u = apiURL(req);
-  if (!u) return res.status(403).json({ ok: false, error: 'API host is not allowed' });
+  const url = apiUrl(req);
+  if (!url) return res.status(403).json({ ok: false, error: 'API host is not allowed' });
   try {
-    const headers = { accept: req.headers.accept || 'application/json', 'user-agent': req.headers['user-agent'] || 'Mozilla/5.0 Chrome/126 Safari/537.36', origin: u.origin, referer: u.origin + '/' };
+    const headers = {
+      accept: req.headers.accept || 'application/json',
+      'user-agent': req.headers['user-agent'] || 'Mozilla/5.0 Chrome/126 Safari/537.36',
+      origin: url.origin,
+      referer: url.origin + '/'
+    };
     if (req.headers['content-type']) headers['content-type'] = req.headers['content-type'];
     if (req.headers.authorization) headers.authorization = req.headers.authorization;
     if (req.headers['x-copilot-key']) headers['x-copilot-key'] = req.headers['x-copilot-key'];
     const init = { method: req.method, headers, redirect: 'follow' };
-    if (req.method !== 'GET' && req.method !== 'HEAD' && req.body && req.body.length) init.body = req.body;
-    const upstream = await fetch(u, init);
+    if (req.method !== 'GET' && req.method !== 'HEAD' && req.body && req.body.length) {
+      init.body = req.body;
+    }
+    const upstream = await fetch(url, init);
     const bytes = Buffer.from(await upstream.arrayBuffer());
     res.status(upstream.status);
     res.type(upstream.headers.get('content-type') || 'application/octet-stream');
     res.set('Cache-Control', upstream.headers.get('cache-control') || 'no-store');
     res.send(bytes);
-  } catch (err) {
-    res.status(502).json({ ok: false, error: '上游服務連線失敗', detail: String(err && err.message || err) });
+  } catch (error) {
+    res.status(502).json({
+      ok: false,
+      error: '上游服務連線失敗',
+      detail: String(error && error.message || error)
+    });
   }
 });
 
-function gameBoot(sid, originalHref) {
+// Only the three ATG runtime files required by the in-app game are exposed.
+app.get('/__runtime/atg-engine-runtime.js', (_req, res) => {
+  res.sendFile(path.join(runtimeDir, 'atg-engine-runtime.js'));
+});
+app.get('/__runtime/atg-live-adapter.js', (_req, res) => {
+  res.sendFile(path.join(runtimeDir, 'atg-live-adapter.js'));
+});
+app.get('/__runtime/overlay-runtime.js', (_req, res) => {
+  res.sendFile(path.join(runtimeDir, 'overlay-runtime.js'));
+});
+
+function gameBoot(sid, originalHref, session, withRuntime) {
   const prefix = '/__game/' + sid;
-  return '<script>window.__SCARAB_ORIGINAL_URL=' + JSON.stringify(originalHref) +
-    ';window.__SCARAB_PROXY_PREFIX=' + JSON.stringify(prefix) +
-    ';(function(){var O=window.__SCARAB_ORIGINAL_URL,P=' + JSON.stringify(prefix) +
-    ';function A(x){var h=x.hostname.toLowerCase();return h==="tz6868.cc"||/\\.tz6868\\.cc$/.test(h)||h==="godeebxp.com"||/\\.godeebxp\\.com$/.test(h)||/(^|\\.)rsgaming[\\w-]*\\.com$/.test(h)||/(^|\\.)royalgaming[\\w-]*\\.com$/.test(h)}' +
+  const payload = session.payload || { kind: 'atg', gameCode: '', cfg: {} };
+  const config = payload.cfg || {};
+  const proxyBoot = '<script>window.__SCARAB_ORIGINAL_URL=' + scriptJson(originalHref) +
+    ';window.__SCARAB_PROXY_PREFIX=' + scriptJson(prefix) +
+    ';(function(){var O=window.__SCARAB_ORIGINAL_URL,P=' + scriptJson(prefix) +
+    ';function A(x){var h=x.hostname.toLowerCase();return h==="godeebxp.com"||/\\.godeebxp\\.com$/.test(h)}' +
     'function H(raw){try{var x=new URL(String(raw),O);if(/^https?:$/.test(x.protocol)&&A(x))return P+"/__remote?url="+encodeURIComponent(x.href)}catch(e){}return raw}' +
     'var F=window.fetch;if(F)window.fetch=function(i,n){var raw=typeof i==="string"?i:(i&&i.url)||String(i),u=H(raw);try{if(i instanceof Request&&u!==raw)i=new Request(u,i);else if(u!==raw)i=u}catch(e){i=u}return F.call(this,i,n)};' +
     'var XO=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(m,u){arguments[1]=H(u);return XO.apply(this,arguments)};' +
     'if(window.EventSource){var ES=window.EventSource;window.EventSource=function(u,o){return new ES(H(u),o)};window.EventSource.prototype=ES.prototype}' +
     'if(navigator.sendBeacon){var SB=navigator.sendBeacon.bind(navigator);navigator.sendBeacon=function(u,d){return SB(H(u),d)}}' +
-    'var N=window.WebSocket;window.WebSocket=function(u,p){try{var x=new URL(u,O);if(/^wss?:$/.test(x.protocol)&&A(x)){var q=(location.protocol==="https:"?"wss:":"ws:")+"//"+location.host+"/__socket/' + sid + '?url="+encodeURIComponent(x.href);return p?new N(q,p):new N(q)}}catch(e){}return p?new N(u,p):new N(u)};window.WebSocket.prototype=N.prototype;Object.keys(N).forEach(function(k){try{window.WebSocket[k]=N[k]}catch(e){}})' +
+    'var N=window.WebSocket;window.WebSocket=function(u,p){try{var x=new URL(u,O);if(/^wss?:$/.test(x.protocol)&&A(x)){var q=(location.protocol==="https:"?"wss:":"ws:")+"//"+location.host+"/__socket/' + sid + '?url="+encodeURIComponent(x.href);return p?new N(q,p):new N(q)}}catch(e){}return p?new N(u,p):new N(u)};window.WebSocket.prototype=N.prototype;Object.keys(N).forEach(function(k){try{window.WebSocket[k]=N[k]}catch(e){}});["CONNECTING","OPEN","CLOSING","CLOSED"].forEach(function(k){try{Object.defineProperty(window.WebSocket,k,{value:N[k],configurable:true})}catch(e){}});' +
     '})();<\/script>';
+
+  if (!withRuntime) return proxyBoot;
+
+  const runtimeBoot = '<script>' +
+    'window.__SCARAB_WEB_ACTIVE=true;' +
+    'window.__SCARAB_WEB_PAYLOAD=' + scriptJson(payload) + ';' +
+    'window.__SC_GAME_CODE=' + scriptJson(String(payload.gameCode || config.GAME_CODE || '')) + ';' +
+    'window.__SC_GOOD_ROOMS=' + scriptJson(config.GOOD_ROOMS || []) + ';' +
+    'try{parent.postMessage({__scarabStatus:true,state:"engine-wait"},location.origin)}catch(e){}' +
+    '<\/script>' +
+    '<script src="/__runtime/atg-engine-runtime.js"><\/script>' +
+    '<script>(function(){if(window.__sethBooted)return;window.__sethBooted=true;try{' +
+    'var p=window.__SCARAB_WEB_PAYLOAD||{};engine(p.cfg||{});' +
+    '}catch(e){window.__sethBooted=false;try{parent.postMessage({__scarabStatus:true,state:"engine-error",message:String(e&&e.message||e)},location.origin)}catch(_){}}})();<\/script>' +
+    '<script src="/__runtime/atg-live-adapter.js"><\/script>' +
+    '<script src="/__runtime/overlay-runtime.js"><\/script>';
+  return proxyBoot + runtimeBoot;
 }
 
-function upstreamHeaders(req, u) {
+function upstreamHeaders(req, url, sessionOrigin) {
+  const origin = sessionOrigin || url.origin;
   const headers = {
     accept: req.headers.accept || '*/*',
     'user-agent': req.headers['user-agent'] || 'Mozilla/5.0 Chrome/126 Safari/537.36',
-    origin: u.origin,
-    referer: u.origin + '/'
+    origin,
+    referer: origin + '/'
   };
-  ['content-type', 'authorization', 'cookie', 'range', 'accept-language'].forEach(k => { if (req.headers[k]) headers[k] = req.headers[k]; });
+  ['content-type', 'authorization', 'cookie', 'range', 'accept-language'].forEach(key => {
+    if (req.headers[key]) headers[key] = req.headers[key];
+  });
   return headers;
 }
 
 function sendCookies(res, upstream, sid) {
-  const setCookies = upstream.headers.getSetCookie ? upstream.headers.getSetCookie() : [];
-  if (setCookies.length) res.set('Set-Cookie', setCookies.map(c => c.replace(/;\s*Domain=[^;]+/ig, '').replace(/;\s*Path=[^;]*/ig, '; Path=/__game/' + sid + '/')));
+  const cookies = upstream.headers.getSetCookie ? upstream.headers.getSetCookie() : [];
+  if (!cookies.length) return;
+  res.set('Set-Cookie', cookies.map(cookie => cookie
+    .replace(/;\s*Domain=[^;]+/ig, '')
+    .replace(/;\s*Path=[^;]*/ig, '; Path=/__game/' + sid + '/')));
 }
 
 app.get('/__game/open', (req, res) => {
-  let u; try { u = new URL(String(req.query.url || '')); } catch (_) { return res.status(400).send('Invalid game URL'); }
-  if (!allowed(u)) return res.status(403).send('Game host is not allowed');
+  let url;
+  try { url = new URL(String(req.query.url || '')); }
+  catch (_) { return res.status(400).send('Invalid game URL'); }
+  if (!gameAllowed(url) || url.protocol !== 'https:') {
+    return res.status(403).send('Game host is not allowed');
+  }
+  const payload = decodePayload(req.query.cfg);
+  if (!payload) return res.status(400).send('Invalid game configuration');
   const sid = crypto.randomBytes(12).toString('hex');
-  sessions.set(sid, { origin: u.origin, createdAt: Date.now() });
-  res.redirect(302, '/__game/' + sid + u.pathname + u.search);
+  sessions.set(sid, {
+    origin: url.origin,
+    createdAt: Date.now(),
+    payload
+  });
+  res.redirect(302, '/__game/' + sid + url.pathname + url.search);
 });
 
-// fetch/XHR from the proxied game may call another approved game host. Keep
-// those requests on this origin too so browser CORS does not disable the engine.
-app.all('/__game/:sid/__remote', express.raw({ type: '*/*', limit: '8mb' }), async (req, res) => {
-  const sid = req.params.sid, s = sessions.get(sid);
-  if (!s) return res.status(403).send('Invalid game session');
-  let u; try { u = new URL(String(req.query.url || '')); } catch (_) { return res.status(400).send('Invalid upstream URL'); }
-  if (!allowed(u) || !/^https:$/.test(u.protocol)) return res.status(403).send('Invalid upstream URL');
+app.all('/__game/:sid/__remote', express.raw({ type: '*/*', limit: '16mb' }), async (req, res) => {
+  const sid = req.params.sid;
+  const session = sessions.get(sid);
+  if (!session) return res.status(403).send('Invalid game session');
+  let url;
+  try { url = new URL(String(req.query.url || '')); }
+  catch (_) { return res.status(400).send('Invalid upstream URL'); }
+  if (!gameAllowed(url) || url.protocol !== 'https:') {
+    return res.status(403).send('Invalid upstream URL');
+  }
   try {
-    const init = { method: req.method, headers: upstreamHeaders(req, u), redirect: 'manual' };
-    if (req.method !== 'GET' && req.method !== 'HEAD' && req.body && req.body.length) init.body = req.body;
-    const upstream = await fetch(u, init);
+    const init = {
+      method: req.method,
+      headers: upstreamHeaders(req, url, session.origin),
+      redirect: 'manual'
+    };
+    if (req.method !== 'GET' && req.method !== 'HEAD' && req.body && req.body.length) {
+      init.body = req.body;
+    }
+    const upstream = await fetch(url, init);
     const location = upstream.headers.get('location');
     if (location && upstream.status >= 300 && upstream.status < 400) {
-      const next = new URL(location, u);
-      if (!allowed(next)) return res.status(403).send('Invalid redirect URL');
+      const next = new URL(location, url);
+      if (!gameAllowed(next)) return res.status(403).send('Invalid redirect URL');
       sendCookies(res, upstream, sid);
-      return res.status(upstream.status).set('Location', '/__game/' + sid + '/__remote?url=' + encodeURIComponent(next.href)).end();
+      return res.status(upstream.status)
+        .set('Location', '/__game/' + sid + '/__remote?url=' + encodeURIComponent(next.href))
+        .end();
     }
     const bytes = Buffer.from(await upstream.arrayBuffer());
-    res.status(upstream.status); res.type(upstream.headers.get('content-type') || 'application/octet-stream');
-    ['content-range', 'accept-ranges', 'etag', 'last-modified'].forEach(k => { const v = upstream.headers.get(k); if (v) res.set(k, v); });
+    res.status(upstream.status);
+    res.type(upstream.headers.get('content-type') || 'application/octet-stream');
+    ['content-range', 'accept-ranges', 'etag', 'last-modified'].forEach(key => {
+      const value = upstream.headers.get(key);
+      if (value) res.set(key, value);
+    });
     res.set('Cache-Control', upstream.headers.get('cache-control') || 'no-store');
-    sendCookies(res, upstream, sid); res.send(bytes);
-  } catch (err) { res.status(502).send('遊戲資料載入失敗：' + String(err && err.message || err)); }
-});
-
-app.use('/__game/:sid/*', express.raw({ type: '*/*', limit: '8mb' }), async (req, res) => {
-  const sid = req.params.sid, s = sessions.get(sid);
-  if (!s) return res.status(403).send('Invalid game session');
-  const tail = req.params[0] || '/';
-  const query = new URL(req.originalUrl, 'http://local').search;
-  const u = new URL((tail.startsWith('/') ? tail : '/' + tail) + query, s.origin + '/');
-  if (!allowed(u)) return res.status(403).send('Invalid game session');
-  try {
-    const headers = upstreamHeaders(req, u);
-    const init = { method: req.method, headers, redirect: 'manual' };
-    if (req.method !== 'GET' && req.method !== 'HEAD' && req.body && req.body.length) init.body = req.body;
-    const upstream = await fetch(u, init);
-    const redirectLocation = upstream.headers.get('location');
-    if (redirectLocation && upstream.status >= 300 && upstream.status < 400) {
-      const next = new URL(redirectLocation, u);
-      if (!allowed(next)) return res.status(403).send('Invalid redirect URL');
-      s.origin = next.origin; sendCookies(res, upstream, sid);
-      return res.status(upstream.status).set('Location', '/__game/' + sid + next.pathname + next.search).end();
-    }
-    const finalURL = new URL(upstream.url || u.href); if (allowed(finalURL)) s.origin = finalURL.origin;
-    let bytes = Buffer.from(await upstream.arrayBuffer());
-    const type = String(upstream.headers.get('content-type') || 'application/octet-stream');
-    if (/text\/html|javascript|text\/css/.test(type)) {
-      let body = bytes.toString('utf8'), prefix = '/__game/' + sid;
-      body = body.replaceAll(s.origin, prefix);
-      body = body.replace(/\b(src|href|action)=(['"])\/(?!\/|__game\/)/gi, (m, a, q) => a + '=' + q + prefix + '/');
-      if (/text\/css/.test(type)) body = body.replace(/url\((['"]?)\/(?!\/|__game\/)/gi, 'url($1' + prefix + '/');
-      if (/text\/html/.test(type)) {
-        const boot = gameBoot(sid, finalURL.href);
-        const head = '<head><base href="' + prefix + finalURL.pathname + '"><meta name="viewport" content="width=device-width,height=device-height,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"><style>html,body{margin:0!important;width:100%!important;height:100%!important;overflow:hidden!important;overscroll-behavior:none!important}</style>' + boot;
-        body = body.replace(/<head(?:\s[^>]*)?>/i, head);
-      }
-      bytes = Buffer.from(body);
-    }
-    res.status(upstream.status); res.type(type); res.set('Cache-Control', upstream.headers.get('cache-control') || 'no-store');
     sendCookies(res, upstream, sid);
     res.send(bytes);
-  } catch (err) {
-    res.status(502).send('遊戲資源載入失敗：' + String(err && err.message || err));
+  } catch (error) {
+    res.status(502).send('遊戲資料載入失敗：' + String(error && error.message || error));
   }
 });
 
-// These paths are WebSocket-only. A normal HTTP request gets an explicit
-// response instead of falling through to index.html.
-app.all(['/__socket/:sid', '/__lobby-socket'], (req, res) => res.status(426).send('WebSocket upgrade required'));
+app.use('/__game/:sid/*', express.raw({ type: '*/*', limit: '16mb' }), async (req, res) => {
+  const sid = req.params.sid;
+  const session = sessions.get(sid);
+  if (!session) return res.status(403).send('Invalid game session');
+  const tail = req.params[0] || '/';
+  const query = new URL(req.originalUrl, 'http://local').search;
+  const url = new URL((tail.startsWith('/') ? tail : '/' + tail) + query, session.origin + '/');
+  if (!gameAllowed(url)) return res.status(403).send('Invalid game session');
+
+  try {
+    const init = {
+      method: req.method,
+      headers: upstreamHeaders(req, url, session.origin),
+      redirect: 'manual'
+    };
+    if (req.method !== 'GET' && req.method !== 'HEAD' && req.body && req.body.length) {
+      init.body = req.body;
+    }
+    const upstream = await fetch(url, init);
+    const redirectLocation = upstream.headers.get('location');
+    if (redirectLocation && upstream.status >= 300 && upstream.status < 400) {
+      const next = new URL(redirectLocation, url);
+      if (!gameAllowed(next)) return res.status(403).send('Invalid redirect URL');
+      sendCookies(res, upstream, sid);
+      const isDocument = req.headers['sec-fetch-dest'] === 'document' ||
+        /text\/html/i.test(String(req.headers.accept || ''));
+      // Only a real page navigation may change the session's document origin.
+      // A cross-host asset redirect must keep its full origin encoded, or later
+      // relative game requests would accidentally be sent to the asset host.
+      if (!isDocument && next.origin !== session.origin) {
+        return res.status(upstream.status)
+          .set('Location', '/__game/' + sid + '/__remote?url=' + encodeURIComponent(next.href))
+          .end();
+      }
+      if (isDocument) session.origin = next.origin;
+      return res.status(upstream.status)
+        .set('Location', '/__game/' + sid + next.pathname + next.search)
+        .end();
+    }
+
+    const finalUrl = new URL(upstream.url || url.href);
+    let bytes = Buffer.from(await upstream.arrayBuffer());
+    const type = String(upstream.headers.get('content-type') || 'application/octet-stream');
+    if (/text\/html|javascript|text\/css/.test(type)) {
+      const prefix = '/__game/' + sid;
+      let body = bytes.toString('utf8');
+      body = body.replaceAll(session.origin, prefix);
+      body = body.replace(/\b(src|href|action)=(['"])\/(?!\/|__game\/)/gi,
+        (_match, attr, quote) => attr + '=' + quote + prefix + '/');
+      if (/text\/css/.test(type)) {
+        body = body.replace(/url\((['"]?)\/(?!\/|__game\/)/gi, 'url($1' + prefix + '/');
+      }
+      if (/text\/html/.test(type)) {
+        body = body
+          .replace(/<meta\b[^>]*http-equiv=(['"])Content-Security-Policy\1[^>]*>/gi, '')
+          .replace(/\s+integrity=(['"])[^'"]*\1/gi, '');
+        const isLobby = /\/egames\/lobby\//i.test(finalUrl.pathname);
+        const boot = gameBoot(sid, finalUrl.href, session, !isLobby);
+        const head = '<head><base href="' + prefix + finalUrl.pathname + '">' +
+          '<meta name="viewport" content="width=device-width,height=device-height,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">' +
+          '<style>html,body{margin:0!important;width:100%!important;height:100%!important;overflow:hidden!important;overscroll-behavior:none!important}</style>' +
+          boot;
+        if (/<head(?:\s[^>]*)?>/i.test(body)) body = body.replace(/<head(?:\s[^>]*)?>/i, head);
+        else body = head + body;
+      }
+      bytes = Buffer.from(body);
+    }
+    res.status(upstream.status);
+    res.type(type);
+    res.set('Cache-Control', upstream.headers.get('cache-control') || 'no-store');
+    sendCookies(res, upstream, sid);
+    res.send(bytes);
+  } catch (error) {
+    res.status(502).send('遊戲資源載入失敗：' + String(error && error.message || error));
+  }
+});
+
+app.all(['/__socket/:sid', '/__lobby-socket'], (_req, res) => {
+  res.status(426).send('WebSocket upgrade required');
+});
 
 app.use(express.static(publicDir, { extensions: ['html'] }));
-app.get('*', (req, res) => res.sendFile(path.join(publicDir, 'index.html')));
+app.get('*', (_req, res) => res.sendFile(path.join(publicDir, 'index.html')));
 
-setInterval(() => { const cutoff = Date.now() - 6 * 60 * 60 * 1000; for (const [id, s] of sessions) if (s.createdAt < cutoff) sessions.delete(id); }, 30 * 60 * 1000).unref();
-const server = app.listen(process.env.PORT || 3000, '0.0.0.0');
-const socketServer = new WebSocketServer({ noServer: true, perMessageDeflate: false, maxPayload: 16 * 1024 * 1024 });
+setInterval(() => {
+  const cutoff = Date.now() - 6 * 60 * 60 * 1000;
+  for (const [id, session] of sessions) {
+    if (session.createdAt < cutoff) sessions.delete(id);
+  }
+}, 30 * 60 * 1000).unref();
+
+const server = app.listen(process.env.PORT || 3000, '0.0.0.0', () => {
+  console.log('ScarabHeart ATG web service listening on ' + (process.env.PORT || 3000));
+});
+const socketServer = new WebSocketServer({
+  noServer: true,
+  perMessageDeflate: false,
+  maxPayload: 16 * 1024 * 1024
+});
 
 function rejectUpgrade(socket, status, message) {
   if (socket.destroyed) return;
   const body = message || 'WebSocket connection rejected';
-  socket.end('HTTP/1.1 ' + status + '\r\nConnection: close\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: ' + Buffer.byteLength(body) + '\r\n\r\n' + body);
+  socket.end('HTTP/1.1 ' + status +
+    '\r\nConnection: close\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: ' +
+    Buffer.byteLength(body) + '\r\n\r\n' + body);
 }
 
 function bridgeSockets(client, upstream) {
@@ -203,31 +356,54 @@ function bridgeSockets(client, upstream) {
 
 server.on('upgrade', (req, socket, head) => {
   try {
-    const m = String(req.url || '').match(/^\/__socket\/([a-f0-9]{24})(?:\?|$)/);
-    const target = new URL(String(new URL(req.url, 'http://local').searchParams.get('url') || ''));
-    const lobby = /^\/__lobby-socket(?:\?|$)/.test(String(req.url || ''));
-    if ((!lobby && (!m || !sessions.has(m[1]))) || !allowed(target)) return rejectUpgrade(socket, '403 Forbidden');
+    const requestUrl = String(req.url || '');
+    const match = requestUrl.match(/^\/__socket\/([a-f0-9]{24})(?:\?|$)/);
+    const lobby = /^\/__lobby-socket(?:\?|$)/.test(requestUrl);
+    const session = match ? sessions.get(match[1]) : null;
+    const target = new URL(String(new URL(requestUrl, 'http://local').searchParams.get('url') || ''));
+    if ((!lobby && (!match || !session)) || !gameAllowed(target)) {
+      return rejectUpgrade(socket, '403 Forbidden');
+    }
 
-    const protocols = String(req.headers['sec-websocket-protocol'] || '').split(',').map(v => v.trim()).filter(Boolean);
+    const protocols = String(req.headers['sec-websocket-protocol'] || '')
+      .split(',').map(value => value.trim()).filter(Boolean);
     const headers = {};
-    ['cookie', 'authorization', 'user-agent'].forEach(k => { if (req.headers[k]) headers[k] = req.headers[k]; });
-    const options = { headers, perMessageDeflate: false, handshakeTimeout: 15000, maxPayload: 16 * 1024 * 1024 };
+    ['cookie', 'authorization', 'user-agent'].forEach(key => {
+      if (req.headers[key]) headers[key] = req.headers[key];
+    });
+    // HAR proves ATG rejects the proxy socket unless Origin is the play site.
+    const origin = lobby ? 'https://play.godeebxp.com' : session.origin;
+    const options = {
+      headers,
+      origin,
+      perMessageDeflate: false,
+      handshakeTimeout: 15000,
+      maxPayload: 16 * 1024 * 1024
+    };
     if (websocketAgent) options.agent = websocketAgent;
-    const upstream = protocols.length ? new WebSocket(target.href, protocols, options) : new WebSocket(target.href, options);
+    const upstream = protocols.length
+      ? new WebSocket(target.href, protocols, options)
+      : new WebSocket(target.href, options);
     let accepted = false;
 
     upstream.on('unexpected-response', (_ws, response) => {
-      if (!accepted) rejectUpgrade(socket, '502 Bad Gateway', 'Upstream WebSocket returned HTTP ' + response.statusCode);
+      if (!accepted) rejectUpgrade(socket, '502 Bad Gateway',
+        'Upstream WebSocket returned HTTP ' + response.statusCode);
     });
     upstream.on('error', () => {
-      if (!accepted) rejectUpgrade(socket, '502 Bad Gateway', 'Upstream WebSocket connection failed');
+      if (!accepted) rejectUpgrade(socket, '502 Bad Gateway',
+        'Upstream WebSocket connection failed');
     });
     upstream.once('open', () => {
       if (socket.destroyed) return upstream.terminate();
       accepted = true;
       if (upstream.protocol) req.headers['sec-websocket-protocol'] = upstream.protocol;
       else delete req.headers['sec-websocket-protocol'];
-      socketServer.handleUpgrade(req, socket, head, client => bridgeSockets(client, upstream));
+      socketServer.handleUpgrade(req, socket, head, client => {
+        bridgeSockets(client, upstream);
+      });
     });
-  } catch (_) { rejectUpgrade(socket, '400 Bad Request'); }
+  } catch (_) {
+    rejectUpgrade(socket, '400 Bad Request');
+  }
 });

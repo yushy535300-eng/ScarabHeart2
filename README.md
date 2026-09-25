@@ -1,63 +1,48 @@
-# ScarabHeart2 Web v2.52（電腦網站可用版）
+# ScarabHeart2 Web v2.53（ATG 程式內遊戲版）
 
-這是可部署到 Render 的網站原始檔，不是 APK。電腦版登入頁採「左側大型聖甲蟲、右側登入面板」；手機仍使用原本直式登入。遊戲改用官方網址開啟，不再透過會卡 ATG Logo 的 Render 遊戲反向代理。
+這是可部署到 Render 的網站原始檔，不是 APK。
 
-## 已接上的功能
+## 這版已改好
 
-- TZ／OFA 原登入與遊戲選擇流程
-- TZ／OFA 帳密成功後直接進入遊戲中心；會員後端冷啟動不再誤判為 TZ 登入失敗
-- 官方遊戲頁由隨包附上的 Chrome 擴充功能注入完整 ATG／RSG 引擎
-- 遊戲內浮動面板真正呼叫引擎，不用假的按鈕狀態冒充成功
-- AUTO START／STOP、FREE 自動、停利停損、訊號與機台功能
-- 速度控制會先確認引擎接受倍率；未支援時會顯示失敗，不會假亮
-- 一般遊戲提供 1X／2X／4X／8X；支援的三款 ATG 遊戲另外提供 16X／MAX
-- 劇透只顯示「購買免遊」後由遊戲伺服器回傳的整輪結果；普通旋轉不顯示
-- 正式 API 模式：會員、金幣、通行證與資格不再使用本機假資料
-- 沒有任何 LINE 連結；公告 API 即使回傳 LINE 網址也會被網站擋掉
+- 電腦登入頁恢復為左側大型聖甲蟲、右側登入介面。
+- TZ 與 OFA 登入由使用者瀏覽器直接呼叫娛樂城 API；不再把 TZ 登入繞到 Render。
+- 遊戲在聖甲之心網站內全畫面載入，不會另開官方 ATG 分頁。
+- 遊戲頁、資源、Fetch/XHR 與 WebSocket 由同一個受限代理工作。
+- WebSocket 上游會使用 ATG 所需的 https://play.godeebxp.com Origin。
+- 懸浮工具會在遊戲頁載入，並監聽目前登入遊戲的服務連線。
+- 速度控制真正呼叫 Cocos TimeManager.instance.setTimeScale()。
+- 一般遊戲提供 1X／2X／4X／8X；戰神賽特 1、戰神賽特 2、虎小妹另提供 16X／MAX。
+- MAX 使用持續 32X，避免把 999 直接寫入 Cocos 導致頁面凍結。
+- 劇透功能沿用 ATG 引擎，只在購買免遊後讀取伺服器回傳的整輪結果。
+- 專案只有 ATG 遊戲與 ATG 引擎。
+- 公告中的 LINE 網址會被擋下，不會顯示。
 
 ## 上傳 GitHub
 
 1. 解壓縮 ZIP。
-2. 把解壓後的所有內容上傳到 GitHub 儲存庫根目錄。`package.json`、`server.js`、`render.yaml`、`public` 必須在同一層。
-3. 請勿上傳 HAR、代理後台 Bearer Token、密碼或 Google 驗證器金鑰。
-4. Commit changes。
+2. 將解壓後的所有內容上傳到 GitHub 儲存庫根目錄。
+3. 確認 package.json、server.js、render.yaml、public、runtime 在同一層。
+4. 不要上傳 HAR、代理後台 Bearer Token、密碼或驗證器金鑰。
 
-## Render 部署
-
-現有 Web Service 可使用：
+## Render 設定
 
 - Runtime：Node
-- Build Command：`npm install && npm run build:extension`
-- Start Command：`npm start`
-- Health Check Path：`/healthz`
+- Build Command：npm install
+- Start Command：npm start
+- Health Check Path：/healthz
 - Node：20 以上
 
-儲存設定後執行 **Manual Deploy → Clear build cache & deploy**。部署完成後開啟：
+部署完成後開啟 /healthz，應看到：
 
-`https://你的網址.onrender.com/healthz`
+    {"ok":true,"version":"2.53-atg-inapp"}
 
-看到 `{"ok":true,"version":"2.52-official-game-extension"}` 就代表新版伺服器已上線。Render 免費方案休眠後第一次開啟可能需要約 30～60 秒。
+## 測試順序
 
-## 電腦瀏覽器只需安裝一次
+1. 用自己的 TZ 帳號登入。
+2. 選一款 ATG 遊戲與機台。
+3. 確認遊戲留在網站內載入。
+4. 確認懸浮工具顯示「遊戲引擎已連線」。
+5. 點 2X，觀察實際動畫速度與工具狀態。
+6. 開啟劇透，實際購買免遊後確認整輪結果。
 
-Chrome 因同源安全限制，不允許網站直接修改第三方官方遊戲頁。因此先依照 `extension/README.txt` 安裝 ZIP 內附的擴充功能：
-
-1. Chrome 開啟 `chrome://extensions`。
-2. 開啟右上角「開發人員模式」。
-3. 按「載入未封裝項目」。
-4. 選擇解壓後的 `extension` 資料夾。
-5. 回網站重新整理、登入並開遊戲。
-
-網站本身上傳到 GitHub／Render；`extension` 資料夾則由要使用懸浮功能的電腦載入。手機瀏覽器不能安裝這個 Chrome 擴充功能，手機若要遊戲內注入仍應使用原 APK。
-
-## 實機測試順序
-
-1. 用自己的 TZ／OFA 測試帳號登入。
-2. 選遊戲並進入真實官方遊戲頁（新分頁）。
-3. 浮動面板的速度頁應顯示「遊戲引擎已連線」。
-4. 點 2X；只有引擎成功接受時才會顯示「引擎已套用 2X」。
-5. 點 AUTO START，再用 STOP 停止。
-6. 開啟劇透後先跑普通旋轉，普通旋轉不應出現結果。
-7. 實際購買免遊；遊戲伺服器回傳後，「本輪免遊最終結果」才會更新。
-
-遊戲商如果日後更換網域、Socket 協定或遊戲內節點名稱，擴充功能的網域清單或對應引擎可能需要跟著更新；面板會保留失敗狀態，方便分辨是引擎未連線，而不是假裝功能已啟用。
+靜態檢查與本機流程測試不需要帳號；TZ 真實登入、下注與購買免遊仍必須由你部署後使用自己的測試帳號驗證。
