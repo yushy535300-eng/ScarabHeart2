@@ -326,3 +326,26 @@ Behavior for the six simulated titles:
 - Prepared ATG entry URLs are reused briefly instead of repeating the whole lobby handshake.
 - The recommendation probe is stopped before the formal game session starts.
 - Added eager/high-priority iframe hints and ATG preconnect/DNS-prefetch.
+
+
+## v2.80 spread machine ranges
+
+Adjusted the six generated recommendation machine pools so they no longer appear as tightly clustered consecutive numbers.
+
+Ranges:
+- Tiger Princess: spread across the known 1500-series room section.
+- Hades / Baphomet: only 1-1000.
+- New Jinlian: only 1-500.
+- New Vampire Hunter: only 1-200.
+- Wuxia: only 1-110.
+- Son Go Ku: only 1-100.
+
+The existing machine-number auto-room flow is unchanged.
+All v2.79 loading-speed optimizations are preserved.
+
+
+## v2.81 Tiger Princess range update
+
+- Tiger Princess simulated recommendation machine range updated to 1-3000.
+- Ten recommended machine numbers are spread across the range instead of clustering near 1500.
+- Other game ranges and all v2.80/v2.79 behavior remain unchanged.
