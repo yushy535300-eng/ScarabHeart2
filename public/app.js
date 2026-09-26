@@ -3,7 +3,7 @@
 
   const $ = id => document.getElementById(id);
   const log = (...args) => { try { console.log('[ScarabHeart]', ...args); } catch (_) {} };
-  const APP_VERSION = 'v3.13-six-game-visible-recommendation-har-verified';
+  const APP_VERSION = 'v3.14-har-roomid-direct-seat-no-duplicate-toast';
   const GAMES = [
     ['golden-seth', '戰神賽特2 覺醒之力', 'media/game2.png'],
     ['egyptian-mythology', '戰神賽特', 'media/game8.png'],
@@ -1187,18 +1187,20 @@
       if (mode === 'manual') {
         target = '';
       } else if (pendingPick && String($('room').value).trim() === pendingPick.machineNum) {
-        // Seth-eye roomId is NOT guaranteed to be ATG's current live roomId.
-        // The user's video proved this: recommended machine 2169 became "#23".
-        // Therefore machineNum is the only authoritative auto-room target.
-        //
-        // Keep TARGET non-numeric so the engine enters its auto-room path,
-        // but force its built-in machine fallback to the real visible machineNum.
         machineNum = String(pendingPick.machineNum || '');
-        target = '__machine__' + machineNum;
         targetKind = 'roomId';
         boardName = pendingPick.boardName;
         const source = (boards && boards[pendingPick.board]) || [];
         boardList = source.filter(x => x && x.roomId && x.machineNum != null).map(x => ({ roomId: String(x.roomId), machineNum: String(x.machineNum), score: x.score }));
+
+        // The six HAR-backed titles have a REAL ATG roomId for every displayed
+        // recommendation. Do not throw that roomId away and fall back to visual
+        // pagination. atg-engine-runtime expects TARGET to be the roomId and
+        // MACHINENUM only as a fallback/display hint. Using "__machine__69"
+        // makes findRoom() search for roomId "69", which can never match e.g.
+        // Wuxia #69 -> roomId 310170 and causes endless page flipping.
+        const realHarRoomId = SIM_RECOMMEND_GAMES.has(requestedGame) && pendingPick.roomId && !String(pendingPick.roomId).startsWith('__machine__');
+        target = realHarRoomId ? String(pendingPick.roomId) : ('__machine__' + machineNum);
       } else {
         machineNum = String($('room').value || '').trim();
         if (!machineNum) throw new Error('請輸入機台號碼，或選擇「進入大廳自行選擇」');
@@ -1222,7 +1224,7 @@
       }
       const config = gameConfig(target, machineNum, boardName, boardList, targetKind);
       if (!window.ScarabWebLauncher) throw new Error('程式內遊戲載入器未就緒');
-      showRoomPickToast(machineNum, requestedGame);
+      hideRoomPickToast();
       ScarabWebLauncher.open(finalUrl, { kind: 'atg', gameCode: requestedGame, gameMeta: GAME_META[requestedGame], cfg: config });
       $('err2').textContent = '';
     } catch (error) {

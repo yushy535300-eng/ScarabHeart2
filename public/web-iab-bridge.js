@@ -97,15 +97,10 @@
   }
 
   function roomPickVisual(state, message) {
+    // v3.14: the game already has the original centered Scarab Heart locator.
+    // Keep the old outer page toast permanently hidden so two locators never overlap.
     var box=document.getElementById('roomPickToast');
-    if(!box) return;
-    if(state==='hide'||state==='done'){
-      box.classList.add('hide');
-      return;
-    }
-    var sub=document.getElementById('roomPickState');
-    if(sub&&message) sub.textContent=message;
-    box.classList.remove('hide');
+    if(box) box.classList.add('hide');
   }
 
   function openInApp(raw, payload) {

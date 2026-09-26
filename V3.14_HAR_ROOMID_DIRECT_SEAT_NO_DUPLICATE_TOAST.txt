@@ -1,0 +1,7 @@
+v3.14
+
+1. Six HAR-backed games now pass the verified ATG roomId as TARGET when a recommendation is selected.
+2. machineNum remains the fallback/display hint.
+3. Fixes endless visual page flipping such as Wuxia #69 (roomId 310170).
+4. Removes the duplicate outer roomPickToast; only the original in-game centered locator remains.
+5. All v3.04 ATG runtime files remain unchanged.
