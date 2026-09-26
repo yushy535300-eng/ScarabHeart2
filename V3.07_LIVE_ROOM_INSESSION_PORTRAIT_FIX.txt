@@ -1,8 +1,0 @@
-v3.07 — based on stable v3.04
-
-- Six titles: machineNum / room identity are collected from ATG live runtime; RTP is shown as RTP 指標 using the established display ranges.
-- Recommendation probe accepts multiple ATG object schemas and aggregates live room rows.
-- In-game 好房推薦 -> 前往 now asks 確定/取消 and switches inside the existing ATG iframe/session; it does not close/relogin/reopen the game.
-- If a recommended room cannot be entered, the runtime continues through the remaining recommendations and then other live ATG rooms.
-- Portrait titles (武俠/孫行者/惡魔血域/金蓮三缺一): only the original in-game locator is used; portrait locator is centered; room switch prefers real roomId and falls back to visible machine/next-page scanning.
-- Existing v3.04 login layout, whitelist, and stable selection behavior are preserved.

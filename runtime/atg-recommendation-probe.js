@@ -1,106 +1,230 @@
-/* ScarabHeart ATG recommendation probe v3.08
-   Reads real machine identities from the parser-blocking ATG room tap. For
-   zlib titles it also keeps a transport fallback; encrypted titles are read
-   after ATG's own framework has decoded InitialModel / SlotTableModel. */
+/* ScarabHeart ATG recommendation probe.
+   Runs only inside a short-lived hidden ATG iframe on the recommendation page.
+   It observes the authenticated game WebSocket, decodes ATG's deflate payload,
+   extracts the real slot-table array, posts it to the parent, then the parent
+   destroys the iframe. It never selects a room or spins the game. */
 (function () {
   'use strict';
   if (window.__scarabRecommendationProbeInstalled) return;
   window.__scarabRecommendationProbeInstalled = true;
 
   var gameCode = String(window.__SC_GAME_CODE || '');
-  var started = Date.now();
   var sent = false;
-  var collectStarted = false, collectDone = false;
-  var fallbackRows = new Map();
+  var startedAt = Date.now();
   var NativeWebSocket = window.WebSocket;
 
-  function n(v) { var x = Number(v); return Number.isFinite(x) ? x : 0; }
-  function first(o, ks) { for (var i=0;i<ks.length;i++){try{var v=o&&o[ks[i]];if(v!=null&&v!=='')return v}catch(_){}} return null; }
-  function digits(v) { if(v==null)return'';var s=String(v).trim().replace(/^#/,'');var m=s.match(/^0*(\d{1,6})$/);return m?String(Number(m[1])):''; }
-  function normalize(t) {
-    if(!t||typeof t!=='object')return null;
-    var b=t.table&&typeof t.table==='object'?Object.assign({},t,t.table):t;
-    var m=digits(first(b,['machineNum','machineNo','machineNumber','machine_num','number','num','tableNo','tableNumber','no']));
-    if(!m)return null;
-    var r=first(b,['roomId','roomID','room_id','tableId','tableID','table_id','rid']);
-    r=r==null?'':String(r).trim();
-    if(!/^\d+$/.test(r))return null;
-    var td=b.today&&typeof b.today==='object'?b.today:{};
-    var status=String(first(b,['status','state','roomStatus','tableStatus'])||'');
-    return {roomId:r,machineNum:m,status:status,isLocked:!!first(b,['isLocked','locked','disabled'])||/locked|close|maintenance/i.test(status),todayBet:n(first(td,['bet','amount','stake'])??first(b,['todayBet','betToday'])),todayWin:n(first(td,['win','payout','award'])??first(b,['todayWin','winToday'])),bet:n(first(b,['bet','stake','amount','totalBet'])),win:n(first(b,['win','payout','award','totalWin']))};
+  function num(v) {
+    var n = Number(v);
+    return Number.isFinite(n) ? n : 0;
   }
-  function inspect(v,depth,seen){
-    if(!v||typeof v!=='object'||depth>8)return;
-    if(seen)try{if(seen.has(v))return;seen.add(v)}catch(_){}
-    var row=normalize(v);if(row)fallbackRows.set(row.machineNum,row);
-    if(Array.isArray(v)){for(var i=0;i<v.length&&i<3000;i++)inspect(v[i],depth+1,seen);return;}
-    var direct=null;try{direct=Array.isArray(v.tables)?v.tables:(v.data&&Array.isArray(v.data.tables)?v.data.tables:null)}catch(_){}
-    if(direct)for(var q=0;q<direct.length;q++){var rr=normalize(direct[q]);if(rr)fallbackRows.set(rr.machineNum,rr)}
-    var keys;try{keys=Object.keys(v)}catch(_){return}
-    for(var j=0;j<keys.length&&j<180;j++){var k=keys[j];if(/^(parent|_parent|node|_node|children|_children)$/i.test(k))continue;try{inspect(v[k],depth+1,seen)}catch(_){}}
+
+  function firstValue(obj, keys) {
+    if (!obj || typeof obj !== 'object') return null;
+    for (var i=0;i<keys.length;i++) {
+      var k=keys[i];
+      try { if (obj[k] != null && obj[k] !== '') return obj[k]; } catch (_) {}
+    }
+    return null;
   }
-  function tapRows(){
-    try { var tap=window.__SCARAB_ATG_ROOM_TAP;if(tap&&typeof tap.scan==='function')tap.scan();if(tap&&typeof tap.getTables==='function')return tap.getTables()||[]; } catch (_) {}
-    return [];
+
+  function normalizeTable(t) {
+    if (!t || typeof t !== 'object') return null;
+    var candidates=[t,t.table,t.room,t.info,t.data,t.slotTable,t.slot,t.machine].filter(Boolean);
+    var roomId=null, machine=null, src=t;
+    for(var i=0;i<candidates.length;i++){
+      var x=candidates[i];
+      var r=firstValue(x,['roomId','roomID','room_id','rid','tableId','tableID','table_id']);
+      var m=firstValue(x,['number','machineNum','machineNo','machineNumber','machine_num','machine_no','tableNo','tableNumber','table_no','no','num']);
+      if(r!=null && m!=null){roomId=r;machine=m;src=x;break;}
+    }
+    if(roomId==null || machine==null) return null;
+    var today = src.today && typeof src.today === 'object' ? src.today : {};
+    var todayWin = num(firstValue(today,['win','todayWin']) != null ? firstValue(today,['win','todayWin']) : firstValue(src,['todayWin','winToday']));
+    var todayBet = num(firstValue(today,['bet','todayBet']) != null ? firstValue(today,['bet','todayBet']) : firstValue(src,['todayBet','betToday']));
+    var win = num(firstValue(src,['win','totalWin','payout']));
+    var bet = num(firstValue(src,['bet','totalBet','wager']));
+    var status = String(firstValue(src,['status','state','roomStatus']) || '');
+    var locked = !!firstValue(src,['isLocked','locked','isFull']) || /locked|full|maintenance|disabled/i.test(status);
+    return {
+      roomId: String(roomId),
+      machineNum: String(machine),
+      status: status,
+      isLocked: locked,
+      todayWin: todayWin,
+      todayBet: todayBet,
+      win: win,
+      bet: bet,
+      todayRtp: todayBet > 0 ? todayWin / todayBet * 100 : null,
+      rtp: bet > 0 ? win / bet * 100 : null,
+      rawFree: firstValue(src,['freeGameCount','freeSpinCount','fg']) != null ? num(firstValue(src,['freeGameCount','freeSpinCount','fg'])) : null
+    };
   }
-  function rows(){
-    var list=tapRows();
-    if(list&&list.length)return list;
-    return Array.from(fallbackRows.values());
+
+  function findBestTables(root) {
+    var best = null;
+    var seen = typeof WeakSet !== 'undefined' ? new WeakSet() : null;
+    var nodes = 0;
+    function walk(value, depth) {
+      if (!value || depth > 9 || nodes > 25000) return;
+      if (typeof value !== 'object') return;
+      nodes++;
+      if (seen) {
+        try { if (seen.has(value)) return; seen.add(value); } catch (_) {}
+      }
+      if (Array.isArray(value)) {
+        var valid = 0;
+        for (var i = 0; i < value.length && i < 20; i++) {
+          var x = value[i];
+          if (normalizeTable(x)) valid++;
+        }
+        if (valid >= Math.min(3, value.length) && (!best || value.length > best.length)) best = value;
+        for (var j = 0; j < value.length && j < 2000; j++) walk(value[j], depth + 1);
+        return;
+      }
+      var keys;
+      try { keys = Object.keys(value); } catch (_) { return; }
+      for (var k = 0; k < keys.length && k < 200; k++) {
+        var key = keys[k];
+        if (key === 'parent' || key === '_parent' || key === 'node' || key === '_node') continue;
+        try { walk(value[key], depth + 1); } catch (_) {}
+      }
+    }
+    walk(root, 0);
+    return best;
   }
-  function publish(force,source){
-    if(sent)return false;
-    var list=rows().filter(function(r){return r&&/^\d+$/.test(String(r.machineNum||''))&&/^\d+$/.test(String(r.roomId||''))});
-    if(!list.length)return false;
-    if(!force&&list.length<10)return false;
-    sent=true;
-    var meta=null;try{meta=window.__SCARAB_ATG_ROOM_TAP&&window.__SCARAB_ATG_ROOM_TAP.tableMeta||null}catch(_){}
-    try{parent.postMessage({__scarabRecommendationProbe:true,ok:true,gameCode:gameCode,source:source||'ATG_FRAMEWORK_TABLE_MODEL',capturedAt:Date.now(),tableMeta:meta,tables:list},location.origin)}catch(_){}
+
+  function publish(array, source) {
+    if (sent || !Array.isArray(array)) return false;
+    var rows = [];
+    var seen = Object.create(null);
+    array.forEach(function (item) {
+      var row = normalizeTable(item);
+      if (!row || !/^\d+$/.test(row.machineNum)) return;
+      if (seen[row.machineNum]) return;
+      seen[row.machineNum] = true;
+      rows.push(row);
+    });
+    if (rows.length < 1) return false;
+    sent = true;
+    try {
+      parent.postMessage({
+        __scarabRecommendationProbe: true,
+        ok: true,
+        gameCode: gameCode,
+        source: source || 'atg-websocket',
+        capturedAt: Date.now(),
+        tables: rows
+      }, location.origin);
+    } catch (_) {}
     return true;
   }
 
-  // Transport fallback for titles whose room table is zlib-compressed. The
-  // actual ATG packet starts with one binary attachment marker byte (0x04).
-  function parseText(text,source){
-    if(!text)return;var s=String(text),starts=[s.indexOf('{'),s.indexOf('[')].filter(function(x){return x>=0}).sort(function(a,b){return a-b});if(!starts.length)return;
-    try{var data=JSON.parse(s.slice(starts[0]));inspect(data,0,new WeakSet());publish(false,source)}catch(_){}
+  function inspectObject(value, source) {
+    if (sent) return;
+    try {
+      var found = findBestTables(value);
+      if (found) publish(found, source);
+    } catch (_) {}
   }
-  async function inspectBinary(data){
-    try{
-      var buf=data instanceof ArrayBuffer?data:(data&&typeof data.arrayBuffer==='function'?await data.arrayBuffer():null);if(!buf)return;
-      var bytes=new Uint8Array(buf),variants=[bytes];if(bytes.length>1&&bytes[0]===4)variants.unshift(bytes.slice(1));
-      if(typeof DecompressionStream!=='undefined'){
-        for(var vi=0;vi<variants.length;vi++)for(const type of ['deflate','deflate-raw','gzip']){try{var stream=new Blob([variants[vi]]).stream().pipeThrough(new DecompressionStream(type));var text=await new Response(stream).text();parseText(text,'ATG_WS_'+type);if(fallbackRows.size>=10)return}catch(_){}}
-      }
-      for(var x=0;x<variants.length;x++)try{parseText(new TextDecoder().decode(variants[x]),'ATG_WS_TEXT')}catch(_){}
-    }catch(_){}
-  }
-  function observe(e){try{if(typeof e.data==='string')parseText(e.data,'ATG_WS_TEXT');else inspectBinary(e.data)}catch(_){} }
-  try{
-    var add=NativeWebSocket&&NativeWebSocket.prototype&&NativeWebSocket.prototype.addEventListener;
-    if(typeof add==='function'){
-      var Old=window.WebSocket;
-      window.WebSocket=function(url,protocols){var ws=protocols?new Old(url,protocols):new Old(url);try{add.call(ws,'message',observe)}catch(_){}return ws};
-      window.WebSocket.prototype=Old.prototype;
-      ['CONNECTING','OPEN','CLOSING','CLOSED'].forEach(function(k){try{Object.defineProperty(window.WebSocket,k,{value:Old[k],configurable:true})}catch(_){}});
-    }
-  }catch(_){}
 
-  window.addEventListener('scarab:atg-tables',function(e){try{inspect(e.detail,0,new WeakSet());publish(false,'ATG_FRAMEWORK_TABLE_MODEL')}catch(_){} });
-  var timer=setInterval(function(){
-    var tap=null;
-    try{tap=window.__SCARAB_ATG_ROOM_TAP;if(tap&&typeof tap.scan==='function')tap.scan()}catch(_){}
-    try{
-      if(tap&&!collectStarted&&tap.tableMeta&&Number(tap.tableMeta.totalPages||1)>1&&typeof tap.collectAllPages==='function'){
-        collectStarted=true;
-        Promise.resolve(tap.collectAllPages()).then(function(){collectDone=true;publish(true,'ATG_NATIVE_ALL_PAGES')}).catch(function(){collectDone=true});
+  async function inspectBinary(data) {
+    if (sent || typeof DecompressionStream === 'undefined') return;
+    try {
+      var buffer;
+      if (data instanceof ArrayBuffer) buffer = data;
+      else if (data && typeof data.arrayBuffer === 'function') buffer = await data.arrayBuffer();
+      else return;
+      var bytes = new Uint8Array(buffer);
+      var offset = -1;
+      for (var i = 0; i < Math.min(16, bytes.length - 1); i++) {
+        if (bytes[i] === 0x78 && (bytes[i+1] === 0x01 || bytes[i+1] === 0x5e || bytes[i+1] === 0x9c || bytes[i+1] === 0xda)) {
+          offset = i; break;
+        }
       }
-    }catch(_){}
-    var age=Date.now()-started;
-    // Single-page games publish immediately. Multi-page games wait briefly for
-    // the native page collector so tiger/hades recommendations can see all pages.
-    if((!collectStarted||collectDone||age>14000)&&publish(false,'ATG_FRAMEWORK_TABLE_MODEL')){clearInterval(timer);return;}
-    if(age>16000&&publish(true,'ATG_FRAMEWORK_PARTIAL')){clearInterval(timer);return;}
-    if(age>32000){clearInterval(timer);if(!sent)try{parent.postMessage({__scarabRecommendationProbe:true,ok:false,gameCode:gameCode,error:'ATG 真實機台資料尚未完成同步'},location.origin)}catch(_){}}
-  },160);
+      if (offset < 0) return;
+      var sliced = offset === 0 ? bytes : bytes.subarray(offset);
+      var stream = new Blob([sliced]).stream().pipeThrough(new DecompressionStream('deflate'));
+      var text = await new Response(stream).text();
+      if (!/(roomId|room_id|tableId|table_id)/.test(text) || !/(number|machineNum|machineNo|machine_num|tableNo|table_no)/.test(text)) return;
+      var json = JSON.parse(text);
+      inspectObject(json, 'atg-websocket-deflate');
+    } catch (_) {}
+  }
+
+  function observeMessage(event) {
+    try {
+      if (event && (event.data instanceof ArrayBuffer || (event.data && typeof event.data.arrayBuffer === 'function'))) {
+        inspectBinary(event.data);
+      } else if (event && typeof event.data === 'string' && event.data.indexOf('roomId') >= 0) {
+        var text = event.data.replace(/^\d+/, '');
+        try { inspectObject(JSON.parse(text), 'atg-websocket-text'); } catch (_) {}
+      }
+    } catch (_) {}
+  }
+
+  // Patch WebSocket before the game creates its socket. The original game
+  // listeners continue to receive every message unchanged.
+  try {
+    var nativeAdd = NativeWebSocket.prototype.addEventListener;
+    var nativeDesc = Object.getOwnPropertyDescriptor(NativeWebSocket.prototype, 'onmessage');
+    NativeWebSocket.prototype.addEventListener = function (type, fn, opts) {
+      if (type === 'message') {
+        try { nativeAdd.call(this, 'message', observeMessage); } catch (_) {}
+      }
+      return nativeAdd.call(this, type, fn, opts);
+    };
+    if (nativeDesc && nativeDesc.set && nativeDesc.get) {
+      Object.defineProperty(NativeWebSocket.prototype, 'onmessage', {
+        configurable: true,
+        enumerable: nativeDesc.enumerable,
+        get: nativeDesc.get,
+        set: function (fn) {
+          try { nativeAdd.call(this, 'message', observeMessage); } catch (_) {}
+          return nativeDesc.set.call(this, fn);
+        }
+      });
+    }
+    window.WebSocket = function (url, protocols) {
+      var ws = protocols ? new NativeWebSocket(url, protocols) : new NativeWebSocket(url);
+      try { nativeAdd.call(ws, 'message', observeMessage); } catch (_) {}
+      return ws;
+    };
+    window.WebSocket.prototype = NativeWebSocket.prototype;
+    ['CONNECTING','OPEN','CLOSING','CLOSED'].forEach(function(k){
+      try { Object.defineProperty(window.WebSocket,k,{value:NativeWebSocket[k],configurable:true}); } catch (_) {}
+    });
+  } catch (_) {}
+
+  // Fallback: the game can finish decoding before a binary observer catches it.
+  // Scan service state briefly for the same roomId/number table array.
+  var scanTimer = setInterval(function () {
+    if (sent) { clearInterval(scanTimer); return; }
+    try {
+      var app = window.App;
+      var services = app && app.serviceManager && app.serviceManager.services;
+      // Some titles (notably the non-zlib table packet variants) are decoded
+      // by the game's own service layer before the table list becomes visible.
+      // Scan the decoded App/service state too, so the probe is not tied to one
+      // wire compression format.
+      if (app) inspectObject(app, 'atg-app-state');
+      if (Array.isArray(services)) {
+        inspectObject(services, 'atg-service-state');
+        services.forEach(function(service){
+          try {
+            var socket = service && service._client && service._client._io;
+            if (socket && !socket.__scarabProbeAny && typeof socket.onAny === 'function') {
+              socket.__scarabProbeAny = true;
+              socket.onAny(function(){ inspectObject([].slice.call(arguments), 'atg-socketio-event'); });
+            }
+          } catch (_) {}
+        });
+      }
+    } catch (_) {}
+    if (Date.now() - startedAt > 16000) {
+      clearInterval(scanTimer);
+      if (!sent) {
+        try { parent.postMessage({__scarabRecommendationProbe:true,ok:false,gameCode:gameCode,error:'ATG 即時機台資料逾時'}, location.origin); } catch (_) {}
+      }
+    }
+  }, 80);
 })();
