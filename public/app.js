@@ -3,7 +3,7 @@
 
   const $ = id => document.getElementById(id);
   const log = (...args) => { try { console.log('[ScarabHeart]', ...args); } catch (_) {} };
-  const APP_VERSION = 'v3.10-six-game-platformmodel-cleanup-fix';
+  const APP_VERSION = 'v3.11-six-game-system-registry-probe-fix';
   const GAMES = [
     ['golden-seth', '戰神賽特2 覺醒之力', 'media/game2.png'],
     ['egyptian-mythology', '戰神賽特', 'media/game8.png'],
@@ -830,7 +830,7 @@
     if (!session || session.game !== gameCode || serial !== recommendationProbeSerial) throw new Error('probe-cancelled');
 
     const target = new URL(finalUrl);
-    target.searchParams.delete('table');
+    target.searchParams.set('table', '1');
     const payload = {
       kind:'atg', probe:true, probeKind:'six-live-tables', gameCode:gameCode,
       gameMeta:GAME_META[gameCode] || {},
@@ -860,6 +860,15 @@
         if (event.source !== frame.contentWindow) return;
         const data = event.data;
         if (!data || data.__scarabRecommendationProbe !== true || String(data.gameCode || '') !== gameCode) return;
+        if (data.progress === true) {
+          try {
+            const label = data.stage === 'boot' ? 'ATG 載入中' :
+              data.stage === 'system' ? 'ATG 已連線' :
+              data.stage === 'tables' ? '機台資料載入中' : '重新讀取中';
+            if (session && session.game === gameCode) $('updTime').textContent = label;
+          } catch (_) {}
+          return;
+        }
         if (data.ok && Array.isArray(data.tables) && data.tables.length >= 1) {
           const tables = data.tables.slice(0, 3500); // hard bound; never accumulate snapshots.
           cleanup();
@@ -869,7 +878,7 @@
           reject(new Error(data.error || 'ATG 即時機台資料讀取失敗'));
         }
       };
-      const timer = setTimeout(() => { cleanup(); reject(new Error('ATG 即時機台資料逾時')); }, 30000);
+      const timer = setTimeout(() => { cleanup(); reject(new Error('ATG 即時機台資料逾時')); }, 35000);
       recommendationProbe = {frame, listener, timer, reject};
       window.addEventListener('message', listener);
       document.body.appendChild(frame);

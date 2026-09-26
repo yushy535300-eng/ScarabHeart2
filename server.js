@@ -116,7 +116,7 @@ app.post('/api/access/login',accessJson,async(req,res)=>{try{const username=Stri
 app.get('/api/access/check',async(req,res)=>{const id=String(req.query.sessionId||''),current=accessSessions.get(id);if(!current)return res.status(401).json({valid:false,reason:'session_invalid'});try{const access=await authorizeWhitelist(current.username,current.platform);if(!access.allowed){accessSessions.delete(id);return res.status(403).json({valid:false,reason:access.reason});}res.json({valid:true,reason:'ok'});}catch(e){res.status(503).json({valid:false,reason:'database_unavailable',temporary:true});}});
 app.post('/api/access/logout',accessJson,(req,res)=>{const id=String(req.body&&req.body.sessionId||'');if(id)accessSessions.delete(id);res.json({success:true});});
 app.get('/healthz', (_req, res) => {
-  res.status(200).json({ ok: true, version: '3.10-six-game-platformmodel-cleanup-fix' });
+  res.status(200).json({ ok: true, version: '3.11-six-game-system-registry-probe-fix' });
 });
 
 app.use('/__api', express.raw({ type: '*/*', limit: '2mb' }), async (req, res) => {
@@ -237,7 +237,7 @@ function gameBoot(sid, originalHref, session, withRuntime) {
     '<\/script>';
   if (payload && payload.probe === true) {
     const probeScript = payload.probeKind === 'six-live-tables'
-      ? '/__runtime/atg-six-recommendation-probe.js?v=310'
+      ? '/__runtime/atg-six-recommendation-probe.js?v=311'
       : '/__runtime/atg-recommendation-probe.js?v=274';
     return proxyBoot + commonRuntimeBoot +
       '<script>(function(){var s=document.createElement("script");s.src=location.origin+' + scriptJson(probeScript) + ';s.defer=false;(document.head||document.documentElement).appendChild(s)})()<\/script>';

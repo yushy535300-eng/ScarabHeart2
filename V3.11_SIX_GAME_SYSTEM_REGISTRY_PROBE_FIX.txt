@@ -1,0 +1,10 @@
+v3.11 six-game System registry probe fix
+
+Base: v3.10, whose normal ATG game runtimes are byte-identical to v3.04.
+
+Fixes:
+1. Six recommendation games now open ATG room-table mode with ?table=1, matching the supplied HAR flow that triggers getSlotTables.
+2. Passive reader no longer relies only on System.import guesses. It reads Cocos/SystemJS named modules through System.get/System.entries/registerRegistry, then scans the already-decoded PlatformModel / SlotTableModel / SlotFrameworkData state for real machine number + roomId + status.
+3. No WebSocket/System.register/Map/WeakMap/fetch/XHR patching is added to the normal game runtime.
+4. Hidden probe posts progress stages and is destroyed after one bounded snapshot.
+5. Existing cleanup/session TTL protections remain.
