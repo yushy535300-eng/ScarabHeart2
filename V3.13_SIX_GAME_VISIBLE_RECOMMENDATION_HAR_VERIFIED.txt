@@ -1,0 +1,12 @@
+ScarabHeart2 v3.13
+
+Base: v3.04 MOBILE LOGIN BALANCED SPACING.
+
+Changes:
+1. Restore immediate recommendation-card rendering for the six non-Seth-API games.
+2. No hidden ATG recommendation iframe is required before cards can display.
+3. MachineNum/roomId pairs are taken from the user supplied ATG HAR captures and were Empty in those captures.
+4. RTP remains the assistant indicator and is shown as RTP 指標.
+5. Existing v2.98/v3.04 room-entry flow remains unchanged; machineNum stays authoritative when entering ATG.
+6. No changes to normal ATG game boot/runtime, whitelist, login, speed, overlay or other working features.
+7. Removing the six-game hidden recommendation probe also prevents those probe iframes/sessions from accumulating during long use.

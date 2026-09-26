@@ -1,20 +1,3 @@
-# ScarabHeart2 Web v3.12
-
-## v3.12 六款 ATG 真實機台讀取修正
-
-這版不再從 Cocos/SystemJS 內部 Model 猜機台資料。六款隱藏推薦頁原本就會經過本機的 ATG WebSocket proxy；v3.12 直接在 **probe session 的 server bridge** 讀 ATG 真實 Socket.IO 回覆，正常遊戲 session 完全不走這個解析邏輯。
-
-已用使用者提供的六款 HAR 驗證兩種 ATG 真實封包：
-
-- `0x04 + zlib(JSON)`：武俠、孫行者、古神巴風特
-- `0x04 + AES-256-GCM(zlib(JSON))`：虎小妹、惡魔血域、金蓮三缺一
-
-加密封包的 key derivation 依 ATG 前端 CryptoTool：`SHA256(token + "atgisbetgame")`。
-
-多頁機台（虎小妹、巴風特、金蓮）會在 **隱藏 probe session** 內用 ATG 原生 `getSlotTables` 逐頁取得，回覆不送進正常遊戲畫面。
-
-正常遊戲的 `bootstrap-runtime / atg-engine-runtime / atg-live-adapter / stability-runtime / overlay-runtime` 保持 v3.04 基準 lineage，不用這套 probe decoder。
-
 # ScarabHeart2 Web v2.57 — ATG Direct Base Fix
 
 本版針對最新 HAR 的剩餘 429 / 502 / 503 根因修正：

@@ -11,7 +11,6 @@ const { WebSocket, WebSocketServer } = require('ws');
 const { HttpsProxyAgent } = require('https-proxy-agent');
 const path = require('path');
 const crypto = require('crypto');
-const zlib = require('zlib');
 const { adminPage } = require('./admin-page');
 const { authorizeWhitelist, listWhitelist, upsertWhitelist, setWhitelistEnabled, extendWhitelist, deleteWhitelist } = require('./whitelist');
 
@@ -117,7 +116,7 @@ app.post('/api/access/login',accessJson,async(req,res)=>{try{const username=Stri
 app.get('/api/access/check',async(req,res)=>{const id=String(req.query.sessionId||''),current=accessSessions.get(id);if(!current)return res.status(401).json({valid:false,reason:'session_invalid'});try{const access=await authorizeWhitelist(current.username,current.platform);if(!access.allowed){accessSessions.delete(id);return res.status(403).json({valid:false,reason:access.reason});}res.json({valid:true,reason:'ok'});}catch(e){res.status(503).json({valid:false,reason:'database_unavailable',temporary:true});}});
 app.post('/api/access/logout',accessJson,(req,res)=>{const id=String(req.body&&req.body.sessionId||'');if(id)accessSessions.delete(id);res.json({success:true});});
 app.get('/healthz', (_req, res) => {
-  res.status(200).json({ ok: true, version: '3.12-six-game-socket-binary-table-fix' });
+  res.status(200).json({ ok: true, version: '3.13-six-game-visible-recommendation-har-verified' });
 });
 
 app.use('/__api', express.raw({ type: '*/*', limit: '2mb' }), async (req, res) => {
@@ -186,10 +185,6 @@ app.get('/__runtime/atg-recommendation-probe.js', (_req, res) => {
   res.set('Cache-Control', 'no-store');
   res.sendFile(path.join(runtimeDir, 'atg-recommendation-probe.js'));
 });
-app.get('/__runtime/atg-six-recommendation-probe.js', (_req, res) => {
-  res.set('Cache-Control', 'no-store');
-  res.sendFile(path.join(runtimeDir, 'atg-six-recommendation-probe.js'));
-});
 app.get('/__runtime/overlay-runtime.js', (_req, res) => {
   res.sendFile(path.join(runtimeDir, 'overlay-runtime.js'));
 });
@@ -237,11 +232,8 @@ function gameBoot(sid, originalHref, session, withRuntime) {
     'window.__SCARAB_FORCE_MANUAL_ROOM=false;' +
     '<\/script>';
   if (payload && payload.probe === true) {
-    const probeScript = payload.probeKind === 'six-live-tables'
-      ? '/__runtime/atg-six-recommendation-probe.js?v=312'
-      : '/__runtime/atg-recommendation-probe.js?v=274';
     return proxyBoot + commonRuntimeBoot +
-      '<script>(function(){var s=document.createElement("script");s.src=location.origin+' + scriptJson(probeScript) + ';s.defer=false;(document.head||document.documentElement).appendChild(s)})()<\/script>';
+      '<script>(function(){var s=document.createElement("script");s.src=location.origin+"/__runtime/atg-recommendation-probe.js?v=274";s.defer=false;(document.head||document.documentElement).appendChild(s)})()<\/script>';
   }
   const runtimeBoot = commonRuntimeBoot +
     '<script>try{parent.postMessage({__scarabStatus:true,state:"engine-wait"},location.origin)}catch(e){}<\/script>' +
@@ -271,243 +263,6 @@ function sendCookies(res, upstream, sid) {
     .replace(/;\s*Path=[^;]*/ig, '; Path=/__game/' + sid + '/')));
 }
 
-
-// v3.12: six-game recommendations are captured from the same Socket.IO traffic
-// the hidden ATG probe already receives. This is intentionally server-side and
-// read-only for normal game sessions: no SystemJS, Map, WeakMap or page WebSocket
-// monkey-patching is needed to obtain the real machine list.
-function isSixGameProbeSession(session) {
-  return !!(session && session.payload && session.payload.probe === true &&
-    session.payload.probeKind === 'six-live-tables');
-}
-
-function probeInitState(session) {
-  if (!isSixGameProbeSession(session)) return null;
-  if (!session.probeState) {
-    session.probeState = {
-      status: 'boot',
-      error: '',
-      complete: false,
-      partial: false,
-      tables: new Map(),
-      tableMeta: null,
-      pages: new Set(),
-      ackRequests: new Map(),
-      pendingBinary: null,
-      token: '',
-      ackSeq: 9000,
-      requestInFlight: false,
-      requestedPage: 0,
-      pageTimer: null,
-      updatedAt: Date.now()
-    };
-  }
-  return session.probeState;
-}
-
-function probeNormalizeTable(raw) {
-  if (!raw || typeof raw !== 'object') return null;
-  const roomId = raw.roomId ?? raw.room_id ?? raw.tableId ?? raw.table_id ?? raw.id;
-  const number = raw.number ?? raw.machineNum ?? raw.machineNo ?? raw.machine_no ?? raw.roomNumber ?? raw.tableNumber;
-  if (roomId == null || number == null) return null;
-  const machineNum = String(number).trim();
-  if (!/^\d+$/.test(machineNum)) return null;
-  const today = raw.today && typeof raw.today === 'object' ? raw.today : {};
-  const status = String(raw.status ?? raw.tableStatus ?? '');
-  const n = value => {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : 0;
-  };
-  return {
-    roomId: String(roomId),
-    machineNum,
-    status,
-    isLocked: !!raw.isLocked || !!raw.locked || /locked/i.test(status),
-    todayWin: n(today.win ?? raw.todayWin),
-    todayBet: n(today.bet ?? raw.todayBet),
-    win: n(raw.win),
-    bet: n(raw.bet),
-    rawFree: raw.freeGameCount != null ? n(raw.freeGameCount) :
-      (raw.freeSpinCount != null ? n(raw.freeSpinCount) : (raw.fg != null ? n(raw.fg) : null))
-  };
-}
-
-function probeDecodeBinary(buffer, request, zipFlag) {
-  let raw = Buffer.from(buffer || []);
-  // Engine.IO websocket binary MESSAGE packet type is 0x04. Chrome HAR proves
-  // ATG attachments include it before either zlib or AES-GCM payload bytes.
-  if (raw.length && raw[0] === 0x04) raw = raw.subarray(1);
-  if (!raw.length) throw new Error('empty_binary_attachment');
-  let jsonBytes;
-  if (zipFlag) {
-    jsonBytes = zlib.inflateSync(raw);
-  } else {
-    const token = String(request && request.token || '');
-    if (!token) throw new Error('encrypted_attachment_without_token');
-    if (raw.length < 29) throw new Error('encrypted_attachment_too_short');
-    const key = crypto.createHash('sha256')
-      .update(token, 'utf8')
-      .update(Buffer.from('atgisbetgame', 'utf8'))
-      .digest();
-    const iv = raw.subarray(0, 12);
-    const tag = raw.subarray(12, 28);
-    const ciphertext = raw.subarray(28);
-    const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
-    decipher.setAuthTag(tag);
-    const compressed = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
-    jsonBytes = zlib.inflateSync(compressed);
-  }
-  return JSON.parse(jsonBytes.toString('utf8'));
-}
-
-function probeStoreDecoded(session, decoded, request) {
-  const state = probeInitState(session);
-  if (!state || !decoded || typeof decoded !== 'object') return;
-  const platform = decoded.platform && typeof decoded.platform === 'object' ? decoded.platform : null;
-  const data = decoded.data && typeof decoded.data === 'object' ? decoded.data : null;
-  const list = Array.isArray(platform && platform.tables) ? platform.tables :
-    (Array.isArray(data && data.tables) ? data.tables : []);
-  const meta = (platform && platform.tableMeta) || (data && data.tableMeta) || null;
-  if (meta && typeof meta === 'object') state.tableMeta = Object.assign({}, state.tableMeta || {}, meta);
-  for (const raw of list) {
-    const row = probeNormalizeTable(raw);
-    if (!row) continue;
-    state.tables.set(row.roomId + ':' + row.machineNum, row);
-  }
-  const page = Number((request && request.page) || (meta && meta.currentPage) || 0);
-  if (list.length && Number.isFinite(page) && page > 0) state.pages.add(page);
-  if (decoded.token) state.token = String(decoded.token);
-  state.status = state.tables.size ? 'tables' : state.status;
-  state.updatedAt = Date.now();
-}
-
-function probeFinishOrPage(session, upstream) {
-  const state = probeInitState(session);
-  if (!state || state.complete || state.requestInFlight) return;
-  const totalPages = Math.max(1, Math.min(12, Number(state.tableMeta && state.tableMeta.totalPages || 1)));
-  let nextPage = 0;
-  for (let page = 1; page <= totalPages; page++) {
-    if (!state.pages.has(page)) { nextPage = page; break; }
-  }
-  if (!nextPage) {
-    state.complete = state.tables.size > 0;
-    state.status = state.complete ? 'complete' : 'failed';
-    if (!state.complete && !state.error) state.error = 'ATG initial response did not contain machine tables';
-    state.updatedAt = Date.now();
-    return;
-  }
-  if (!state.token || !upstream || upstream.readyState !== WebSocket.OPEN) return;
-  const ackId = ++state.ackSeq;
-  const request = { event: 'getSlotTables', page: nextPage, token: state.token, synthetic: true, ackId };
-  state.ackRequests.set(ackId, request);
-  state.requestInFlight = true;
-  state.requestedPage = nextPage;
-  state.status = 'paging';
-  state.updatedAt = Date.now();
-  const packet = '42' + ackId + JSON.stringify(['getSlotTables', {
-    page: nextPage,
-    token: state.token,
-    locale: 'zh-tw'
-  }]);
-  try {
-    upstream.send(packet, { binary: false });
-  } catch (error) {
-    state.requestInFlight = false;
-    state.error = 'ATG page request failed: ' + String(error && error.message || error);
-    state.partial = state.tables.size > 0;
-    state.complete = state.partial;
-    state.status = state.complete ? 'complete' : 'failed';
-    return;
-  }
-  if (state.pageTimer) clearTimeout(state.pageTimer);
-  state.pageTimer = setTimeout(() => {
-    state.pageTimer = null;
-    if (!state.requestInFlight || state.requestedPage !== nextPage) return;
-    state.requestInFlight = false;
-    state.error = 'ATG machine page ' + nextPage + ' timed out';
-    state.partial = state.tables.size > 0;
-    state.complete = state.partial;
-    state.status = state.complete ? 'complete' : 'failed';
-    state.updatedAt = Date.now();
-  }, 7000);
-}
-
-function probeHandleClientMessage(session, data, binary) {
-  const state = probeInitState(session);
-  if (!state || binary) return;
-  const text = Buffer.isBuffer(data) ? data.toString('utf8') : String(data || '');
-  const match = text.match(/^42(\d+)(\[.*\])$/s);
-  if (!match) return;
-  try {
-    const ackId = Number(match[1]);
-    const args = JSON.parse(match[2]);
-    const event = String(args[0] || '');
-    const payload = args[1] && typeof args[1] === 'object' ? args[1] : {};
-    if (event !== 'initial' && event !== 'getSlotTables') return;
-    const request = {
-      event,
-      page: Number(payload.page || 0),
-      token: String(payload.token || ''),
-      synthetic: false,
-      ackId
-    };
-    state.ackRequests.set(ackId, request);
-    if (event === 'initial') {
-      state.status = 'connected';
-      state.updatedAt = Date.now();
-    }
-  } catch (_) {}
-}
-
-function probeHandleUpstreamMessage(session, upstream, data, binary) {
-  const state = probeInitState(session);
-  if (!state) return false;
-  if (!binary) {
-    const text = Buffer.isBuffer(data) ? data.toString('utf8') : String(data || '');
-    const match = text.match(/^46(\d+)-(\d+)(\[.*\])$/s);
-    if (!match) return false;
-    try {
-      const ackId = Number(match[2]);
-      const args = JSON.parse(match[3]);
-      const envelope = args[0] && typeof args[0] === 'object' ? args[0] : {};
-      const request = state.ackRequests.get(ackId) || null;
-      if (!request) return false;
-      state.pendingBinary = {
-        request,
-        zip: Number(envelope.zip || 0) === 1,
-        suppress: !!request.synthetic
-      };
-      return !!request.synthetic;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  const pending = state.pendingBinary;
-  if (!pending) return false;
-  state.pendingBinary = null;
-  if (pending.request && pending.request.synthetic) {
-    state.requestInFlight = false;
-    state.requestedPage = 0;
-    if (state.pageTimer) { clearTimeout(state.pageTimer); state.pageTimer = null; }
-  }
-  try {
-    const decoded = probeDecodeBinary(data, pending.request, pending.zip);
-    probeStoreDecoded(session, decoded, pending.request);
-    state.ackRequests.delete(pending.request.ackId);
-    // Let the real ATG client receive and process its own initial packet before
-    // we use the rolling token for hidden probe-only page requests.
-    setTimeout(() => probeFinishOrPage(session, upstream), pending.request.synthetic ? 30 : 220);
-  } catch (error) {
-    state.error = 'ATG binary decode failed: ' + String(error && error.message || error);
-    state.partial = state.tables.size > 0;
-    state.complete = state.partial;
-    state.status = state.complete ? 'complete' : 'failed';
-    state.updatedAt = Date.now();
-  }
-  return !!pending.suppress;
-}
-
 app.get('/__game/open', (req, res) => {
   let url;
   try { url = new URL(String(req.query.url || '')); }
@@ -526,38 +281,6 @@ app.get('/__game/open', (req, res) => {
     lastGoodDocumentUrl: ''
   });
   res.redirect(302, '/__game/' + sid + url.pathname + url.search);
-});
-
-app.post('/__game/session/:sid/close', express.json({ limit: '4kb' }), (req, res) => {
-  const sid = String(req.params.sid || '');
-  if (sid) sessions.delete(sid);
-  res.status(204).end();
-});
-
-
-app.get('/__game/session/:sid/probe-tables', (req, res) => {
-  const sid = String(req.params.sid || '');
-  const session = sessions.get(sid);
-  if (!session || !isSixGameProbeSession(session)) {
-    return res.status(404).json({ ok:false, status:'missing', error:'probe session not found' });
-  }
-  const state = probeInitState(session);
-  const tables = state ? Array.from(state.tables.values()).slice(0, 4000) : [];
-  const totalPages = Math.max(1, Number(state && state.tableMeta && state.tableMeta.totalPages || 1));
-  res.set('Cache-Control', 'no-store');
-  res.json({
-    ok: !!(state && (state.complete || tables.length)),
-    status: state ? state.status : 'boot',
-    complete: !!(state && state.complete),
-    partial: !!(state && state.partial),
-    error: state ? state.error : '',
-    gameCode: String(session.payload && session.payload.gameCode || ''),
-    count: tables.length,
-    pagesLoaded: state ? Array.from(state.pages).sort((a,b)=>a-b) : [],
-    totalPages,
-    tableMeta: state ? state.tableMeta : null,
-    tables
-  });
 });
 
 app.all('/__game/:sid/__remote', express.raw({ type: '*/*', limit: '16mb' }), async (req, res) => {
@@ -785,22 +508,14 @@ app.use(express.static(publicDir, { extensions: ['html'] }));
 app.get('*', (_req, res) => res.sendFile(path.join(publicDir, 'index.html')));
 
 setInterval(() => {
-  const now = Date.now();
-  const normalCutoff = now - 6 * 60 * 60 * 1000;
-  const probeCutoff = now - 2 * 60 * 1000;
+  const cutoff = Date.now() - 6 * 60 * 60 * 1000;
   for (const [id, session] of sessions) {
-    const isProbe = !!(session && session.payload && session.payload.probe === true);
-    if ((isProbe && session.createdAt < probeCutoff) || (!isProbe && session.createdAt < normalCutoff)) sessions.delete(id);
+    if (session.createdAt < cutoff) sessions.delete(id);
   }
   for (const [id, access] of accessSessions) {
-    if (access.createdAt < normalCutoff) accessSessions.delete(id);
+    if (access.createdAt < cutoff) accessSessions.delete(id);
   }
-  for (const [key, cached] of recommendationProxyCache) {
-    if (!cached || now - Number(cached.at || 0) > 10 * 60 * 1000) recommendationProxyCache.delete(key);
-  }
-  // Hard caps prevent accidental long-running accumulation even if upstream URLs vary.
-  while (recommendationProxyCache.size > 24) recommendationProxyCache.delete(recommendationProxyCache.keys().next().value);
-}, 60 * 1000).unref();
+}, 30 * 60 * 1000).unref();
 
 const server = app.listen(process.env.PORT || 3000, '0.0.0.0', () => {
   console.log('ScarabHeart ATG web service listening on ' + (process.env.PORT || 3000));
@@ -819,15 +534,12 @@ function rejectUpgrade(socket, status, message) {
     Buffer.byteLength(body) + '\r\n\r\n' + body);
 }
 
-function bridgeSockets(client, upstream, session) {
+function bridgeSockets(client, upstream) {
   client.on('message', (data, binary) => {
-    try { probeHandleClientMessage(session, data, binary); } catch (_) {}
     if (upstream.readyState === WebSocket.OPEN) upstream.send(data, { binary });
   });
   upstream.on('message', (data, binary) => {
-    let suppress = false;
-    try { suppress = probeHandleUpstreamMessage(session, upstream, data, binary); } catch (_) {}
-    if (!suppress && client.readyState === WebSocket.OPEN) client.send(data, { binary });
+    if (client.readyState === WebSocket.OPEN) client.send(data, { binary });
   });
   client.on('close', (code, reason) => {
     if (upstream.readyState === WebSocket.OPEN) upstream.close(code === 1005 ? 1000 : code, reason);
@@ -887,7 +599,7 @@ server.on('upgrade', (req, socket, head) => {
       if (upstream.protocol) req.headers['sec-websocket-protocol'] = upstream.protocol;
       else delete req.headers['sec-websocket-protocol'];
       socketServer.handleUpgrade(req, socket, head, client => {
-        bridgeSockets(client, upstream, session);
+        bridgeSockets(client, upstream);
       });
     });
   } catch (_) {
