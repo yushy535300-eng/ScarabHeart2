@@ -1,0 +1,11 @@
+v3.12 six-game Socket.IO binary table fix
+
+- Normal ATG gameplay runtimes remain unchanged from the v3.04 baseline lineage.
+- Six recommendation games no longer inspect Cocos/SystemJS model internals.
+- Hidden probe sessions capture the real ATG Socket.IO initial table payload server-side.
+- Supports both ATG payload formats verified in the supplied HARs:
+  * Engine.IO 0x04 + zlib JSON
+  * Engine.IO 0x04 + AES-256-GCM(zlib JSON), key = SHA256(token + atgisbetgame)
+- Multi-page table sets use probe-only getSlotTables requests with the rolling ATG token.
+- Normal gameplay WebSocket traffic is not decoded or altered by this feature.
+- Probe snapshots are bounded and are removed with the existing probe session cleanup.
