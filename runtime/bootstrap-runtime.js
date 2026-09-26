@@ -60,11 +60,6 @@
   var portraitWasWaiting = false;
   var portraitClearSince = 0;
   var overlayRecovering = false;
-  var portraitFinderTimer = null;
-  var portraitTargetAttemptAt = 0;
-  var portraitPageAttemptAt = 0;
-  var portraitPageIndex = 1;
-  var portraitEngineSwitching = false;
   var loaded = Object.create(null);
   var watchdogTimer = null;
 
@@ -74,75 +69,6 @@
         window.parent.postMessage({__scarabStatus:true,state:state,message:message||'',roomSessionId:String(window.__SCARAB_ROOM_SESSION_ID||window.__SC_ROOM_SESSION_ID||'')}, location.origin);
       }
     } catch (_) {}
-  }
-
-  function visibleElement(el){
-    try{if(!el||el.nodeType!==1)return false;var cs=getComputedStyle(el),r=el.getBoundingClientRect();return cs.display!=='none'&&cs.visibility!=='hidden'&&Number(cs.opacity||1)>0&&r.width>8&&r.height>8&&r.bottom>0&&r.right>0&&r.top<innerHeight&&r.left<innerWidth;}catch(_){return false;}
-  }
-  function portraitTargetText(text,target){
-    var tx=String(text||'').replace(/\s+/g,' ').trim(); if(!tx||tx.length>80)return false;
-    var raw=String(parseInt(target,10)); if(!/^\d+$/.test(raw))return false;
-    var pad=raw.padStart(3,'0');
-    return tx===raw||tx===pad||tx==='#'+raw||tx==='#'+pad||new RegExp('(?:^|[^0-9])0*'+raw+'(?:[^0-9]|$)').test(tx)&&/房|機台|机台|號|号|machine|room/i.test(tx);
-  }
-  function liveRoomForMachine(e,target){
-    try{
-      var list=e&&Array.isArray(e.tables)?e.tables:[];var raw=String(parseInt(target,10));
-      for(var i=0;i<list.length;i++){
-        var x=list[i]||{};var n=x.number!=null?x.number:(x.machineNum!=null?x.machineNum:(x.machineNo!=null?x.machineNo:x.machine_num));
-        if(String(parseInt(n,10))===raw)return {roomId:String(x.roomId!=null?x.roomId:(x.room_id!=null?x.room_id:(x.tableId!=null?x.tableId:''))),machineNum:String(n)};
-      }
-    }catch(_){} return null;
-  }
-  async function portraitSwitchByEngine(cfg){
-    if(portraitEngineSwitching)return false;
-    var e=window.__sethEngine,target=String(cfg&&cfg.MACHINENUM||'').trim(); if(!e||!target)return false;
-    var row=liveRoomForMachine(e,target); if(!row)return false;
-    portraitEngineSwitching=true;
-    try{
-      status('room-searching','已找到機台 #'+target+'，正在進房…');
-      var ok=false;
-      if(row.roomId&&typeof e.selectByRoom==='function'){var r=e.selectByRoom(row.roomId);if(r&&typeof r.then==='function')r=await r;ok=r!==false;}
-      if(!ok&&typeof e.switchRoomInGame==='function'){var s=e.switchRoomInGame(target);if(s&&typeof s.then==='function')s=await s;ok=s!==false;}
-      if(ok){status('room-entered','已定位機台 #'+target);return true;}
-    }catch(_){}finally{setTimeout(function(){portraitEngineSwitching=false;},900)}
-    return false;
-  }
-  function cocosNodeText(e,node){
-    var parts=[];try{if(typeof e.label==='function')parts.push(e.label(node)||'');}catch(_){}try{if(typeof e.btnText==='function')parts.push(e.btnText(node)||'');}catch(_){}try{parts.push(node&&node.name||'');}catch(_){}return parts.join(' ').trim();
-  }
-  function portraitPressTargetNode(cfg){
-    var e=window.__sethEngine,target=String(cfg&&cfg.MACHINENUM||'').trim();if(!e||typeof e.walk!=='function'||!target)return false;
-    try{
-      var nodes=e.walk(function(n){return portraitTargetText(cocosNodeText(e,n),target);})||[];
-      if(nodes.length){var n=nodes[0];if(typeof e.press==='function'){e.press(n);status('room-searching','已找到機台 #'+target+'，正在進房…');return true;}}
-    }catch(_){} return false;
-  }
-  function portraitNextCocos(){
-    var e=window.__sethEngine;if(!e||typeof e.walk!=='function')return false;
-    try{
-      var nodes=e.walk(function(n){var tx=cocosNodeText(e,n).replace(/\s+/g,'').toLowerCase();return /下一頁|下一页|next|pageright|rightpage/.test(tx)||tx==='>'||tx==='›'||tx==='»';})||[];
-      if(!nodes.length)nodes=e.walk(function(n){var nm=String(n&&n.name||'').toLowerCase();return /next|right.*page|page.*right/.test(nm);})||[];
-      if(!nodes.length)nodes=e.walk(function(n){var nm=String(n&&n.name||'');return nm==='Toggle'||nm==='allToggle';})||[];
-      if(nodes.length&&typeof e.press==='function'){e.press(nodes[(portraitPageIndex-1)%nodes.length]);return true;}
-    }catch(_){} return false;
-  }
-  function portraitPressDomTarget(cfg){
-    var target=String(cfg&&cfg.MACHINENUM||'').trim();if(!target)return false;
-    try{var els=document.querySelectorAll('button,[role="button"],a,li,div');for(var i=0;i<els.length;i++){var el=els[i];if(!visibleElement(el)||el.closest&&el.closest('#scarab-heart-ui,.shLegacyNotice'))continue;if(!portraitTargetText(el.innerText||el.textContent,target))continue;var hit=el;for(var j=0;j<5&&hit&&hit!==document.body;j++,hit=hit.parentElement){if(hit.matches&&hit.matches('button,a,[role="button"],[onclick]'))break;}hit=hit||el;try{hit.click();status('room-searching','已找到機台 #'+target+'，正在進房…');return true;}catch(_){}}}catch(_){}return false;
-  }
-  function portraitNextDom(){
-    var sels=['.el-pagination .btn-next:not([disabled])','[class*="pagination"] [class*="next"]:not([disabled])','button[aria-label*="next" i]:not([disabled])','button[title*="next" i]:not([disabled])'];
-    for(var i=0;i<sels.length;i++){try{var el=document.querySelector(sels[i]);if(el&&visibleElement(el)){el.click();return true;}}catch(_){}}
-    return false;
-  }
-  async function portraitFinderTick(){
-    try{
-      var payload=window.__SCARAB_WEB_PAYLOAD||{},cfg=payload.cfg||{};if(!cfg.PORTRAIT_ROOM_MODE||!String(cfg.MACHINENUM||'').trim()||window.__SCARAB_ROOM_DONE)return;
-      var now=Date.now();
-      if(now-portraitTargetAttemptAt>900){portraitTargetAttemptAt=now;if(await portraitSwitchByEngine(cfg))return;if(portraitPressTargetNode(cfg))return;if(portraitPressDomTarget(cfg))return;}
-      if(now-portraitPageAttemptAt>1800){portraitPageAttemptAt=now;var moved=portraitNextCocos()||portraitNextDom();if(moved){portraitPageIndex++;status('room-searching','第 '+portraitPageIndex+' 頁搜尋機台 #'+String(cfg.MACHINENUM||'')+'…');}}
-    }catch(_){}
   }
 
   function domReady(){
@@ -280,7 +206,6 @@
 
   function startWatchdogs(){
     if(watchdogTimer) return;
-    if(!portraitFinderTimer) portraitFinderTimer=setInterval(function(){portraitFinderTick();},420);
     watchdogTimer=setInterval(function(){
       try {
         var waiting=isRoomWait();

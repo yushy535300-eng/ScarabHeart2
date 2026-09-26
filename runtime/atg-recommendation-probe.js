@@ -18,45 +18,28 @@
     return Number.isFinite(n) ? n : 0;
   }
 
-  function firstValue(obj, keys) {
-    if (!obj || typeof obj !== 'object') return null;
-    for (var i=0;i<keys.length;i++) {
-      var k=keys[i];
-      try { if (obj[k] != null && obj[k] !== '') return obj[k]; } catch (_) {}
-    }
-    return null;
-  }
-
   function normalizeTable(t) {
-    if (!t || typeof t !== 'object') return null;
-    var candidates=[t,t.table,t.room,t.info,t.data,t.slotTable,t.slot,t.machine].filter(Boolean);
-    var roomId=null, machine=null, src=t;
-    for(var i=0;i<candidates.length;i++){
-      var x=candidates[i];
-      var r=firstValue(x,['roomId','roomID','room_id','rid','tableId','tableID','table_id']);
-      var m=firstValue(x,['number','machineNum','machineNo','machineNumber','machine_num','machine_no','tableNo','tableNumber','table_no','no','num']);
-      if(r!=null && m!=null){roomId=r;machine=m;src=x;break;}
-    }
-    if(roomId==null || machine==null) return null;
-    var today = src.today && typeof src.today === 'object' ? src.today : {};
-    var todayWin = num(firstValue(today,['win','todayWin']) != null ? firstValue(today,['win','todayWin']) : firstValue(src,['todayWin','winToday']));
-    var todayBet = num(firstValue(today,['bet','todayBet']) != null ? firstValue(today,['bet','todayBet']) : firstValue(src,['todayBet','betToday']));
-    var win = num(firstValue(src,['win','totalWin','payout']));
-    var bet = num(firstValue(src,['bet','totalBet','wager']));
-    var status = String(firstValue(src,['status','state','roomStatus']) || '');
-    var locked = !!firstValue(src,['isLocked','locked','isFull']) || /locked|full|maintenance|disabled/i.test(status);
+    if (!t || t.roomId == null || t.number == null) return null;
+    var today = t.today && typeof t.today === 'object' ? t.today : {};
+    var todayWin = num(today.win != null ? today.win : (t.todayWin != null ? t.todayWin : t.winToday));
+    var todayBet = num(today.bet != null ? today.bet : (t.todayBet != null ? t.todayBet : t.betToday));
+    var win = num(t.win);
+    var bet = num(t.bet);
+    var status = String(t.status || '');
     return {
-      roomId: String(roomId),
-      machineNum: String(machine),
+      roomId: String(t.roomId),
+      machineNum: String(t.number),
       status: status,
-      isLocked: locked,
+      isLocked: !!t.isLocked || /locked/i.test(status),
       todayWin: todayWin,
       todayBet: todayBet,
       win: win,
       bet: bet,
       todayRtp: todayBet > 0 ? todayWin / todayBet * 100 : null,
       rtp: bet > 0 ? win / bet * 100 : null,
-      rawFree: firstValue(src,['freeGameCount','freeSpinCount','fg']) != null ? num(firstValue(src,['freeGameCount','freeSpinCount','fg'])) : null
+      rawFree: t.freeGameCount != null ? num(t.freeGameCount) :
+        (t.freeSpinCount != null ? num(t.freeSpinCount) :
+        (t.fg != null ? num(t.fg) : null))
     };
   }
 
@@ -75,7 +58,7 @@
         var valid = 0;
         for (var i = 0; i < value.length && i < 20; i++) {
           var x = value[i];
-          if (normalizeTable(x)) valid++;
+          if (x && typeof x === 'object' && x.roomId != null && x.number != null) valid++;
         }
         if (valid >= Math.min(3, value.length) && (!best || value.length > best.length)) best = value;
         for (var j = 0; j < value.length && j < 2000; j++) walk(value[j], depth + 1);
@@ -104,7 +87,7 @@
       seen[row.machineNum] = true;
       rows.push(row);
     });
-    if (rows.length < 1) return false;
+    if (rows.length < 10) return false;
     sent = true;
     try {
       parent.postMessage({
@@ -145,7 +128,7 @@
       var sliced = offset === 0 ? bytes : bytes.subarray(offset);
       var stream = new Blob([sliced]).stream().pipeThrough(new DecompressionStream('deflate'));
       var text = await new Response(stream).text();
-      if (!/(roomId|room_id|tableId|table_id)/.test(text) || !/(number|machineNum|machineNo|machine_num|tableNo|table_no)/.test(text)) return;
+      if (text.indexOf('roomId') < 0 || text.indexOf('number') < 0) return;
       var json = JSON.parse(text);
       inspectObject(json, 'atg-websocket-deflate');
     } catch (_) {}

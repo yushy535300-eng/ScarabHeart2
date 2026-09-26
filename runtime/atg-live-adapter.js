@@ -108,7 +108,6 @@
         return current && Number(current._timeScale);
       };
       engine.live = live;
-      engine.getLiveRoomTables = function(){ try { return Array.isArray(engine.tables) ? engine.tables.slice() : []; } catch (_) { return []; } };
       engine.__scarabTimeManagerPatched = true;
       attachedEngine = engine;
     }

@@ -3,7 +3,7 @@
 
   const $ = id => document.getElementById(id);
   const log = (...args) => { try { console.log('[ScarabHeart]', ...args); } catch (_) {} };
-  const APP_VERSION = 'v3.06-real-room-insession-switch-fix';
+  const APP_VERSION = 'v3.09-six-game-live-machine-recommendations';
   const GAMES = [
     ['golden-seth', '戰神賽特2 覺醒之力', 'media/game2.png'],
     ['egyptian-mythology', '戰神賽特', 'media/game8.png'],
@@ -705,82 +705,137 @@
   }
 
   function simulatedBoardsFromTables(gameCode, tables) {
-    // Six specified titles: roomId / machineNum / availability are LIVE ATG data.
-    // The displayed RTP value is an app-side indicator and is never used to decide
-    // whether the room physically exists.
+    // These six titles use ATG's REAL machine number / roomId / occupancy.
+    // Only the displayed RTP-style value is an assistant indicator, not an ATG RTP feed.
     const rawRows = (Array.isArray(tables) ? tables : []).map(raw => {
-      const machineNum = String(raw.machineNum == null ? '' : raw.machineNum);
-      const roomId = String(raw.roomId == null ? '' : raw.roomId);
+      const machineNum = String(raw.machineNum == null ? (raw.number == null ? '' : raw.number) : raw.machineNum);
+      const roomId = String(raw.roomId == null ? (raw.room_id == null ? '' : raw.room_id) : raw.roomId);
       const status = String(raw.status || '');
-      const locked = !!raw.isLocked || /locked|full|maintenance|disabled/i.test(status);
-      if (!/^\d+$/.test(machineNum) || !roomId || locked) return null;
-      return {roomId,machineNum,status,isLocked:false,available:true};
+      const locked = !!raw.isLocked || /locked/i.test(status);
+      const occupied = /full|close/i.test(status);
+      if (!/^\d+$/.test(machineNum) || !roomId || locked || occupied) return null;
+      const seed = simHash(gameCode + ':' + machineNum);
+      return {
+        roomId,
+        machineNum,
+        status: status || 'Empty',
+        isLocked: false,
+        available: true,
+        seed,
+        source: 'ATG_REAL_MACHINE_INDICATOR'
+      };
     }).filter(Boolean);
 
     const seen = new Set();
-    const live = rawRows.filter(row => {
+    const rows = rawRows.filter(row => {
       if (seen.has(row.machineNum)) return false;
       seen.add(row.machineNum);
       return true;
     });
-    if (!live.length) return emptyBoards();
+    if (!rows.length) return emptyBoards();
 
-    const ranked = live.slice().sort((x,y) => {
-      const ax = simHash(gameCode + ':room:' + x.machineNum) % 100000;
-      const ay = simHash(gameCode + ':room:' + y.machineNum) % 100000;
-      return ay - ax;
-    });
+    // Stable selection from the current REAL empty-machine snapshot.
+    // This avoids hard-coded machine numbers while keeping the established
+    // recommendation distribution users are familiar with.
+    const selected = rows.slice().sort((a,b) => (b.seed % 100000) - (a.seed % 100000)).slice(0, 10);
 
-    function indicator(rank, machineNum, salt) {
-      const seed = simHash(gameCode + ':' + machineNum + ':' + salt);
+    function indicatorRow(row, rank, salt) {
+      const seed = simHash(gameCode + ':' + row.machineNum + ':' + salt);
       let rtp;
       if (rank === 0) rtp = 94.60 + (seed % 210) / 100;
       else if (rank === 1) rtp = 91.20 + (seed % 260) / 100;
       else if (rank === 2) rtp = 84.50 + (seed % 360) / 100;
       else {
-        const floors=[78.8,72.6,66.4,59.8,53.2,46.8,40.5];
-        const spans=[4.2,4.4,4.6,4.8,5.0,5.2,4.8];
-        const idx=Math.min(rank-3,floors.length-1);
-        rtp=floors[idx]+(seed % Math.max(1,Math.round(spans[idx]*100)))/100;
+        const floors = [78.8, 72.6, 66.4, 59.8, 53.2, 46.8, 40.5];
+        const spans  = [4.2,  4.4,  4.6,  4.8,  5.0,  5.2,  4.8];
+        const idx = Math.min(rank - 3, floors.length - 1);
+        rtp = floors[idx] + ((seed % Math.max(1, Math.round(spans[idx] * 100))) / 100);
       }
-      rtp=Math.min(96.69,Math.round(rtp*100)/100);
-      const scoreBands=[895,874,856,822,803,785,766,748,731,715];
-      const score=Math.max(700,(scoreBands[Math.min(rank,scoreBands.length-1)]||715)-(seed%11));
-      const bet=1200+((seed>>>7)%7800);
-      const win=Math.round(bet*rtp/100);
-      return {rtp,score,bet,win,profit:win-bet,rtpIndicator:true};
-    }
-
-    function decorate(row, rank, salt, metric) {
-      return Object.assign({}, row, indicator(rank,row.machineNum,salt), {
-        source:'ATG_LIVE_ROOM_RTP_INDICATOR', metric, rtpIndicator:true
+      rtp = Math.min(96.69, Math.round(rtp * 100) / 100);
+      const scoreBands = [895, 874, 856, 822, 803, 785, 766, 748, 731, 715];
+      const score = Math.max(700, scoreBands[Math.min(rank, 9)] - (seed % 11));
+      const heat = 1200 + ((seed >>> 7) % 7800);
+      return Object.assign({}, row, {
+        rtp,
+        bet: heat,
+        win: Math.round(heat * rtp / 100),
+        profit: Math.round(heat * (rtp / 100 - 1)),
+        score,
+        simulated: true,
+        source: 'ATG_REAL_MACHINE_INDICATOR'
       });
     }
-    const base=ranked.slice(0,Math.max(10,ranked.length));
-    const composite=base.map((x,i)=>decorate(x,i,'composite','RTP 指標')).slice(0,10);
-    const volatility=base.map((x,i)=>decorate(x,i,'hot','RTP 指標')).sort((x,y)=>y.rtp-x.rtp).slice(0,10);
-    const premium=base.map((x,i)=>decorate(x,i,'premium','RTP 指標')).sort((x,y)=>y.bet-x.bet).slice(0,10);
-    const freegame=base.map((x,i)=>decorate(x,i,'free','RTP 指標')).sort((x,y)=>x.score-y.score).slice(0,10);
-    return {composite,volatility,premium,freegame,updatedAt:Date.now(),source:'ATG_LIVE_ROOM_RTP_INDICATOR',simulated:true};
+
+    const composite = selected.map((x,i) => Object.assign(indicatorRow(x,i,'composite'), {metric:'綜合指標'}));
+    const volatility = selected.map((x,i) => Object.assign(indicatorRow(x,i,'volatility'), {metric:'爆分指標'}))
+      .sort((a,b) => b.rtp - a.rtp);
+    const premium = selected.map((x,i) => Object.assign(indicatorRow(x,i,'premium'), {metric:'熱度指標'}))
+      .sort((a,b) => b.bet - a.bet);
+    const freegame = selected.map((x,i) => Object.assign(indicatorRow(x,i,'freegame'), {metric:'免遊指標'}))
+      .sort((a,b) => a.score - b.score);
+
+    return {
+      composite,
+      volatility,
+      premium,
+      freegame,
+      updatedAt: Date.now(),
+      source: 'ATG_REAL_MACHINE_INDICATOR',
+      simulated: true
+    };
   }
 
-  function tablesFromBoardValue(value) {
-    const out=[];
-    const seen=new Set();
-    ['composite','volatility','premium','freegame'].forEach(key => {
-      const list=value && Array.isArray(value[key]) ? value[key] : [];
-      list.forEach(item => {
-        if(!item || item.machineNum==null || !item.roomId) return;
-        const machineNum=String(item.machineNum), roomId=String(item.roomId);
-        const k=machineNum+'|'+roomId;
-        if(seen.has(k)) return; seen.add(k);
-        out.push({
-          machineNum,roomId,status:String(item.status||''),isLocked:item.isLocked===true,
-          todayBet:item.todayBet, todayWin:item.todayWin, bet:item.bet, win:item.win
-        });
-      });
+  async function probeSixGameAtgTables(gameCode) {
+    stopRecommendationProbe();
+    const serial = ++recommendationProbeSerial;
+    const finalUrl = await resolveAtgGameUrl(gameCode);
+    if (!session || session.game !== gameCode || serial !== recommendationProbeSerial) throw new Error('probe-cancelled');
+
+    // IMPORTANT: do NOT append ?table=1 here. The six titles must be allowed to
+    // enter ATG's normal machine-selection bootstrap so SlotFrameworkData.tables
+    // is populated by the game's own authenticated socket/session.
+    const target = new URL(finalUrl);
+    target.searchParams.delete('table');
+    const payload = {
+      kind:'atg',
+      probe:true,
+      probeKind:'six-live-tables',
+      gameCode:gameCode,
+      gameMeta:GAME_META[gameCode] || {},
+      cfg:{ GAME_CODE:gameCode, PROBE:true, PROBE_KIND:'six-live-tables' }
+    };
+    const encoded = probeBase64url(payload);
+
+    return new Promise((resolve, reject) => {
+      const frame = document.createElement('iframe');
+      frame.setAttribute('aria-hidden','true');
+      frame.tabIndex = -1;
+      const portrait = PORTRAIT_ROOM_GAMES.has(String(gameCode || ''));
+      const fw = portrait ? 720 : 1280;
+      const fh = portrait ? 1280 : 720;
+      frame.style.cssText = 'position:fixed!important;left:-20000px!important;top:-20000px!important;width:' + fw + 'px!important;height:' + fh + 'px!important;opacity:0!important;pointer-events:none!important;border:0!important;visibility:visible!important;';
+      const cleanup = () => {
+        try { clearTimeout(timer); } catch (_) {}
+        try { window.removeEventListener('message', listener); } catch (_) {}
+        try { frame.src='about:blank'; frame.remove(); } catch (_) {}
+        if (recommendationProbe && recommendationProbe.frame === frame) recommendationProbe = null;
+      };
+      const listener = event => {
+        if (event.source !== frame.contentWindow) return;
+        const data = event.data;
+        if (!data || data.__scarabRecommendationProbe !== true || String(data.gameCode || '') !== gameCode) return;
+        if (data.ok && Array.isArray(data.tables) && data.tables.length >= 1) {
+          cleanup(); resolve(data.tables);
+        } else if (data.ok === false) {
+          cleanup(); reject(new Error(data.error || 'ATG 即時機台資料讀取失敗'));
+        }
+      };
+      const timer = setTimeout(() => { cleanup(); reject(new Error('ATG 即時機台資料逾時')); }, 28000);
+      recommendationProbe = {frame, listener, timer, reject};
+      window.addEventListener('message', listener);
+      document.body.appendChild(frame);
+      frame.src = '/__game/open?url=' + encodeURIComponent(target.href) + '&cfg=' + encodeURIComponent(encoded);
     });
-    return out;
   }
 
   async function probeAtgTables(gameCode) {
@@ -809,7 +864,7 @@
         if (event.source !== frame.contentWindow) return;
         const data = event.data;
         if (!data || data.__scarabRecommendationProbe !== true || String(data.gameCode || '') !== gameCode) return;
-        if (data.ok && Array.isArray(data.tables) && data.tables.length >= 1) {
+        if (data.ok && Array.isArray(data.tables) && data.tables.length >= 10) {
           cleanup(); resolve(data.tables);
         } else if (data.ok === false) {
           cleanup(); reject(new Error(data.error || 'ATG 即時機台資料讀取失敗'));
@@ -828,6 +883,54 @@
     if (!game || !session || session.game !== game) return;
 
     const serial = ++boardLoadSerial;
+    if (SIM_RECOMMEND_GAMES.has(game)) {
+      const box = $('recommend');
+      pendingPick = null;
+
+      // Reuse only a previously successful REAL-machine snapshot while a fresh
+      // ATG probe is running. Never fall back to hard-coded machine numbers.
+      let instant = null;
+      const memory = boardCache[game] && boardCache[game].value;
+      if (memory && usableBoardCount(memory) > 0) instant = normalizeBoards(memory);
+      if (!instant) instant = loadRealBoardStorage(game);
+      if (instant && usableBoardCount(instant) > 0) {
+        boards = instant;
+        $('updTime').textContent = '更新中';
+        renderBoard();
+      } else {
+        boards = null;
+        box.innerHTML = '<div style="color:#7893a9;font-size:12px;padding:16px">正在讀取 ATG 即時機台資料…</div>';
+        $('updTime').textContent = '讀取中';
+      }
+
+      try {
+        const tables = await probeSixGameAtgTables(game);
+        if (!session || session.game !== game || serial !== boardLoadSerial) return;
+        const value = normalizeBoards(simulatedBoardsFromTables(game, tables));
+        if (usableBoardCount(value) < 1) throw new Error('目前沒有可用空機台');
+        value.updatedAt = Date.now();
+        value.source = 'ATG_REAL_MACHINE_INDICATOR';
+        boards = value;
+        boardCache[game] = { at: Date.now(), value };
+        saveRealBoardStorage(game, value);
+        $('updTime').textContent = '更新 ' + formatTime(value.updatedAt);
+        renderBoard();
+      } catch (error) {
+        if (!session || session.game !== game || serial !== boardLoadSerial) return;
+        if (String(error && error.message || '') !== 'probe-cancelled') log('六款 ATG 即時機台讀取失敗', game, error && error.message);
+        if (instant && usableBoardCount(instant) > 0) {
+          boards = instant;
+          $('updTime').textContent = '暫用最近機台資料';
+          renderBoard();
+        } else {
+          boards = emptyBoards();
+          $('updTime').textContent = '讀取失敗';
+          box.innerHTML = '<div style="color:#ff9a82;font-size:12px;padding:16px">目前無法取得 ATG 機台資料，請按「刷新」重試。</div>';
+        }
+      }
+      return;
+    }
+
     const box = $('recommend');
     pendingPick = null;
 
@@ -873,11 +976,9 @@
       apiPromise = SethEyeAPI.boards(game, operatorCode())
         .then(value => {
           if (!session || session.game !== game || serial !== boardLoadSerial) return null;
-          const normalized = SIM_RECOMMEND_GAMES.has(game)
-            ? normalizeBoards(simulatedBoardsFromTables(game, tablesFromBoardValue(value)))
-            : normalizeBoards(value);
+          const normalized = normalizeBoards(value);
           if (usableBoardCount(normalized) > 0) {
-            showFresh(normalized, SIM_RECOMMEND_GAMES.has(game) ? 'REAL_API_ROOM_RTP_INDICATOR' : 'REAL_API');
+            showFresh(normalized, 'REAL_API');
             return normalized;
           }
           return null;
@@ -954,8 +1055,8 @@
       row.className = 'room-card';
       const metric = item.metric ? ' · ' + item.metric : '';
       const simMark = '';
-      const rtpCaption = SIM_RECOMMEND_GAMES.has(session && session.game) ? 'RTP 指標 ' : 'RTP ';
-      row.innerHTML = '<span class="room-rank">' + (index + 1) + '</span><span><b>' + (locked ? '🔒 ' + machine.padStart(3, '0') + ' 號機台' : machine.padStart(3, '0') + ' 號機台') + '</b><small>' + BOARD_META[activeBoard][0] + (item.rtp != null ? ' · ' + rtpCaption + item.rtp + '%' : '') + metric + simMark + '</small></span><span class="score">' + (item.score == null ? '—' : item.score) + '</span>';
+      const rtpLabel = item.simulated ? ' · RTP 指標 ' : ' · RTP ';
+      row.innerHTML = '<span class="room-rank">' + (index + 1) + '</span><span><b>' + (locked ? '🔒 ' + machine.padStart(3, '0') + ' 號機台' : machine.padStart(3, '0') + ' 號機台') + '</b><small>' + BOARD_META[activeBoard][0] + (item.rtp != null ? rtpLabel + item.rtp + '%' : '') + metric + simMark + '</small></span><span class="score">' + (item.score == null ? '—' : item.score) + '</span>';
       if (!locked) {
         row.style.cursor = 'pointer';
         row.setAttribute('role', 'button');
@@ -1079,14 +1180,34 @@
     }
   }
 
+  function showRoomPickToast(machineNum, gameCode) {
+    const toast = $('roomPickToast');
+    const num = String(machineNum || '').trim();
+    if (!toast) return;
+    const portraitGame = PORTRAIT_ROOM_GAMES.has(String(gameCode || ''));
+    if (!portraitGame || !num) {
+      toast.classList.add('hide');
+      return;
+    }
+    const n = $('roomPickNumber');
+    const s = $('roomPickState');
+    if (n) n.textContent = '#' + num;
+    if (s) s.textContent = '正在定位機台中…';
+    toast.classList.remove('hide');
+  }
+
+  function hideRoomPickToast() {
+    const toast = $('roomPickToast');
+    if (toast) toast.classList.add('hide');
+  }
+
   function gameConfig(target, machineNum, boardName, boardList, targetKind) {
-    const goodRooms = ((boards && boards.composite) || []).filter(x => x && x.machineNum != null).slice(0, 10).map(x => ({
+    const goodRooms = ((boards && boards.composite) || []).filter(x => x && x.machineNum != null).slice(0, 3).map(x => ({
       roomId: x.roomId,
       machineNum: x.machineNum,
       rtp: x.rtp != null ? x.rtp : x.todayRtp,
       bet: x.bet != null ? x.bet : x.todayBet,
-      profit: x.profit != null ? x.profit : x.todayPnl,
-      rtpIndicator: !!x.rtpIndicator
+      profit: x.profit != null ? x.profit : x.todayPnl
     }));
     return {
       TARGET: String(target || ''),
@@ -1183,9 +1304,11 @@
       }
       const config = gameConfig(target, machineNum, boardName, boardList, targetKind);
       if (!window.ScarabWebLauncher) throw new Error('程式內遊戲載入器未就緒');
+      showRoomPickToast(machineNum, requestedGame);
       ScarabWebLauncher.open(finalUrl, { kind: 'atg', gameCode: requestedGame, gameMeta: GAME_META[requestedGame], cfg: config });
       $('err2').textContent = '';
     } catch (error) {
+      hideRoomPickToast();
       $('err2').textContent = error && error.message ? error.message : '進入遊戲失敗';
     } finally {
       buttons.forEach(button => { button.disabled = false; });
@@ -1194,6 +1317,7 @@
 
   function closeGame(destination) {
     clearPreparedGameEntry();
+    hideRoomPickToast();
     // Invalidate async work from the game instance that is being closed.
     // This does NOT alter room selection/fallback logic; it only prevents
     // an old iframe/session from taking control after the user picks again.

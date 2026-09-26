@@ -96,6 +96,17 @@
     if (ui.loading) ui.loading.classList.toggle('done', !!done);
   }
 
+  function roomPickVisual(state, message) {
+    var box=document.getElementById('roomPickToast');
+    if(!box) return;
+    if(state==='hide'||state==='done'){
+      box.classList.add('hide');
+      return;
+    }
+    var sub=document.getElementById('roomPickState');
+    if(sub&&message) sub.textContent=message;
+    box.classList.remove('hide');
+  }
 
   function openInApp(raw, payload) {
     currentRoomSessionId = String(payload && payload.cfg && payload.cfg.ROOM_SESSION_ID || '');
@@ -160,6 +171,7 @@
       ui.frame.src = 'about:blank';
     }
     if (ui.view) ui.view.classList.add('hide');
+    roomPickVisual('hide');
     if (ui.loading) ui.loading.classList.remove('done');
     document.documentElement.style.overflow = '';
     document.body.style.overflow = '';
@@ -189,10 +201,11 @@
       } else if (data.state === 'room-fallback') {
         setLoading(data.message || '已切換手動選房', true);
       } else if (data.state === 'room-searching') {
-        setLoading(data.message || '正在定位機台中…', true);
+        roomPickVisual('show', data.message || '正在定位機台中…');
       } else if (data.state === 'room-entered') {
-        setLoading(data.message || '已完成指定機台定位', true);
+        roomPickVisual('done');
       } else if (data.state === 'room-exact-wait') {
+        roomPickVisual('show', data.message || '正在等待指定機台資料');
         setLoading(data.message || '正在等待指定機台資料', true);
       } else if (data.state === 'engine-error') {
         // Assistant failure must never take down the real ATG game.

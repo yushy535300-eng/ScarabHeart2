@@ -1,0 +1,19 @@
+v3.09
+
+基準：v3.04 MOBILE LOGIN BALANCED SPACING。
+
+只修六款推薦機台資料來源：
+- 虎小妹
+- 古神巴風特
+- 武俠
+- 孫行者
+- 惡魔血域
+- 金蓮三缺一
+
+修正原則：
+1. 原本已有推薦 API 的遊戲完全保留 v3.04 流程。
+2. 六款不再使用固定假機台號碼，改由隱藏 ATG 遊戲 session 的 SlotFrameworkData.tables 讀取真實 number / roomId / Empty-Full-Locked。
+3. 六款只推薦當下非 Full / 非 Locked / 非 Close 的真實機台。
+4. 六款 RTP 使用既有指標區間，畫面標示「RTP 指標」。
+5. 新 probe 僅存在於隱藏推薦 iframe，不修改正常遊戲的 WebSocket / SystemJS / Map / WeakMap，因此不碰 v3.04 原本可正常進遊戲的流程。
+6. 一般進遊戲、原本選房、懸浮、登入、白名單均不改。

@@ -116,7 +116,7 @@ app.post('/api/access/login',accessJson,async(req,res)=>{try{const username=Stri
 app.get('/api/access/check',async(req,res)=>{const id=String(req.query.sessionId||''),current=accessSessions.get(id);if(!current)return res.status(401).json({valid:false,reason:'session_invalid'});try{const access=await authorizeWhitelist(current.username,current.platform);if(!access.allowed){accessSessions.delete(id);return res.status(403).json({valid:false,reason:access.reason});}res.json({valid:true,reason:'ok'});}catch(e){res.status(503).json({valid:false,reason:'database_unavailable',temporary:true});}});
 app.post('/api/access/logout',accessJson,(req,res)=>{const id=String(req.body&&req.body.sessionId||'');if(id)accessSessions.delete(id);res.json({success:true});});
 app.get('/healthz', (_req, res) => {
-  res.status(200).json({ ok: true, version: '3.06-real-room-insession-switch-fix' });
+  res.status(200).json({ ok: true, version: '3.04-mobile-login-balanced-spacing' });
 });
 
 app.use('/__api', express.raw({ type: '*/*', limit: '2mb' }), async (req, res) => {
@@ -185,6 +185,10 @@ app.get('/__runtime/atg-recommendation-probe.js', (_req, res) => {
   res.set('Cache-Control', 'no-store');
   res.sendFile(path.join(runtimeDir, 'atg-recommendation-probe.js'));
 });
+app.get('/__runtime/atg-six-recommendation-probe.js', (_req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.sendFile(path.join(runtimeDir, 'atg-six-recommendation-probe.js'));
+});
 app.get('/__runtime/overlay-runtime.js', (_req, res) => {
   res.sendFile(path.join(runtimeDir, 'overlay-runtime.js'));
 });
@@ -232,8 +236,11 @@ function gameBoot(sid, originalHref, session, withRuntime) {
     'window.__SCARAB_FORCE_MANUAL_ROOM=false;' +
     '<\/script>';
   if (payload && payload.probe === true) {
+    const probeScript = payload.probeKind === 'six-live-tables'
+      ? '/__runtime/atg-six-recommendation-probe.js?v=309'
+      : '/__runtime/atg-recommendation-probe.js?v=274';
     return proxyBoot + commonRuntimeBoot +
-      '<script>(function(){var s=document.createElement("script");s.src=location.origin+"/__runtime/atg-recommendation-probe.js?v=274";s.defer=false;(document.head||document.documentElement).appendChild(s)})()<\/script>';
+      '<script>(function(){var s=document.createElement("script");s.src=location.origin+' + scriptJson(probeScript) + ';s.defer=false;(document.head||document.documentElement).appendChild(s)})()<\/script>';
   }
   const runtimeBoot = commonRuntimeBoot +
     '<script>try{parent.postMessage({__scarabStatus:true,state:"engine-wait"},location.origin)}catch(e){}<\/script>' +
