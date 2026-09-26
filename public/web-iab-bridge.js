@@ -180,7 +180,6 @@
       return;
     }
     if (data && data.__scarabStatus === true) {
-      window.dispatchEvent(new CustomEvent('scarab:web-status', { detail: data }));
       if (data.state === 'engine-ready') {
         setLoading('懸浮工具已連線', true);
       } else if (data.state === 'engine-wait' || data.state === 'engine-loading') {

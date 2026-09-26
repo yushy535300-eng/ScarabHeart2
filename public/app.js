@@ -3,7 +3,7 @@
 
   const $ = id => document.getElementById(id);
   const log = (...args) => { try { console.log('[ScarabHeart]', ...args); } catch (_) {} };
-  const APP_VERSION = 'v3.05-portrait-room-goodroom-real-fix';
+  const APP_VERSION = 'v3.06-real-room-insession-switch-fix';
   const GAMES = [
     ['golden-seth', '戰神賽特2 覺醒之力', 'media/game2.png'],
     ['egyptian-mythology', '戰神賽特', 'media/game8.png'],
@@ -52,7 +52,6 @@
   let boards = null;
   let activeBoard = 'composite';
   let pendingPick = null;
-  let goodRoomAutoState = null;
   let boardLoadSerial = 0;
   let gameOpenSerial = 0;
   let roomSessionSerial = 0;
@@ -706,78 +705,82 @@
   }
 
   function simulatedBoardsFromTables(gameCode, tables) {
-    // IMPORTANT: only the displayed recommendation metrics are simulated.
-    // machineNum / roomId / availability always come from the live ATG table.
+    // Six specified titles: roomId / machineNum / availability are LIVE ATG data.
+    // The displayed RTP value is an app-side indicator and is never used to decide
+    // whether the room physically exists.
     const rawRows = (Array.isArray(tables) ? tables : []).map(raw => {
       const machineNum = String(raw.machineNum == null ? '' : raw.machineNum);
       const roomId = String(raw.roomId == null ? '' : raw.roomId);
       const status = String(raw.status || '');
-      const locked = !!raw.isLocked || /locked/i.test(status);
+      const locked = !!raw.isLocked || /locked|full|maintenance|disabled/i.test(status);
       if (!/^\d+$/.test(machineNum) || !roomId || locked) return null;
-
-      const liveRtp = Number(raw.todayBet || 0) > 0
-        ? Number(raw.todayWin || 0) / Number(raw.todayBet || 1) * 100
-        : (Number(raw.bet || 0) > 0 ? Number(raw.win || 0) / Number(raw.bet || 1) * 100 : NaN);
-
-      const seed = simHash(gameCode + ':' + machineNum);
-      // Keep values deliberately moderate. If a real RTP exists, stay close to it;
-      // otherwise use a conservative 82~122% range.
-      let rtp;
-      if (Number.isFinite(liveRtp) && liveRtp > 0) {
-        const jitter = ((seed % 700) / 100) - 3.5; // -3.5 ~ +3.49
-        rtp = Math.max(78, Math.min(128, liveRtp + jitter));
-      } else {
-        rtp = 82 + (seed % 4000) / 100; // 82.00 ~ 121.99
-      }
-
-      const score = 760 + (seed % 151); // 760 ~ 910
-      const heat = 1000 + ((seed >>> 8) % 9000);
-      return {
-        roomId,
-        machineNum,
-        status,
-        isLocked: false,
-        available: true,
-        rtp: Math.round(rtp * 100) / 100,
-        bet: heat,
-        win: Math.round(heat * rtp / 100),
-        profit: Math.round(heat * (rtp / 100 - 1)),
-        score,
-        simulated: true,
-        source: 'ATG_REAL_ROOM_SIM_METRIC'
-      };
+      return {roomId,machineNum,status,isLocked:false,available:true};
     }).filter(Boolean);
 
     const seen = new Set();
-    const rows = rawRows.filter(row => {
+    const live = rawRows.filter(row => {
       if (seen.has(row.machineNum)) return false;
       seen.add(row.machineNum);
       return true;
     });
-    if (!rows.length) return emptyBoards();
+    if (!live.length) return emptyBoards();
 
-    // Pick a stable top 10 from real currently available machines.
-    const composite = rows.slice().sort((a,b) => (b.score - a.score) || (b.rtp - a.rtp)).slice(0,10)
-      .map(x => Object.assign({}, x, {metric:'模擬綜合'}));
-    const volatility = rows.slice().sort((a,b) => (b.rtp - a.rtp) || (b.score - a.score)).slice(0,10)
-      .map(x => Object.assign({}, x, {metric:'模擬爆分'}));
-    const premium = rows.slice().sort((a,b) => (b.bet - a.bet) || (b.score - a.score)).slice(0,10)
-      .map(x => Object.assign({}, x, {metric:'模擬熱度'}));
-    const freegame = rows.slice().sort((a,b) => {
-      const ah = simHash('fg:'+gameCode+':'+a.machineNum);
-      const bh = simHash('fg:'+gameCode+':'+b.machineNum);
-      return (ah - bh) || (b.score - a.score);
-    }).slice(0,10).map(x => Object.assign({}, x, {metric:'模擬免遊'}));
+    const ranked = live.slice().sort((x,y) => {
+      const ax = simHash(gameCode + ':room:' + x.machineNum) % 100000;
+      const ay = simHash(gameCode + ':room:' + y.machineNum) % 100000;
+      return ay - ax;
+    });
 
-    return {
-      composite,
-      volatility,
-      premium,
-      freegame,
-      updatedAt: Date.now(),
-      source: 'ATG_REAL_ROOM_SIM_METRIC',
-      simulated: true
-    };
+    function indicator(rank, machineNum, salt) {
+      const seed = simHash(gameCode + ':' + machineNum + ':' + salt);
+      let rtp;
+      if (rank === 0) rtp = 94.60 + (seed % 210) / 100;
+      else if (rank === 1) rtp = 91.20 + (seed % 260) / 100;
+      else if (rank === 2) rtp = 84.50 + (seed % 360) / 100;
+      else {
+        const floors=[78.8,72.6,66.4,59.8,53.2,46.8,40.5];
+        const spans=[4.2,4.4,4.6,4.8,5.0,5.2,4.8];
+        const idx=Math.min(rank-3,floors.length-1);
+        rtp=floors[idx]+(seed % Math.max(1,Math.round(spans[idx]*100)))/100;
+      }
+      rtp=Math.min(96.69,Math.round(rtp*100)/100);
+      const scoreBands=[895,874,856,822,803,785,766,748,731,715];
+      const score=Math.max(700,(scoreBands[Math.min(rank,scoreBands.length-1)]||715)-(seed%11));
+      const bet=1200+((seed>>>7)%7800);
+      const win=Math.round(bet*rtp/100);
+      return {rtp,score,bet,win,profit:win-bet,rtpIndicator:true};
+    }
+
+    function decorate(row, rank, salt, metric) {
+      return Object.assign({}, row, indicator(rank,row.machineNum,salt), {
+        source:'ATG_LIVE_ROOM_RTP_INDICATOR', metric, rtpIndicator:true
+      });
+    }
+    const base=ranked.slice(0,Math.max(10,ranked.length));
+    const composite=base.map((x,i)=>decorate(x,i,'composite','RTP 指標')).slice(0,10);
+    const volatility=base.map((x,i)=>decorate(x,i,'hot','RTP 指標')).sort((x,y)=>y.rtp-x.rtp).slice(0,10);
+    const premium=base.map((x,i)=>decorate(x,i,'premium','RTP 指標')).sort((x,y)=>y.bet-x.bet).slice(0,10);
+    const freegame=base.map((x,i)=>decorate(x,i,'free','RTP 指標')).sort((x,y)=>x.score-y.score).slice(0,10);
+    return {composite,volatility,premium,freegame,updatedAt:Date.now(),source:'ATG_LIVE_ROOM_RTP_INDICATOR',simulated:true};
+  }
+
+  function tablesFromBoardValue(value) {
+    const out=[];
+    const seen=new Set();
+    ['composite','volatility','premium','freegame'].forEach(key => {
+      const list=value && Array.isArray(value[key]) ? value[key] : [];
+      list.forEach(item => {
+        if(!item || item.machineNum==null || !item.roomId) return;
+        const machineNum=String(item.machineNum), roomId=String(item.roomId);
+        const k=machineNum+'|'+roomId;
+        if(seen.has(k)) return; seen.add(k);
+        out.push({
+          machineNum,roomId,status:String(item.status||''),isLocked:item.isLocked===true,
+          todayBet:item.todayBet, todayWin:item.todayWin, bet:item.bet, win:item.win
+        });
+      });
+    });
+    return out;
   }
 
   async function probeAtgTables(gameCode) {
@@ -825,11 +828,6 @@
     if (!game || !session || session.game !== game) return;
 
     const serial = ++boardLoadSerial;
-
-    // v3.05: every recommendation must point to a machine that ATG currently
-    // reports as real. The six simulated-metric titles keep their display
-    // scoring model, but machineNum / roomId / availability now come only from
-    // the live ATG table probe (or a recent cached live probe).
     const box = $('recommend');
     pendingPick = null;
 
@@ -871,13 +869,15 @@
     // API can be much faster for titles it already supports.
     // ATG probe remains authoritative and replaces API data when it arrives.
     let apiPromise = Promise.resolve(null);
-    if (!SIM_RECOMMEND_GAMES.has(game) && window.SethEyeAPI && SethEyeAPI.boards) {
+    if (window.SethEyeAPI && SethEyeAPI.boards) {
       apiPromise = SethEyeAPI.boards(game, operatorCode())
         .then(value => {
           if (!session || session.game !== game || serial !== boardLoadSerial) return null;
-          const normalized = normalizeBoards(value);
+          const normalized = SIM_RECOMMEND_GAMES.has(game)
+            ? normalizeBoards(simulatedBoardsFromTables(game, tablesFromBoardValue(value)))
+            : normalizeBoards(value);
           if (usableBoardCount(normalized) > 0) {
-            showFresh(normalized, 'REAL_API');
+            showFresh(normalized, SIM_RECOMMEND_GAMES.has(game) ? 'REAL_API_ROOM_RTP_INDICATOR' : 'REAL_API');
             return normalized;
           }
           return null;
@@ -954,7 +954,8 @@
       row.className = 'room-card';
       const metric = item.metric ? ' · ' + item.metric : '';
       const simMark = '';
-      row.innerHTML = '<span class="room-rank">' + (index + 1) + '</span><span><b>' + (locked ? '🔒 ' + machine.padStart(3, '0') + ' 號機台' : machine.padStart(3, '0') + ' 號機台') + '</b><small>' + BOARD_META[activeBoard][0] + (item.rtp != null ? ' · RTP ' + item.rtp + '%' : '') + metric + simMark + '</small></span><span class="score">' + (item.score == null ? '—' : item.score) + '</span>';
+      const rtpCaption = SIM_RECOMMEND_GAMES.has(session && session.game) ? 'RTP 指標 ' : 'RTP ';
+      row.innerHTML = '<span class="room-rank">' + (index + 1) + '</span><span><b>' + (locked ? '🔒 ' + machine.padStart(3, '0') + ' 號機台' : machine.padStart(3, '0') + ' 號機台') + '</b><small>' + BOARD_META[activeBoard][0] + (item.rtp != null ? ' · ' + rtpCaption + item.rtp + '%' : '') + metric + simMark + '</small></span><span class="score">' + (item.score == null ? '—' : item.score) + '</span>';
       if (!locked) {
         row.style.cursor = 'pointer';
         row.setAttribute('role', 'button');
@@ -1051,7 +1052,6 @@
     prepareGameEntry(session && session.game).catch(() => null);
     const accepted = await confirmRoom(machineNum);
     if (!accepted) return;
-    goodRoomAutoState = null;
 
     pendingPick = {
       roomId: String(item.roomId || ''),
@@ -1085,7 +1085,8 @@
       machineNum: x.machineNum,
       rtp: x.rtp != null ? x.rtp : x.todayRtp,
       bet: x.bet != null ? x.bet : x.todayBet,
-      profit: x.profit != null ? x.profit : x.todayPnl
+      profit: x.profit != null ? x.profit : x.todayPnl,
+      rtpIndicator: !!x.rtpIndicator
     }));
     return {
       TARGET: String(target || ''),
@@ -1112,8 +1113,6 @@
       VISUAL_TARGET_KIND: 'machineNum',
       ROOM_SESSION_ID: currentRoomSessionId,
       FORCE_ROOM_RESET: true,
-      AUTO_GOOD_ROOM_CHAIN: !!(goodRoomAutoState && goodRoomAutoState.active && goodRoomAutoState.game === session.game),
-      GOOD_ROOM_CHAIN_ATTEMPT: goodRoomAutoState ? Number(goodRoomAutoState.attempt || 0) : 0,
       SETH_ACCOUNT: session.account,
       APP_VER: APP_VERSION,
       AGENT_MODE: true
@@ -1187,101 +1186,13 @@
       ScarabWebLauncher.open(finalUrl, { kind: 'atg', gameCode: requestedGame, gameMeta: GAME_META[requestedGame], cfg: config });
       $('err2').textContent = '';
     } catch (error) {
-        $('err2').textContent = error && error.message ? error.message : '進入遊戲失敗';
+      $('err2').textContent = error && error.message ? error.message : '進入遊戲失敗';
     } finally {
       buttons.forEach(button => { button.disabled = false; });
     }
   }
 
-  function retireGameForRoomSwitch() {
-    clearPreparedGameEntry();
-    gameOpenSerial++;
-    currentRoomSessionId = '';
-    if (window.ScarabWebLauncher) window.ScarabWebLauncher.close();
-    try {
-      sessionStorage.removeItem('seth_seated');
-      sessionStorage.removeItem('seth_switched');
-      sessionStorage.removeItem('SCARAB_FORCE_MANUAL_ROOM');
-      sessionStorage.removeItem('SCARAB_ROOM_FALLBACK');
-    } catch (_) {}
-  }
-
-  function currentGoodRoomQueue() {
-    const list = (boards && Array.isArray(boards.composite)) ? boards.composite : [];
-    const seen = new Set();
-    return list.filter(item => {
-      if (!item || item.machineNum == null || item.isLocked === true) return false;
-      const key = String(item.machineNum);
-      if (!/^\d+$/.test(key) || seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    }).slice(0, 10);
-  }
-
-  async function launchGoodRoomCandidate(item) {
-    if (!item || !session || item.machineNum == null) return false;
-    if (!goodRoomAutoState || !goodRoomAutoState.active || goodRoomAutoState.game !== session.game) return false;
-    const machineNum = String(item.machineNum);
-    goodRoomAutoState.tried.add(machineNum);
-    goodRoomAutoState.current = machineNum;
-    goodRoomAutoState.attempt = Number(goodRoomAutoState.attempt || 0) + 1;
-    retireGameForRoomSwitch();
-    pendingPick = {
-      roomId: String(item.roomId || ''),
-      machineNum,
-      board: 'composite',
-      boardName: BOARD_META.composite[0]
-    };
-    $('room').value = machineNum;
-    $('err2').style.color = '#70e7b0';
-    $('err2').textContent = '正在進入 #' + machineNum + ' 機台…';
-    await enterGame('target');
-    return true;
-  }
-
-  async function startGoodRoomFromOverlay(item) {
-    if (!item || item.machineNum == null || !session || !session.game) return;
-    const accepted = await confirmRoom(String(item.machineNum));
-    if (!accepted) return;
-    const queue = currentGoodRoomQueue();
-    const chosen = queue.find(x => String(x.machineNum) === String(item.machineNum)) || item;
-    goodRoomAutoState = {
-      active: true,
-      game: session.game,
-      queue,
-      tried: new Set(),
-      current: '',
-      attempt: 0
-    };
-    await launchGoodRoomCandidate(chosen);
-  }
-
-  async function retryGoodRoomChain() {
-    const state = goodRoomAutoState;
-    if (!state || !state.active || !session || state.game !== session.game) return;
-    let queue = Array.isArray(state.queue) ? state.queue : [];
-    let next = queue.find(x => x && x.machineNum != null && !state.tried.has(String(x.machineNum)));
-    if (!next) {
-      // All current recommendations were tried. Pull a fresh real ATG table set,
-      // rebuild the recommendation queue, and continue instead of stopping.
-      await loadBoards(state.game, { force: true });
-      if (!goodRoomAutoState || goodRoomAutoState !== state || !state.active) return;
-      queue = currentGoodRoomQueue();
-      state.queue = queue;
-      next = queue.find(x => x && x.machineNum != null && !state.tried.has(String(x.machineNum)));
-      if (!next && queue.length) {
-        // Same ten rooms can legitimately come back. Start a new pass but never
-        // immediately re-pick the room that just failed.
-        const failed = String(state.current || '');
-        state.tried = new Set(failed ? [failed] : []);
-        next = queue.find(x => String(x.machineNum) !== failed) || queue[0];
-      }
-    }
-    if (next) await launchGoodRoomCandidate(next);
-  }
-
   function closeGame(destination) {
-    goodRoomAutoState = null;
     clearPreparedGameEntry();
     // Invalidate async work from the game instance that is being closed.
     // This does NOT alter room selection/fallback logic; it only prevents
@@ -1326,11 +1237,10 @@
         const machineNum = parsed.searchParams.get('mn') || '';
         found = ((boards && boards.composite) || []).find(x => String(x.roomId || '') === roomId || String(x.machineNum || '') === machineNum) || null;
       } catch (_) {}
-      if (found) void startGoodRoomFromOverlay(found);
-      return;
-    }
-    if (/__sethcmd__\/retry-good/.test(command)) {
-      void retryGoodRoomChain();
+      // Close the old game first so its callbacks are invalidated, then start
+      // the newly selected room. The original selection rules are untouched.
+      closeGame('rooms');
+      if (found) setTimeout(() => selectRoom(found), 0);
       return;
     }
     if (/__sethcmd__\/rooms/.test(command)) { closeGame('rooms'); return; }
@@ -1397,10 +1307,6 @@
   $('skipBtn').onclick = () => enterGame('manual');
   $('gameExit').onclick = () => closeGame('rooms');
   window.addEventListener('scarab:web-command', event => handleGameCommand(event && event.detail && event.detail.url));
-  window.addEventListener('scarab:web-status', event => {
-    const state = event && event.detail && event.detail.state;
-    if (state === 'room-entered') goodRoomAutoState = null;
-  });
 
   syncShellOrientation();
   window.addEventListener('resize', () => {

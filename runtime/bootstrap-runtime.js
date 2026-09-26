@@ -61,10 +61,10 @@
   var portraitClearSince = 0;
   var overlayRecovering = false;
   var portraitFinderTimer = null;
-  var portraitLastTargetClick = 0;
-  var portraitLastNextClick = 0;
-  var portraitPageTurns = 0;
-  var goodRoomRetrySent = false;
+  var portraitTargetAttemptAt = 0;
+  var portraitPageAttemptAt = 0;
+  var portraitPageIndex = 1;
+  var portraitEngineSwitching = false;
   var loaded = Object.create(null);
   var watchdogTimer = null;
 
@@ -76,115 +76,73 @@
     } catch (_) {}
   }
 
-  function command(url){
-    try {
-      if (window.parent && window.parent !== window) {
-        window.parent.postMessage({__scarabCommand:true,url:String(url||''),roomSessionId:String(window.__SCARAB_ROOM_SESSION_ID||window.__SC_ROOM_SESSION_ID||'')}, location.origin);
-      }
-    } catch (_) {}
-  }
-
   function visibleElement(el){
-    try {
-      if(!el || el.nodeType!==1) return false;
-      var cs=getComputedStyle(el),r=el.getBoundingClientRect();
-      return cs.display!=='none' && cs.visibility!=='hidden' && Number(cs.opacity||1)>0 && r.width>8 && r.height>8 && r.bottom>0 && r.right>0 && r.top<innerHeight && r.left<innerWidth;
-    } catch (_) { return false; }
+    try{if(!el||el.nodeType!==1)return false;var cs=getComputedStyle(el),r=el.getBoundingClientRect();return cs.display!=='none'&&cs.visibility!=='hidden'&&Number(cs.opacity||1)>0&&r.width>8&&r.height>8&&r.bottom>0&&r.right>0&&r.top<innerHeight&&r.left<innerWidth;}catch(_){return false;}
   }
-
-  function portraitIgnore(el){
-    try { return !!(el && el.closest && el.closest('#scarab-heart-ui,.shLegacyNotice,#shToast,script,style')); } catch (_) { return false; }
+  function portraitTargetText(text,target){
+    var tx=String(text||'').replace(/\s+/g,' ').trim(); if(!tx||tx.length>80)return false;
+    var raw=String(parseInt(target,10)); if(!/^\d+$/.test(raw))return false;
+    var pad=raw.padStart(3,'0');
+    return tx===raw||tx===pad||tx==='#'+raw||tx==='#'+pad||new RegExp('(?:^|[^0-9])0*'+raw+'(?:[^0-9]|$)').test(tx)&&/房|機台|机台|號|号|machine|room/i.test(tx);
   }
-
-  function machineTextMatch(el,target){
-    try {
-      if(!el || portraitIgnore(el) || !visibleElement(el)) return false;
-      var tx=String(el.innerText||el.textContent||'').replace(/\s+/g,' ').trim();
-      if(!tx || tx.length>90) return false;
-      var raw=String(parseInt(target,10));
-      var pad=raw.padStart(3,'0');
-      var exact=(tx===raw||tx===pad||tx==='#'+raw||tx==='#'+pad);
-      var tagged=new RegExp('(?:^|[^0-9])0*'+raw+'(?:[^0-9]|$)').test(tx) && /房|機台|机台|號|号|machine|room/i.test(tx);
-      var hint=String((el.id||'')+' '+(el.className||'')).toLowerCase();
-      var semantic=new RegExp('(?:^|[^0-9])0*'+raw+'(?:[^0-9]|$)').test(tx) && /room|machine|table|slot|card|item/.test(hint);
-      return exact||tagged||semantic;
-    } catch (_) { return false; }
+  function liveRoomForMachine(e,target){
+    try{
+      var list=e&&Array.isArray(e.tables)?e.tables:[];var raw=String(parseInt(target,10));
+      for(var i=0;i<list.length;i++){
+        var x=list[i]||{};var n=x.number!=null?x.number:(x.machineNum!=null?x.machineNum:(x.machineNo!=null?x.machineNo:x.machine_num));
+        if(String(parseInt(n,10))===raw)return {roomId:String(x.roomId!=null?x.roomId:(x.room_id!=null?x.room_id:(x.tableId!=null?x.tableId:''))),machineNum:String(n)};
+      }
+    }catch(_){} return null;
   }
-
-  function clickableForMachine(el){
-    var cur=el;
-    for(var i=0;i<6&&cur&&cur!==document.body;i++,cur=cur.parentElement){
-      if(portraitIgnore(cur)) return null;
-      var tag=String(cur.tagName||'').toLowerCase();
-      var role=String(cur.getAttribute&&cur.getAttribute('role')||'').toLowerCase();
-      var hint=String((cur.id||'')+' '+(cur.className||'')).toLowerCase();
-      if(tag==='button'||tag==='a'||role==='button'||cur.hasAttribute&&cur.hasAttribute('onclick')||/room|machine|table|slot|card|item/.test(hint)) return cur;
-    }
-    return el;
-  }
-
-  function clickPortraitTarget(cfg){
-    var target=String(cfg&&cfg.MACHINENUM||'').trim();
-    if(!target||window.__SCARAB_ROOM_DONE) return false;
-    var list=document.querySelectorAll('button,[role="button"],a,li,div,section');
-    for(var i=0;i<list.length;i++){
-      var el=list[i];
-      if(!machineTextMatch(el,target)) continue;
-      var hit=clickableForMachine(el);
-      if(!hit||!visibleElement(hit)) continue;
-      var now=Date.now();
-      if(now-portraitLastTargetClick<1800) return true;
-      portraitLastTargetClick=now;
-      try { hit.scrollIntoView({block:'center',inline:'center'}); } catch (_) {}
-      try { hit.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,pointerType:'touch'})); } catch (_) {}
-      try { hit.dispatchEvent(new MouseEvent('mousedown',{bubbles:true})); } catch (_) {}
-      try { hit.click(); } catch (_) { try { hit.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); } catch(__){} }
+  async function portraitSwitchByEngine(cfg){
+    if(portraitEngineSwitching)return false;
+    var e=window.__sethEngine,target=String(cfg&&cfg.MACHINENUM||'').trim(); if(!e||!target)return false;
+    var row=liveRoomForMachine(e,target); if(!row)return false;
+    portraitEngineSwitching=true;
+    try{
       status('room-searching','已找到機台 #'+target+'，正在進房…');
-      return true;
-    }
+      var ok=false;
+      if(row.roomId&&typeof e.selectByRoom==='function'){var r=e.selectByRoom(row.roomId);if(r&&typeof r.then==='function')r=await r;ok=r!==false;}
+      if(!ok&&typeof e.switchRoomInGame==='function'){var s=e.switchRoomInGame(target);if(s&&typeof s.then==='function')s=await s;ok=s!==false;}
+      if(ok){status('room-entered','已定位機台 #'+target);return true;}
+    }catch(_){}finally{setTimeout(function(){portraitEngineSwitching=false;},900)}
     return false;
   }
-
-  function findPortraitNext(){
-    var selectors=[
-      '.el-pagination .btn-next:not([disabled])',
-      '[class*="pagination"] [class*="next"]:not([disabled])',
-      'button[aria-label*="next" i]:not([disabled])',
-      'button[title*="next" i]:not([disabled])',
-      '[role="button"][aria-label*="next" i]'
-    ];
-    for(var i=0;i<selectors.length;i++){
-      try { var n=document.querySelector(selectors[i]); if(n&&visibleElement(n)&&!portraitIgnore(n)) return n; } catch(_){}
-    }
-    var nodes=document.querySelectorAll('button,[role="button"],a');
-    for(var j=0;j<nodes.length;j++){
-      var el=nodes[j]; if(!visibleElement(el)||portraitIgnore(el)||el.disabled) continue;
-      var tx=String(el.innerText||el.textContent||'').replace(/\s+/g,'').trim();
-      var aria=String(el.getAttribute&&el.getAttribute('aria-label')||'');
-      var title=String(el.getAttribute&&el.getAttribute('title')||'');
-      var hint=String((el.id||'')+' '+(el.className||'')).toLowerCase();
-      if(/^(下一頁|下一页|›|»|>)$/.test(tx)||/下一頁|下一页|next/i.test(aria+' '+title)||/next/.test(hint)) return el;
-    }
-    return null;
+  function cocosNodeText(e,node){
+    var parts=[];try{if(typeof e.label==='function')parts.push(e.label(node)||'');}catch(_){}try{if(typeof e.btnText==='function')parts.push(e.btnText(node)||'');}catch(_){}try{parts.push(node&&node.name||'');}catch(_){}return parts.join(' ').trim();
   }
-
-  function portraitFinderTick(){
-    try {
-      var payload=window.__SCARAB_WEB_PAYLOAD||{},cfg=payload.cfg||{};
-      if(!cfg.PORTRAIT_ROOM_MODE||!String(cfg.MACHINENUM||'').trim()||window.__SCARAB_ROOM_DONE) return;
-      if(clickPortraitTarget(cfg)) return;
-      // The legacy engine already flips pages on many builds. This is a
-      // portrait-only backup: if the target is not visible, operate the real
-      // visible next-page control instead of guessing an ATG roomId.
+  function portraitPressTargetNode(cfg){
+    var e=window.__sethEngine,target=String(cfg&&cfg.MACHINENUM||'').trim();if(!e||typeof e.walk!=='function'||!target)return false;
+    try{
+      var nodes=e.walk(function(n){return portraitTargetText(cocosNodeText(e,n),target);})||[];
+      if(nodes.length){var n=nodes[0];if(typeof e.press==='function'){e.press(n);status('room-searching','已找到機台 #'+target+'，正在進房…');return true;}}
+    }catch(_){} return false;
+  }
+  function portraitNextCocos(){
+    var e=window.__sethEngine;if(!e||typeof e.walk!=='function')return false;
+    try{
+      var nodes=e.walk(function(n){var tx=cocosNodeText(e,n).replace(/\s+/g,'').toLowerCase();return /下一頁|下一页|next|pageright|rightpage/.test(tx)||tx==='>'||tx==='›'||tx==='»';})||[];
+      if(!nodes.length)nodes=e.walk(function(n){var nm=String(n&&n.name||'').toLowerCase();return /next|right.*page|page.*right/.test(nm);})||[];
+      if(!nodes.length)nodes=e.walk(function(n){var nm=String(n&&n.name||'');return nm==='Toggle'||nm==='allToggle';})||[];
+      if(nodes.length&&typeof e.press==='function'){e.press(nodes[(portraitPageIndex-1)%nodes.length]);return true;}
+    }catch(_){} return false;
+  }
+  function portraitPressDomTarget(cfg){
+    var target=String(cfg&&cfg.MACHINENUM||'').trim();if(!target)return false;
+    try{var els=document.querySelectorAll('button,[role="button"],a,li,div');for(var i=0;i<els.length;i++){var el=els[i];if(!visibleElement(el)||el.closest&&el.closest('#scarab-heart-ui,.shLegacyNotice'))continue;if(!portraitTargetText(el.innerText||el.textContent,target))continue;var hit=el;for(var j=0;j<5&&hit&&hit!==document.body;j++,hit=hit.parentElement){if(hit.matches&&hit.matches('button,a,[role="button"],[onclick]'))break;}hit=hit||el;try{hit.click();status('room-searching','已找到機台 #'+target+'，正在進房…');return true;}catch(_){}}}catch(_){}return false;
+  }
+  function portraitNextDom(){
+    var sels=['.el-pagination .btn-next:not([disabled])','[class*="pagination"] [class*="next"]:not([disabled])','button[aria-label*="next" i]:not([disabled])','button[title*="next" i]:not([disabled])'];
+    for(var i=0;i<sels.length;i++){try{var el=document.querySelector(sels[i]);if(el&&visibleElement(el)){el.click();return true;}}catch(_){}}
+    return false;
+  }
+  async function portraitFinderTick(){
+    try{
+      var payload=window.__SCARAB_WEB_PAYLOAD||{},cfg=payload.cfg||{};if(!cfg.PORTRAIT_ROOM_MODE||!String(cfg.MACHINENUM||'').trim()||window.__SCARAB_ROOM_DONE)return;
       var now=Date.now();
-      if(now-portraitLastNextClick<2400) return;
-      var next=findPortraitNext();
-      if(next){
-        portraitLastNextClick=now; portraitPageTurns++;
-        try { next.click(); } catch (_) { try { next.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); } catch(__){} }
-        status('room-searching','第 '+String(portraitPageTurns+1)+' 頁搜尋機台 #'+String(cfg.MACHINENUM||'')+'…');
-      }
-    } catch (_) {}
+      if(now-portraitTargetAttemptAt>900){portraitTargetAttemptAt=now;if(await portraitSwitchByEngine(cfg))return;if(portraitPressTargetNode(cfg))return;if(portraitPressDomTarget(cfg))return;}
+      if(now-portraitPageAttemptAt>1800){portraitPageAttemptAt=now;var moved=portraitNextCocos()||portraitNextDom();if(moved){portraitPageIndex++;status('room-searching','第 '+portraitPageIndex+' 頁搜尋機台 #'+String(cfg.MACHINENUM||'')+'…');}}
+    }catch(_){}
   }
 
   function domReady(){
@@ -322,7 +280,7 @@
 
   function startWatchdogs(){
     if(watchdogTimer) return;
-    if(!portraitFinderTimer) portraitFinderTimer=setInterval(portraitFinderTick,320);
+    if(!portraitFinderTimer) portraitFinderTimer=setInterval(function(){portraitFinderTick();},420);
     watchdogTimer=setInterval(function(){
       try {
         var waiting=isRoomWait();
@@ -340,21 +298,14 @@
           }
 
           var exact=!!cfg.EXACT_ROOM;
-          var autoGood=!!cfg.AUTO_GOOD_ROOM_CHAIN;
-          var retryMs=portraitRoom?18000:12000;
-          if(autoGood && !goodRoomRetrySent && Date.now()-roomWaitSince>=retryMs){
-            goodRoomRetrySent=true;
-            status('room-recommend-next','目前推薦房未定位成功，正在改找下一個推薦');
-            command('https://__sethcmd__/retry-good?mn='+encodeURIComponent(String(cfg.MACHINENUM||'')));
-          } else if (!autoGood && !exact && !portraitRoom && !window.__SCARAB_FORCE_MANUAL_ROOM && Date.now()-roomWaitSince>=ROOM_TIMEOUT_MS) {
+          if (!exact && !portraitRoom && !window.__SCARAB_FORCE_MANUAL_ROOM && Date.now()-roomWaitSince>=ROOM_TIMEOUT_MS) {
             forceManualRoom();
-          } else if (!autoGood && (exact||portraitRoom) && Date.now()-roomWaitSince>=ROOM_TIMEOUT_MS) {
+          } else if ((exact||portraitRoom) && Date.now()-roomWaitSince>=ROOM_TIMEOUT_MS) {
             status('room-exact-wait','正在等待指定機台 #'+String(cfg.MACHINENUM||'')+' 的即時房間資料');
             roomWaitSince=Date.now();
           }
         } else {
           roomWaitSince=0;
-          goodRoomRetrySent=false;
           if(portraitRoom&&portraitWasWaiting){
             if(!portraitClearSince) portraitClearSince=Date.now();
             if(Date.now()-portraitClearSince>=1600){
