@@ -3,7 +3,7 @@
 
   const $ = id => document.getElementById(id);
   const log = (...args) => { try { console.log('[ScarabHeart]', ...args); } catch (_) {} };
-  const APP_VERSION = 'v3.09-six-game-live-machine-recommendations';
+  const APP_VERSION = 'v3.10-six-game-platformmodel-cleanup-fix';
   const GAMES = [
     ['golden-seth', '戰神賽特2 覺醒之力', 'media/game2.png'],
     ['egyptian-mythology', '戰神賽特', 'media/game8.png'],
@@ -64,6 +64,51 @@
   const boardCache = Object.create(null);
   const BOARD_CACHE_MS = 15000;
   const REAL_BOARD_STORAGE_MS = 5 * 60 * 1000;
+
+  const SIX_GAME_CODES = new Set([
+    'tiger-princess', 'hades', 'wuxia-caishen',
+    'son-go-ku', 'new-vampire-hunter', 'new-jinlian'
+  ]);
+
+  function releaseProxySessionForFrame(frame) {
+    if (!frame) return;
+    try {
+      const pathname = String(frame.contentWindow && frame.contentWindow.location && frame.contentWindow.location.pathname || '');
+      const match = pathname.match(/^\/__game\/([a-f0-9]{16,})\//i);
+      if (!match) return;
+      const url = '/__game/session/' + encodeURIComponent(match[1]) + '/close';
+      try {
+        if (navigator.sendBeacon) {
+          const blob = new Blob(['{}'], { type: 'application/json' });
+          if (navigator.sendBeacon(url, blob)) return;
+        }
+      } catch (_) {}
+      fetch(url, { method:'POST', headers:{'content-type':'application/json'}, body:'{}', keepalive:true }).catch(() => null);
+    } catch (_) {}
+  }
+
+  function pruneRecommendationState(keepGame) {
+    const keep = String(keepGame || '');
+    try {
+      Object.keys(boardCache).forEach(game => {
+        if (!keep || game !== keep) delete boardCache[game];
+      });
+    } catch (_) {}
+    try {
+      const now = Date.now();
+      const prefix = 'scarab_real_boards_v275_';
+      const remove = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!key || !key.startsWith(prefix)) continue;
+        try {
+          const raw = JSON.parse(localStorage.getItem(key) || 'null');
+          if (!raw || !raw.at || now - Number(raw.at) > REAL_BOARD_STORAGE_MS) remove.push(key);
+        } catch (_) { remove.push(key); }
+      }
+      remove.forEach(key => localStorage.removeItem(key));
+    } catch (_) {}
+  }
 
   function realBoardStorageKey(game) {
     return 'scarab_real_boards_v275_' + String(game || '');
@@ -363,6 +408,8 @@
   }
 
   function logout(silent) {
+    stopRecommendationProbe();
+    pruneRecommendationState('');
     if (window.ScarabWebLauncher) ScarabWebLauncher.close();
     stopAccessWatch();
     const accessSessionId = session && session.accessSessionId;
@@ -378,6 +425,7 @@
     if (!session || !GAME_META[code]) return;
     clearPreparedGameEntry();
     stopRecommendationProbe();
+    pruneRecommendationState(code);
     // Invalidate every async result belonging to the previous game first.
     boardLoadSerial++;
     gameOpenSerial++;
@@ -415,6 +463,7 @@
     if (!p) return;
     try { clearTimeout(p.timer); } catch (_) {}
     try { window.removeEventListener('message', p.listener); } catch (_) {}
+    try { if (p.frame) releaseProxySessionForFrame(p.frame); } catch (_) {}
     try { if (p.frame) { p.frame.src = 'about:blank'; p.frame.remove(); } } catch (_) {}
     try { if (p.reject) p.reject(new Error('probe-cancelled')); } catch (_) {}
   }
@@ -705,40 +754,37 @@
   }
 
   function simulatedBoardsFromTables(gameCode, tables) {
-    // These six titles use ATG's REAL machine number / roomId / occupancy.
-    // Only the displayed RTP-style value is an assistant indicator, not an ATG RTP feed.
+    // For these six games, machine identity / roomId / occupancy comes from ATG.
+    // The displayed RTP number remains the assistant's existing indicator range.
     const rawRows = (Array.isArray(tables) ? tables : []).map(raw => {
       const machineNum = String(raw.machineNum == null ? (raw.number == null ? '' : raw.number) : raw.machineNum);
-      const roomId = String(raw.roomId == null ? (raw.room_id == null ? '' : raw.room_id) : raw.roomId);
-      const status = String(raw.status || '');
+      const roomId = String(raw.roomId == null ? (raw.room_id == null ? (raw.tableId == null ? '' : raw.tableId) : raw.room_id) : raw.roomId);
+      const status = String(raw.status || raw.tableStatus || '');
       const locked = !!raw.isLocked || /locked/i.test(status);
-      const occupied = /full|close/i.test(status);
+      const occupied = /full|close|occupied/i.test(status);
       if (!/^\d+$/.test(machineNum) || !roomId || locked || occupied) return null;
-      const seed = simHash(gameCode + ':' + machineNum);
       return {
         roomId,
         machineNum,
         status: status || 'Empty',
         isLocked: false,
         available: true,
-        seed,
+        seed: simHash(gameCode + ':' + machineNum),
         source: 'ATG_REAL_MACHINE_INDICATOR'
       };
     }).filter(Boolean);
 
     const seen = new Set();
     const rows = rawRows.filter(row => {
-      if (seen.has(row.machineNum)) return false;
-      seen.add(row.machineNum);
+      const key = row.roomId + ':' + row.machineNum;
+      if (seen.has(key)) return false;
+      seen.add(key);
       return true;
     });
     if (!rows.length) return emptyBoards();
 
-    // Stable selection from the current REAL empty-machine snapshot.
-    // This avoids hard-coded machine numbers while keeping the established
-    // recommendation distribution users are familiar with.
-    const selected = rows.slice().sort((a,b) => (b.seed % 100000) - (a.seed % 100000)).slice(0, 10);
-
+    // Keep only one current snapshot and select ten real currently-available machines.
+    const selected = rows.slice().sort((a,b) => (b.seed % 100000) - (a.seed % 100000)).slice(0,10);
     function indicatorRow(row, rank, salt) {
       const seed = simHash(gameCode + ':' + row.machineNum + ':' + salt);
       let rtp;
@@ -752,8 +798,8 @@
         rtp = floors[idx] + ((seed % Math.max(1, Math.round(spans[idx] * 100))) / 100);
       }
       rtp = Math.min(96.69, Math.round(rtp * 100) / 100);
-      const scoreBands = [895, 874, 856, 822, 803, 785, 766, 748, 731, 715];
-      const score = Math.max(700, scoreBands[Math.min(rank, 9)] - (seed % 11));
+      const scoreBands = [895,874,856,822,803,785,766,748,731,715];
+      const score = Math.max(700, scoreBands[Math.min(rank,9)] - (seed % 11));
       const heat = 1200 + ((seed >>> 7) % 7800);
       return Object.assign({}, row, {
         rtp,
@@ -766,19 +812,11 @@
       });
     }
 
-    const composite = selected.map((x,i) => Object.assign(indicatorRow(x,i,'composite'), {metric:'綜合指標'}));
-    const volatility = selected.map((x,i) => Object.assign(indicatorRow(x,i,'volatility'), {metric:'爆分指標'}))
-      .sort((a,b) => b.rtp - a.rtp);
-    const premium = selected.map((x,i) => Object.assign(indicatorRow(x,i,'premium'), {metric:'熱度指標'}))
-      .sort((a,b) => b.bet - a.bet);
-    const freegame = selected.map((x,i) => Object.assign(indicatorRow(x,i,'freegame'), {metric:'免遊指標'}))
-      .sort((a,b) => a.score - b.score);
-
     return {
-      composite,
-      volatility,
-      premium,
-      freegame,
+      composite: selected.map((x,i) => Object.assign(indicatorRow(x,i,'composite'), {metric:'綜合指標'})),
+      volatility: selected.map((x,i) => Object.assign(indicatorRow(x,i,'volatility'), {metric:'爆分指標'})).sort((a,b)=>b.rtp-a.rtp),
+      premium: selected.map((x,i) => Object.assign(indicatorRow(x,i,'premium'), {metric:'熱度指標'})).sort((a,b)=>b.bet-a.bet),
+      freegame: selected.map((x,i) => Object.assign(indicatorRow(x,i,'freegame'), {metric:'免遊指標'})).sort((a,b)=>a.score-b.score),
       updatedAt: Date.now(),
       source: 'ATG_REAL_MACHINE_INDICATOR',
       simulated: true
@@ -791,16 +829,10 @@
     const finalUrl = await resolveAtgGameUrl(gameCode);
     if (!session || session.game !== gameCode || serial !== recommendationProbeSerial) throw new Error('probe-cancelled');
 
-    // IMPORTANT: do NOT append ?table=1 here. The six titles must be allowed to
-    // enter ATG's normal machine-selection bootstrap so SlotFrameworkData.tables
-    // is populated by the game's own authenticated socket/session.
     const target = new URL(finalUrl);
     target.searchParams.delete('table');
     const payload = {
-      kind:'atg',
-      probe:true,
-      probeKind:'six-live-tables',
-      gameCode:gameCode,
+      kind:'atg', probe:true, probeKind:'six-live-tables', gameCode:gameCode,
       gameMeta:GAME_META[gameCode] || {},
       cfg:{ GAME_CODE:gameCode, PROBE:true, PROBE_KIND:'six-live-tables' }
     };
@@ -814,9 +846,13 @@
       const fw = portrait ? 720 : 1280;
       const fh = portrait ? 1280 : 720;
       frame.style.cssText = 'position:fixed!important;left:-20000px!important;top:-20000px!important;width:' + fw + 'px!important;height:' + fh + 'px!important;opacity:0!important;pointer-events:none!important;border:0!important;visibility:visible!important;';
+      let settled = false;
       const cleanup = () => {
+        if (settled) return;
+        settled = true;
         try { clearTimeout(timer); } catch (_) {}
         try { window.removeEventListener('message', listener); } catch (_) {}
+        try { releaseProxySessionForFrame(frame); } catch (_) {}
         try { frame.src='about:blank'; frame.remove(); } catch (_) {}
         if (recommendationProbe && recommendationProbe.frame === frame) recommendationProbe = null;
       };
@@ -825,12 +861,15 @@
         const data = event.data;
         if (!data || data.__scarabRecommendationProbe !== true || String(data.gameCode || '') !== gameCode) return;
         if (data.ok && Array.isArray(data.tables) && data.tables.length >= 1) {
-          cleanup(); resolve(data.tables);
+          const tables = data.tables.slice(0, 3500); // hard bound; never accumulate snapshots.
+          cleanup();
+          resolve(tables);
         } else if (data.ok === false) {
-          cleanup(); reject(new Error(data.error || 'ATG 即時機台資料讀取失敗'));
+          cleanup();
+          reject(new Error(data.error || 'ATG 即時機台資料讀取失敗'));
         }
       };
-      const timer = setTimeout(() => { cleanup(); reject(new Error('ATG 即時機台資料逾時')); }, 28000);
+      const timer = setTimeout(() => { cleanup(); reject(new Error('ATG 即時機台資料逾時')); }, 30000);
       recommendationProbe = {frame, listener, timer, reject};
       window.addEventListener('message', listener);
       document.body.appendChild(frame);
@@ -886,9 +925,8 @@
     if (SIM_RECOMMEND_GAMES.has(game)) {
       const box = $('recommend');
       pendingPick = null;
+      pruneRecommendationState(game);
 
-      // Reuse only a previously successful REAL-machine snapshot while a fresh
-      // ATG probe is running. Never fall back to hard-coded machine numbers.
       let instant = null;
       const memory = boardCache[game] && boardCache[game].value;
       if (memory && usableBoardCount(memory) > 0) instant = normalizeBoards(memory);
@@ -927,6 +965,8 @@
           $('updTime').textContent = '讀取失敗';
           box.innerHTML = '<div style="color:#ff9a82;font-size:12px;padding:16px">目前無法取得 ATG 機台資料，請按「刷新」重試。</div>';
         }
+      } finally {
+        pruneRecommendationState(game);
       }
       return;
     }
@@ -1317,6 +1357,8 @@
 
   function closeGame(destination) {
     clearPreparedGameEntry();
+    stopRecommendationProbe();
+    pruneRecommendationState(session && session.game);
     hideRoomPickToast();
     // Invalidate async work from the game instance that is being closed.
     // This does NOT alter room selection/fallback logic; it only prevents

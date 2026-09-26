@@ -116,7 +116,7 @@ app.post('/api/access/login',accessJson,async(req,res)=>{try{const username=Stri
 app.get('/api/access/check',async(req,res)=>{const id=String(req.query.sessionId||''),current=accessSessions.get(id);if(!current)return res.status(401).json({valid:false,reason:'session_invalid'});try{const access=await authorizeWhitelist(current.username,current.platform);if(!access.allowed){accessSessions.delete(id);return res.status(403).json({valid:false,reason:access.reason});}res.json({valid:true,reason:'ok'});}catch(e){res.status(503).json({valid:false,reason:'database_unavailable',temporary:true});}});
 app.post('/api/access/logout',accessJson,(req,res)=>{const id=String(req.body&&req.body.sessionId||'');if(id)accessSessions.delete(id);res.json({success:true});});
 app.get('/healthz', (_req, res) => {
-  res.status(200).json({ ok: true, version: '3.04-mobile-login-balanced-spacing' });
+  res.status(200).json({ ok: true, version: '3.10-six-game-platformmodel-cleanup-fix' });
 });
 
 app.use('/__api', express.raw({ type: '*/*', limit: '2mb' }), async (req, res) => {
@@ -237,7 +237,7 @@ function gameBoot(sid, originalHref, session, withRuntime) {
     '<\/script>';
   if (payload && payload.probe === true) {
     const probeScript = payload.probeKind === 'six-live-tables'
-      ? '/__runtime/atg-six-recommendation-probe.js?v=309'
+      ? '/__runtime/atg-six-recommendation-probe.js?v=310'
       : '/__runtime/atg-recommendation-probe.js?v=274';
     return proxyBoot + commonRuntimeBoot +
       '<script>(function(){var s=document.createElement("script");s.src=location.origin+' + scriptJson(probeScript) + ';s.defer=false;(document.head||document.documentElement).appendChild(s)})()<\/script>';
@@ -288,6 +288,12 @@ app.get('/__game/open', (req, res) => {
     lastGoodDocumentUrl: ''
   });
   res.redirect(302, '/__game/' + sid + url.pathname + url.search);
+});
+
+app.post('/__game/session/:sid/close', express.json({ limit: '4kb' }), (req, res) => {
+  const sid = String(req.params.sid || '');
+  if (sid) sessions.delete(sid);
+  res.status(204).end();
 });
 
 app.all('/__game/:sid/__remote', express.raw({ type: '*/*', limit: '16mb' }), async (req, res) => {
@@ -515,14 +521,22 @@ app.use(express.static(publicDir, { extensions: ['html'] }));
 app.get('*', (_req, res) => res.sendFile(path.join(publicDir, 'index.html')));
 
 setInterval(() => {
-  const cutoff = Date.now() - 6 * 60 * 60 * 1000;
+  const now = Date.now();
+  const normalCutoff = now - 6 * 60 * 60 * 1000;
+  const probeCutoff = now - 2 * 60 * 1000;
   for (const [id, session] of sessions) {
-    if (session.createdAt < cutoff) sessions.delete(id);
+    const isProbe = !!(session && session.payload && session.payload.probe === true);
+    if ((isProbe && session.createdAt < probeCutoff) || (!isProbe && session.createdAt < normalCutoff)) sessions.delete(id);
   }
   for (const [id, access] of accessSessions) {
-    if (access.createdAt < cutoff) accessSessions.delete(id);
+    if (access.createdAt < normalCutoff) accessSessions.delete(id);
   }
-}, 30 * 60 * 1000).unref();
+  for (const [key, cached] of recommendationProxyCache) {
+    if (!cached || now - Number(cached.at || 0) > 10 * 60 * 1000) recommendationProxyCache.delete(key);
+  }
+  // Hard caps prevent accidental long-running accumulation even if upstream URLs vary.
+  while (recommendationProxyCache.size > 24) recommendationProxyCache.delete(recommendationProxyCache.keys().next().value);
+}, 60 * 1000).unref();
 
 const server = app.listen(process.env.PORT || 3000, '0.0.0.0', () => {
   console.log('ScarabHeart ATG web service listening on ' + (process.env.PORT || 3000));

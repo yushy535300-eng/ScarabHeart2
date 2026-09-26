@@ -96,6 +96,23 @@
     if (ui.loading) ui.loading.classList.toggle('done', !!done);
   }
 
+  function releaseGameProxySession(frame) {
+    if (!frame) return;
+    try {
+      var pathname = String(frame.contentWindow && frame.contentWindow.location && frame.contentWindow.location.pathname || '');
+      var match = pathname.match(/^\/__game\/([a-f0-9]{16,})\//i);
+      if (!match) return;
+      var url = '/__game/session/' + encodeURIComponent(match[1]) + '/close';
+      try {
+        if (navigator.sendBeacon) {
+          var blob = new Blob(['{}'], {type:'application/json'});
+          if (navigator.sendBeacon(url, blob)) return;
+        }
+      } catch (_) {}
+      nativeFetch(url, {method:'POST',headers:{'content-type':'application/json'},body:'{}',keepalive:true}).catch(function(){});
+    } catch (_) {}
+  }
+
   function roomPickVisual(state, message) {
     var box=document.getElementById('roomPickToast');
     if(!box) return;
@@ -152,7 +169,10 @@
 
     try {
       var currentSrc = String(ui.frame.getAttribute('src') || '');
-      if (currentSrc && currentSrc !== 'about:blank') ui.frame.src = 'about:blank';
+      if (currentSrc && currentSrc !== 'about:blank') {
+        releaseGameProxySession(ui.frame);
+        ui.frame.src = 'about:blank';
+      }
     } catch (_) {}
 
     ui.frame.src = '/__game/open?url=' + encodeURIComponent(source.href) +
@@ -168,6 +188,7 @@
     currentRoomSessionId = '';
     if (ui.frame) {
       ui.frame.onload = null;
+      releaseGameProxySession(ui.frame);
       ui.frame.src = 'about:blank';
     }
     if (ui.view) ui.view.classList.add('hide');
