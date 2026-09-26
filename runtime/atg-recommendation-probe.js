@@ -87,7 +87,7 @@
       seen[row.machineNum] = true;
       rows.push(row);
     });
-    if (rows.length < 10) return false;
+    if (rows.length < 1) return false;
     sent = true;
     try {
       parent.postMessage({

@@ -3,7 +3,7 @@
 
   const $ = id => document.getElementById(id);
   const log = (...args) => { try { console.log('[ScarabHeart]', ...args); } catch (_) {} };
-  const APP_VERSION = 'v3.04-mobile-login-balanced-spacing';
+  const APP_VERSION = 'v3.05-portrait-room-goodroom-real-fix';
   const GAMES = [
     ['golden-seth', '戰神賽特2 覺醒之力', 'media/game2.png'],
     ['egyptian-mythology', '戰神賽特', 'media/game8.png'],
@@ -52,6 +52,7 @@
   let boards = null;
   let activeBoard = 'composite';
   let pendingPick = null;
+  let goodRoomAutoState = null;
   let boardLoadSerial = 0;
   let gameOpenSerial = 0;
   let roomSessionSerial = 0;
@@ -805,7 +806,7 @@
         if (event.source !== frame.contentWindow) return;
         const data = event.data;
         if (!data || data.__scarabRecommendationProbe !== true || String(data.gameCode || '') !== gameCode) return;
-        if (data.ok && Array.isArray(data.tables) && data.tables.length >= 10) {
+        if (data.ok && Array.isArray(data.tables) && data.tables.length >= 1) {
           cleanup(); resolve(data.tables);
         } else if (data.ok === false) {
           cleanup(); reject(new Error(data.error || 'ATG 即時機台資料讀取失敗'));
@@ -824,17 +825,11 @@
     if (!game || !session || session.game !== game) return;
 
     const serial = ++boardLoadSerial;
-    if (SIM_RECOMMEND_GAMES.has(game)) {
-      stopRecommendationProbe();
-      pendingPick = null;
-      const simulated = normalizeBoards(instantSimBoards(game));
-      boards = simulated;
-      boardCache[game] = { at: Date.now(), value: simulated };
-      $('updTime').textContent = '更新 ' + formatTime(simulated.updatedAt);
-      renderBoard();
-      return;
-    }
 
+    // v3.05: every recommendation must point to a machine that ATG currently
+    // reports as real. The six simulated-metric titles keep their display
+    // scoring model, but machineNum / roomId / availability now come only from
+    // the live ATG table probe (or a recent cached live probe).
     const box = $('recommend');
     pendingPick = null;
 
@@ -876,7 +871,7 @@
     // API can be much faster for titles it already supports.
     // ATG probe remains authoritative and replaces API data when it arrives.
     let apiPromise = Promise.resolve(null);
-    if (window.SethEyeAPI && SethEyeAPI.boards) {
+    if (!SIM_RECOMMEND_GAMES.has(game) && window.SethEyeAPI && SethEyeAPI.boards) {
       apiPromise = SethEyeAPI.boards(game, operatorCode())
         .then(value => {
           if (!session || session.game !== game || serial !== boardLoadSerial) return null;
@@ -1056,6 +1051,7 @@
     prepareGameEntry(session && session.game).catch(() => null);
     const accepted = await confirmRoom(machineNum);
     if (!accepted) return;
+    goodRoomAutoState = null;
 
     pendingPick = {
       roomId: String(item.roomId || ''),
@@ -1083,29 +1079,8 @@
     }
   }
 
-  function showRoomPickToast(machineNum, gameCode) {
-    const toast = $('roomPickToast');
-    const num = String(machineNum || '').trim();
-    if (!toast) return;
-    const portraitGame = PORTRAIT_ROOM_GAMES.has(String(gameCode || ''));
-    if (!portraitGame || !num) {
-      toast.classList.add('hide');
-      return;
-    }
-    const n = $('roomPickNumber');
-    const s = $('roomPickState');
-    if (n) n.textContent = '#' + num;
-    if (s) s.textContent = '正在定位機台中…';
-    toast.classList.remove('hide');
-  }
-
-  function hideRoomPickToast() {
-    const toast = $('roomPickToast');
-    if (toast) toast.classList.add('hide');
-  }
-
   function gameConfig(target, machineNum, boardName, boardList, targetKind) {
-    const goodRooms = ((boards && boards.composite) || []).filter(x => x && x.machineNum != null).slice(0, 3).map(x => ({
+    const goodRooms = ((boards && boards.composite) || []).filter(x => x && x.machineNum != null).slice(0, 10).map(x => ({
       roomId: x.roomId,
       machineNum: x.machineNum,
       rtp: x.rtp != null ? x.rtp : x.todayRtp,
@@ -1137,6 +1112,8 @@
       VISUAL_TARGET_KIND: 'machineNum',
       ROOM_SESSION_ID: currentRoomSessionId,
       FORCE_ROOM_RESET: true,
+      AUTO_GOOD_ROOM_CHAIN: !!(goodRoomAutoState && goodRoomAutoState.active && goodRoomAutoState.game === session.game),
+      GOOD_ROOM_CHAIN_ATTEMPT: goodRoomAutoState ? Number(goodRoomAutoState.attempt || 0) : 0,
       SETH_ACCOUNT: session.account,
       APP_VER: APP_VERSION,
       AGENT_MODE: true
@@ -1207,20 +1184,105 @@
       }
       const config = gameConfig(target, machineNum, boardName, boardList, targetKind);
       if (!window.ScarabWebLauncher) throw new Error('程式內遊戲載入器未就緒');
-      showRoomPickToast(machineNum, requestedGame);
       ScarabWebLauncher.open(finalUrl, { kind: 'atg', gameCode: requestedGame, gameMeta: GAME_META[requestedGame], cfg: config });
       $('err2').textContent = '';
     } catch (error) {
-      hideRoomPickToast();
-      $('err2').textContent = error && error.message ? error.message : '進入遊戲失敗';
+        $('err2').textContent = error && error.message ? error.message : '進入遊戲失敗';
     } finally {
       buttons.forEach(button => { button.disabled = false; });
     }
   }
 
-  function closeGame(destination) {
+  function retireGameForRoomSwitch() {
     clearPreparedGameEntry();
-    hideRoomPickToast();
+    gameOpenSerial++;
+    currentRoomSessionId = '';
+    if (window.ScarabWebLauncher) window.ScarabWebLauncher.close();
+    try {
+      sessionStorage.removeItem('seth_seated');
+      sessionStorage.removeItem('seth_switched');
+      sessionStorage.removeItem('SCARAB_FORCE_MANUAL_ROOM');
+      sessionStorage.removeItem('SCARAB_ROOM_FALLBACK');
+    } catch (_) {}
+  }
+
+  function currentGoodRoomQueue() {
+    const list = (boards && Array.isArray(boards.composite)) ? boards.composite : [];
+    const seen = new Set();
+    return list.filter(item => {
+      if (!item || item.machineNum == null || item.isLocked === true) return false;
+      const key = String(item.machineNum);
+      if (!/^\d+$/.test(key) || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).slice(0, 10);
+  }
+
+  async function launchGoodRoomCandidate(item) {
+    if (!item || !session || item.machineNum == null) return false;
+    if (!goodRoomAutoState || !goodRoomAutoState.active || goodRoomAutoState.game !== session.game) return false;
+    const machineNum = String(item.machineNum);
+    goodRoomAutoState.tried.add(machineNum);
+    goodRoomAutoState.current = machineNum;
+    goodRoomAutoState.attempt = Number(goodRoomAutoState.attempt || 0) + 1;
+    retireGameForRoomSwitch();
+    pendingPick = {
+      roomId: String(item.roomId || ''),
+      machineNum,
+      board: 'composite',
+      boardName: BOARD_META.composite[0]
+    };
+    $('room').value = machineNum;
+    $('err2').style.color = '#70e7b0';
+    $('err2').textContent = '正在進入 #' + machineNum + ' 機台…';
+    await enterGame('target');
+    return true;
+  }
+
+  async function startGoodRoomFromOverlay(item) {
+    if (!item || item.machineNum == null || !session || !session.game) return;
+    const accepted = await confirmRoom(String(item.machineNum));
+    if (!accepted) return;
+    const queue = currentGoodRoomQueue();
+    const chosen = queue.find(x => String(x.machineNum) === String(item.machineNum)) || item;
+    goodRoomAutoState = {
+      active: true,
+      game: session.game,
+      queue,
+      tried: new Set(),
+      current: '',
+      attempt: 0
+    };
+    await launchGoodRoomCandidate(chosen);
+  }
+
+  async function retryGoodRoomChain() {
+    const state = goodRoomAutoState;
+    if (!state || !state.active || !session || state.game !== session.game) return;
+    let queue = Array.isArray(state.queue) ? state.queue : [];
+    let next = queue.find(x => x && x.machineNum != null && !state.tried.has(String(x.machineNum)));
+    if (!next) {
+      // All current recommendations were tried. Pull a fresh real ATG table set,
+      // rebuild the recommendation queue, and continue instead of stopping.
+      await loadBoards(state.game, { force: true });
+      if (!goodRoomAutoState || goodRoomAutoState !== state || !state.active) return;
+      queue = currentGoodRoomQueue();
+      state.queue = queue;
+      next = queue.find(x => x && x.machineNum != null && !state.tried.has(String(x.machineNum)));
+      if (!next && queue.length) {
+        // Same ten rooms can legitimately come back. Start a new pass but never
+        // immediately re-pick the room that just failed.
+        const failed = String(state.current || '');
+        state.tried = new Set(failed ? [failed] : []);
+        next = queue.find(x => String(x.machineNum) !== failed) || queue[0];
+      }
+    }
+    if (next) await launchGoodRoomCandidate(next);
+  }
+
+  function closeGame(destination) {
+    goodRoomAutoState = null;
+    clearPreparedGameEntry();
     // Invalidate async work from the game instance that is being closed.
     // This does NOT alter room selection/fallback logic; it only prevents
     // an old iframe/session from taking control after the user picks again.
@@ -1264,10 +1326,11 @@
         const machineNum = parsed.searchParams.get('mn') || '';
         found = ((boards && boards.composite) || []).find(x => String(x.roomId || '') === roomId || String(x.machineNum || '') === machineNum) || null;
       } catch (_) {}
-      // Close the old game first so its callbacks are invalidated, then start
-      // the newly selected room. The original selection rules are untouched.
-      closeGame('rooms');
-      if (found) setTimeout(() => selectRoom(found), 0);
+      if (found) void startGoodRoomFromOverlay(found);
+      return;
+    }
+    if (/__sethcmd__\/retry-good/.test(command)) {
+      void retryGoodRoomChain();
       return;
     }
     if (/__sethcmd__\/rooms/.test(command)) { closeGame('rooms'); return; }
@@ -1334,6 +1397,10 @@
   $('skipBtn').onclick = () => enterGame('manual');
   $('gameExit').onclick = () => closeGame('rooms');
   window.addEventListener('scarab:web-command', event => handleGameCommand(event && event.detail && event.detail.url));
+  window.addEventListener('scarab:web-status', event => {
+    const state = event && event.detail && event.detail.state;
+    if (state === 'room-entered') goodRoomAutoState = null;
+  });
 
   syncShellOrientation();
   window.addEventListener('resize', () => {
