@@ -116,7 +116,7 @@ app.post('/api/access/login',accessJson,async(req,res)=>{try{const username=Stri
 app.get('/api/access/check',async(req,res)=>{const id=String(req.query.sessionId||''),current=accessSessions.get(id);if(!current)return res.status(401).json({valid:false,reason:'session_invalid'});try{const access=await authorizeWhitelist(current.username,current.platform);if(!access.allowed){accessSessions.delete(id);return res.status(403).json({valid:false,reason:access.reason});}res.json({valid:true,reason:'ok'});}catch(e){res.status(503).json({valid:false,reason:'database_unavailable',temporary:true});}});
 app.post('/api/access/logout',accessJson,(req,res)=>{const id=String(req.body&&req.body.sessionId||'');if(id)accessSessions.delete(id);res.json({success:true});});
 app.get('/healthz', (_req, res) => {
-  res.status(200).json({ ok: true, version: '3.06-real-room-insession-switch-fix' });
+  res.status(200).json({ ok: true, version: '3.08-atg-native-room-table-fix' });
 });
 
 app.use('/__api', express.raw({ type: '*/*', limit: '2mb' }), async (req, res) => {
@@ -174,12 +174,16 @@ app.use('/__api', express.raw({ type: '*/*', limit: '2mb' }), async (req, res) =
   }
 });
 
-// Only the three ATG runtime files required by the in-app game are exposed.
+// ATG runtime files required by the in-app game are exposed.
 app.get('/__runtime/atg-engine-runtime.js', (_req, res) => {
   res.sendFile(path.join(runtimeDir, 'atg-engine-runtime.js'));
 });
 app.get('/__runtime/atg-live-adapter.js', (_req, res) => {
   res.sendFile(path.join(runtimeDir, 'atg-live-adapter.js'));
+});
+app.get('/__runtime/atg-room-tap.js', (_req, res) => {
+  res.set('Cache-Control', 'no-store');
+  res.sendFile(path.join(runtimeDir, 'atg-room-tap.js'));
 });
 app.get('/__runtime/atg-recommendation-probe.js', (_req, res) => {
   res.set('Cache-Control', 'no-store');
@@ -231,13 +235,16 @@ function gameBoot(sid, originalHref, session, withRuntime) {
     'window.__SC_ROOM_SESSION_ID=' + scriptJson(String(config.ROOM_SESSION_ID || '')) + ';' +
     'window.__SCARAB_FORCE_MANUAL_ROOM=false;' +
     '<\/script>';
+  const roomTapBoot = '<script src="/__runtime/atg-room-tap.js?v=308"><\/script>';
   if (payload && payload.probe === true) {
-    return proxyBoot + commonRuntimeBoot +
-      '<script>(function(){var s=document.createElement("script");s.src=location.origin+"/__runtime/atg-recommendation-probe.js?v=274";s.defer=false;(document.head||document.documentElement).appendChild(s)})()<\/script>';
+    // Parser-blocking room tap must run before ATG's own framework so we can
+    // observe the decoded InitialModel/SlotTableModel even on encrypted titles.
+    return proxyBoot + commonRuntimeBoot + roomTapBoot +
+      '<script src="/__runtime/atg-recommendation-probe.js?v=308"><\/script>';
   }
-  const runtimeBoot = commonRuntimeBoot +
+  const runtimeBoot = commonRuntimeBoot + roomTapBoot +
     '<script>try{parent.postMessage({__scarabStatus:true,state:"engine-wait"},location.origin)}catch(e){}<\/script>' +
-    '<script>(function(){var s=document.createElement("script");s.src=location.origin+"/__runtime/bootstrap-runtime.js";s.defer=true;(document.head||document.documentElement).appendChild(s)})()<\/script>';
+    '<script>(function(){var s=document.createElement("script");s.src=location.origin+"/__runtime/bootstrap-runtime.js?v=308";s.defer=true;(document.head||document.documentElement).appendChild(s)})()<\/script>';
   return proxyBoot + runtimeBoot;
 }
 

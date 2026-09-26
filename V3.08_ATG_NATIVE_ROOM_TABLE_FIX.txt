@@ -1,0 +1,21 @@
+v3.08 — ATG native room table fix
+
+Base: v3.04 UI / v2.98 stable room flow, with the useful v3.07 in-session UI fixes retained.
+
+Room data changes:
+- Adds parser-blocking atg-room-tap.js before ATG slot framework scripts.
+- Captures ATG InitialModel / SlotTableModel exports and decoded table state.
+- Uses real machine number, roomId and Empty/Full/Locked state from the authenticated ATG game runtime.
+- Keeps the six requested titles on RTP 指標 display while room identity/status are real ATG values.
+- Recommendation probe now reads ATG framework-decoded tables; zlib websocket decoding is fallback only.
+- Full/locked/closed machines are excluded from the six-game recommendation list.
+
+Room switching:
+- Floating 好房推薦 stays in the current ATG iframe/session.
+- Confirm/cancel stays enabled.
+- In-session switch first delegates to room tap / existing game selector, then existing engine/portrait click fallback.
+- It does not close and re-open ATG to change rooms.
+
+Portrait:
+- Keeps only the original in-game center locator.
+- Keeps the existing portrait exact-machine and next-page fallback.

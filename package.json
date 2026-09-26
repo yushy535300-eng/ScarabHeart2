@@ -1,13 +1,13 @@
 {
   "name": "scarabheart-web-render",
-  "version": "3.6.0",
+  "version": "3.8.0",
   "private": true,
   "engines": {
     "node": ">=20"
   },
   "scripts": {
     "start": "node server.js",
-    "check": "node --check server.js && node --check public/web-iab-bridge.js && node --check public/app.js && node --check public/seth-eye-api.js && node --check runtime/atg-engine-runtime.js && node --check runtime/atg-live-adapter.js && node --check runtime/overlay-runtime.js && node --check runtime/bootstrap-runtime.js && node --check runtime/stability-runtime.js"
+    "check": "node --check server.js && node --check public/web-iab-bridge.js && node --check public/app.js && node --check public/seth-eye-api.js && node --check runtime/atg-engine-runtime.js && node --check runtime/atg-room-tap.js && node --check runtime/atg-recommendation-probe.js && node --check runtime/atg-live-adapter.js && node --check runtime/overlay-runtime.js && node --check runtime/bootstrap-runtime.js && node --check runtime/stability-runtime.js"
   },
   "dependencies": {
     "express": "4.21.2",

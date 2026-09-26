@@ -96,6 +96,7 @@
     if (ui.loading) ui.loading.classList.toggle('done', !!done);
   }
 
+  function roomPickVisual(){ /* v3.08: original in-game locator only */ }
 
   function openInApp(raw, payload) {
     currentRoomSessionId = String(payload && payload.cfg && payload.cfg.ROOM_SESSION_ID || '');
@@ -160,6 +161,7 @@
       ui.frame.src = 'about:blank';
     }
     if (ui.view) ui.view.classList.add('hide');
+    roomPickVisual('hide');
     if (ui.loading) ui.loading.classList.remove('done');
     document.documentElement.style.overflow = '';
     document.body.style.overflow = '';
@@ -173,6 +175,10 @@
     // Old game documents are allowed to finish loading, but they are never
     // allowed to control the current room selection.
     if (messageRoomSessionId && currentRoomSessionId && messageRoomSessionId !== currentRoomSessionId) return;
+    if (data && data.__scarabLiveTables === true && Array.isArray(data.tables)) {
+      window.dispatchEvent(new CustomEvent('scarab:live-tables', {detail:data}));
+      return;
+    }
     if (data && data.__scarabCommand === true && typeof data.url === 'string') {
       window.dispatchEvent(new CustomEvent('scarab:web-command', {
         detail: { url: data.url, roomSessionId: messageRoomSessionId }
@@ -189,10 +195,11 @@
       } else if (data.state === 'room-fallback') {
         setLoading(data.message || '已切換手動選房', true);
       } else if (data.state === 'room-searching') {
-        setLoading(data.message || '正在定位機台中…', true);
+        roomPickVisual('show', data.message || '正在定位機台中…');
       } else if (data.state === 'room-entered') {
-        setLoading(data.message || '已完成指定機台定位', true);
+        roomPickVisual('done');
       } else if (data.state === 'room-exact-wait') {
+        roomPickVisual('show', data.message || '正在等待指定機台資料');
         setLoading(data.message || '正在等待指定機台資料', true);
       } else if (data.state === 'engine-error') {
         // Assistant failure must never take down the real ATG game.
@@ -201,11 +208,28 @@
     }
   });
 
+  function switchRoomInApp(options) {
+    var ui=elements();
+    if(!ui.frame||!ui.frame.contentWindow||!currentRoomSessionId)return false;
+    var data=options||{};
+    try {
+      ui.frame.contentWindow.postMessage({
+        __scarabRoomSwitch:true,
+        roomSessionId:currentRoomSessionId,
+        roomId:String(data.roomId||''),
+        machineNum:String(data.machineNum||''),
+        candidates:Array.isArray(data.candidates)?data.candidates:[]
+      },location.origin);
+      return true;
+    } catch (_) { return false; }
+  }
+
   window.ScarabWebLauncher = {
     isWeb: true,
     reserve: function () { return true; },
     cancelReserve: function () {},
     open: openInApp,
+    switchRoom: switchRoomInApp,
     close: closeInApp
   };
   window.Capacitor = window.Capacitor || {

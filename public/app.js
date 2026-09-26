@@ -3,7 +3,7 @@
 
   const $ = id => document.getElementById(id);
   const log = (...args) => { try { console.log('[ScarabHeart]', ...args); } catch (_) {} };
-  const APP_VERSION = 'v3.06-real-room-insession-switch-fix';
+  const APP_VERSION = 'v3.08-atg-native-room-table-fix';
   const GAMES = [
     ['golden-seth', '戰神賽特2 覺醒之力', 'media/game2.png'],
     ['egyptian-mythology', '戰神賽特', 'media/game8.png'],
@@ -705,82 +705,78 @@
   }
 
   function simulatedBoardsFromTables(gameCode, tables) {
-    // Six specified titles: roomId / machineNum / availability are LIVE ATG data.
-    // The displayed RTP value is an app-side indicator and is never used to decide
-    // whether the room physically exists.
+    // These six titles keep the established RTP display model, but machineNum /
+    // roomId / availability must come from ATG live room data.
     const rawRows = (Array.isArray(tables) ? tables : []).map(raw => {
-      const machineNum = String(raw.machineNum == null ? '' : raw.machineNum);
-      const roomId = String(raw.roomId == null ? '' : raw.roomId);
+      const machineNum = String(raw.machineNum == null ? '' : raw.machineNum).replace(/^#/, '').trim();
+      const roomId = String(raw.roomId == null ? '' : raw.roomId).trim();
       const status = String(raw.status || '');
-      const locked = !!raw.isLocked || /locked|full|maintenance|disabled/i.test(status);
-      if (!/^\d+$/.test(machineNum) || !roomId || locked) return null;
-      return {roomId,machineNum,status,isLocked:false,available:true};
+      const locked = !!raw.isLocked || /locked|disable|maintenance|closed/i.test(status);
+      const occupied = /full/i.test(status);
+      if (!/^\d+$/.test(machineNum) || !/^\d+$/.test(roomId) || locked || occupied) return null;
+      const realBet = Number(raw.todayBet || 0) > 0 ? Number(raw.todayBet) : (Number(raw.bet || 0) > 0 ? Number(raw.bet) : null);
+      const realWin = Number(raw.todayBet || 0) > 0 ? Number(raw.todayWin || 0) : (Number(raw.bet || 0) > 0 ? Number(raw.win || 0) : null);
+      return { roomId, machineNum, status, isLocked:false, available:true, realBet, realWin };
     }).filter(Boolean);
 
     const seen = new Set();
-    const live = rawRows.filter(row => {
+    const rows = rawRows.filter(row => {
       if (seen.has(row.machineNum)) return false;
       seen.add(row.machineNum);
       return true;
     });
-    if (!live.length) return emptyBoards();
+    if (!rows.length) return emptyBoards();
 
-    const ranked = live.slice().sort((x,y) => {
-      const ax = simHash(gameCode + ':room:' + x.machineNum) % 100000;
-      const ay = simHash(gameCode + ':room:' + y.machineNum) % 100000;
-      return ay - ax;
-    });
+    // Stable ranking over the CURRENT real ATG machines.
+    const ranked = rows.slice().sort((a,b) => {
+      const ah = simHash(gameCode + ':' + a.machineNum);
+      const bh = simHash(gameCode + ':' + b.machineNum);
+      return (bh % 100000) - (ah % 100000);
+    }).slice(0,10);
 
-    function indicator(rank, machineNum, salt) {
+    function indicatorRtp(rank, machineNum, salt) {
       const seed = simHash(gameCode + ':' + machineNum + ':' + salt);
       let rtp;
       if (rank === 0) rtp = 94.60 + (seed % 210) / 100;
       else if (rank === 1) rtp = 91.20 + (seed % 260) / 100;
       else if (rank === 2) rtp = 84.50 + (seed % 360) / 100;
       else {
-        const floors=[78.8,72.6,66.4,59.8,53.2,46.8,40.5];
-        const spans=[4.2,4.4,4.6,4.8,5.0,5.2,4.8];
+        const floors = [78.8,72.6,66.4,59.8,53.2,46.8,40.5];
+        const spans  = [4.2, 4.4, 4.6, 4.8, 5.0, 5.2, 4.8];
         const idx=Math.min(rank-3,floors.length-1);
-        rtp=floors[idx]+(seed % Math.max(1,Math.round(spans[idx]*100)))/100;
+        rtp=floors[idx]+((seed % Math.round(spans[idx]*100))/100);
       }
-      rtp=Math.min(96.69,Math.round(rtp*100)/100);
-      const scoreBands=[895,874,856,822,803,785,766,748,731,715];
-      const score=Math.max(700,(scoreBands[Math.min(rank,scoreBands.length-1)]||715)-(seed%11));
-      const bet=1200+((seed>>>7)%7800);
-      const win=Math.round(bet*rtp/100);
-      return {rtp,score,bet,win,profit:win-bet,rtpIndicator:true};
+      return Math.min(96.69, Math.round(rtp*100)/100);
     }
 
-    function decorate(row, rank, salt, metric) {
-      return Object.assign({}, row, indicator(rank,row.machineNum,salt), {
-        source:'ATG_LIVE_ROOM_RTP_INDICATOR', metric, rtpIndicator:true
-      });
+    const scoreBands=[895,874,856,822,803,785,766,748,731,715];
+    function makeRow(base, rank, salt, metric) {
+      const seed=simHash(gameCode+':'+base.machineNum+':'+salt);
+      const rtp=indicatorRtp(rank,base.machineNum,salt);
+      const score=Math.max(700,(scoreBands[rank]||715)-(seed%11));
+      const bet=base.realBet;
+      const profit=(base.realBet!=null && base.realWin!=null) ? Math.round(base.realWin-base.realBet) : null;
+      return {
+        roomId:base.roomId,
+        machineNum:base.machineNum,
+        status:base.status,
+        isLocked:false,
+        available:true,
+        rtp,
+        bet,
+        win:base.realWin,
+        profit,
+        score,
+        source:'ATG_LIVE_ROOM_RTP_INDICATOR',
+        metric
+      };
     }
-    const base=ranked.slice(0,Math.max(10,ranked.length));
-    const composite=base.map((x,i)=>decorate(x,i,'composite','RTP 指標')).slice(0,10);
-    const volatility=base.map((x,i)=>decorate(x,i,'hot','RTP 指標')).sort((x,y)=>y.rtp-x.rtp).slice(0,10);
-    const premium=base.map((x,i)=>decorate(x,i,'premium','RTP 指標')).sort((x,y)=>y.bet-x.bet).slice(0,10);
-    const freegame=base.map((x,i)=>decorate(x,i,'free','RTP 指標')).sort((x,y)=>x.score-y.score).slice(0,10);
-    return {composite,volatility,premium,freegame,updatedAt:Date.now(),source:'ATG_LIVE_ROOM_RTP_INDICATOR',simulated:true};
-  }
 
-  function tablesFromBoardValue(value) {
-    const out=[];
-    const seen=new Set();
-    ['composite','volatility','premium','freegame'].forEach(key => {
-      const list=value && Array.isArray(value[key]) ? value[key] : [];
-      list.forEach(item => {
-        if(!item || item.machineNum==null || !item.roomId) return;
-        const machineNum=String(item.machineNum), roomId=String(item.roomId);
-        const k=machineNum+'|'+roomId;
-        if(seen.has(k)) return; seen.add(k);
-        out.push({
-          machineNum,roomId,status:String(item.status||''),isLocked:item.isLocked===true,
-          todayBet:item.todayBet, todayWin:item.todayWin, bet:item.bet, win:item.win
-        });
-      });
-    });
-    return out;
+    const composite=ranked.map((x,i)=>makeRow(x,i,'composite','綜合指標'));
+    const volatility=ranked.map((x,i)=>makeRow(x,i,'hot','爆分指標')).sort((a,b)=>b.rtp-a.rtp);
+    const premium=ranked.map((x,i)=>makeRow(x,i,'premium','熱度指標')).sort((a,b)=>(Number(b.bet||0)-Number(a.bet||0))||(b.score-a.score));
+    const freegame=ranked.map((x,i)=>makeRow(x,i,'free','免遊指標')).sort((a,b)=>a.score-b.score);
+    return {composite,volatility,premium,freegame,updatedAt:Date.now(),source:'ATG_LIVE_ROOM_RTP_INDICATOR'};
   }
 
   async function probeAtgTables(gameCode) {
@@ -815,7 +811,7 @@
           cleanup(); reject(new Error(data.error || 'ATG 即時機台資料讀取失敗'));
         }
       };
-      const timer = setTimeout(() => { cleanup(); reject(new Error('ATG 即時機台資料逾時')); }, 22000);
+      const timer = setTimeout(() => { cleanup(); reject(new Error('ATG 即時機台資料逾時')); }, 32000);
       recommendationProbe = {frame, listener, timer, reject};
       window.addEventListener('message', listener);
       document.body.appendChild(frame);
@@ -828,6 +824,8 @@
     if (!game || !session || session.game !== game) return;
 
     const serial = ++boardLoadSerial;
+    const indicatorGame = SIM_RECOMMEND_GAMES.has(game);
+
     const box = $('recommend');
     pendingPick = null;
 
@@ -869,15 +867,13 @@
     // API can be much faster for titles it already supports.
     // ATG probe remains authoritative and replaces API data when it arrives.
     let apiPromise = Promise.resolve(null);
-    if (window.SethEyeAPI && SethEyeAPI.boards) {
+    if (!indicatorGame && window.SethEyeAPI && SethEyeAPI.boards) {
       apiPromise = SethEyeAPI.boards(game, operatorCode())
         .then(value => {
           if (!session || session.game !== game || serial !== boardLoadSerial) return null;
-          const normalized = SIM_RECOMMEND_GAMES.has(game)
-            ? normalizeBoards(simulatedBoardsFromTables(game, tablesFromBoardValue(value)))
-            : normalizeBoards(value);
+          const normalized = normalizeBoards(value);
           if (usableBoardCount(normalized) > 0) {
-            showFresh(normalized, SIM_RECOMMEND_GAMES.has(game) ? 'REAL_API_ROOM_RTP_INDICATOR' : 'REAL_API');
+            showFresh(normalized, 'REAL_API');
             return normalized;
           }
           return null;
@@ -891,11 +887,11 @@
     const probePromise = probeAtgTables(game)
       .then(tables => {
         if (!session || session.game !== game || serial !== boardLoadSerial) return null;
-        const value = SIM_RECOMMEND_GAMES.has(game)
+        const value = indicatorGame
           ? normalizeBoards(simulatedBoardsFromTables(game, tables))
           : normalizeBoards(realBoardsFromTables(tables));
         if (usableBoardCount(value) < 1) throw new Error('ATG 沒有回傳可用機台');
-        showFresh(value, SIM_RECOMMEND_GAMES.has(game) ? 'ATG_REAL_ROOM_SIM_METRIC' : 'ATG_REALTIME');
+        showFresh(value, indicatorGame ? 'ATG_LIVE_ROOM_RTP_INDICATOR' : 'ATG_REALTIME');
         return value;
       })
       .catch(error => {
@@ -915,8 +911,11 @@
         renderBoard();
       } else {
         boards = emptyBoards();
-        $('updTime').textContent = '讀取失敗';
-        box.innerHTML = '<div style="color:#ff9a82;font-size:12px;padding:16px">目前無法取得真實機台資料，請按「刷新」重試。</div>';
+        $('updTime').textContent = '同步中';
+        box.innerHTML = '<div style="color:#79a8c2;font-size:12px;padding:16px">ATG 真實機台仍在同步，程式會自動重試…</div>';
+        if (indicatorGame) setTimeout(() => {
+          if (session && session.game === game && usableBoardCount(boards) < 1) loadBoards(game, { force:true });
+        }, 3500);
       }
     }
   }
@@ -949,13 +948,13 @@
     }
     list.slice(0, 10).forEach((item, index) => {
       const machine = item.machineNum == null ? '—' : String(item.machineNum);
-      const locked = !item.roomId || item.isLocked === true;
+      const locked = item.isLocked === true || !/^\d+$/.test(machine);
       const row = document.createElement('div');
       row.className = 'room-card';
       const metric = item.metric ? ' · ' + item.metric : '';
       const simMark = '';
-      const rtpCaption = SIM_RECOMMEND_GAMES.has(session && session.game) ? 'RTP 指標 ' : 'RTP ';
-      row.innerHTML = '<span class="room-rank">' + (index + 1) + '</span><span><b>' + (locked ? '🔒 ' + machine.padStart(3, '0') + ' 號機台' : machine.padStart(3, '0') + ' 號機台') + '</b><small>' + BOARD_META[activeBoard][0] + (item.rtp != null ? ' · ' + rtpCaption + item.rtp + '%' : '') + metric + simMark + '</small></span><span class="score">' + (item.score == null ? '—' : item.score) + '</span>';
+      const rtpName = (session && SIM_RECOMMEND_GAMES.has(session.game)) ? 'RTP 指標 ' : 'RTP ';
+      row.innerHTML = '<span class="room-rank">' + (index + 1) + '</span><span><b>' + (locked ? '🔒 ' + machine.padStart(3, '0') + ' 號機台' : machine.padStart(3, '0') + ' 號機台') + '</b><small>' + BOARD_META[activeBoard][0] + (item.rtp != null ? ' · ' + rtpName + item.rtp + '%' : '') + metric + simMark + '</small></span><span class="score">' + (item.score == null ? '—' : item.score) + '</span>';
       if (!locked) {
         row.style.cursor = 'pointer';
         row.setAttribute('role', 'button');
@@ -1079,14 +1078,17 @@
     }
   }
 
+  function showRoomPickToast(){ /* v3.08: only the original in-game locator is used */ }
+
+  function hideRoomPickToast(){ /* no outer locator */ }
+
   function gameConfig(target, machineNum, boardName, boardList, targetKind) {
     const goodRooms = ((boards && boards.composite) || []).filter(x => x && x.machineNum != null).slice(0, 10).map(x => ({
       roomId: x.roomId,
       machineNum: x.machineNum,
       rtp: x.rtp != null ? x.rtp : x.todayRtp,
       bet: x.bet != null ? x.bet : x.todayBet,
-      profit: x.profit != null ? x.profit : x.todayPnl,
-      rtpIndicator: !!x.rtpIndicator
+      profit: x.profit != null ? x.profit : x.todayPnl
     }));
     return {
       TARGET: String(target || ''),
@@ -1183,9 +1185,11 @@
       }
       const config = gameConfig(target, machineNum, boardName, boardList, targetKind);
       if (!window.ScarabWebLauncher) throw new Error('程式內遊戲載入器未就緒');
+      showRoomPickToast(machineNum, requestedGame);
       ScarabWebLauncher.open(finalUrl, { kind: 'atg', gameCode: requestedGame, gameMeta: GAME_META[requestedGame], cfg: config });
       $('err2').textContent = '';
     } catch (error) {
+      hideRoomPickToast();
       $('err2').textContent = error && error.message ? error.message : '進入遊戲失敗';
     } finally {
       buttons.forEach(button => { button.disabled = false; });
@@ -1194,6 +1198,7 @@
 
   function closeGame(destination) {
     clearPreparedGameEntry();
+    hideRoomPickToast();
     // Invalidate async work from the game instance that is being closed.
     // This does NOT alter room selection/fallback logic; it only prevents
     // an old iframe/session from taking control after the user picks again.
@@ -1226,21 +1231,41 @@
     }
   }
 
+  function roomSwitchCandidates(selected) {
+    const all=[];
+    const seen=new Set();
+    const add=x=>{
+      if(!x||x.machineNum==null)return;
+      const machineNum=String(x.machineNum).replace(/^#/,'').trim();
+      if(!/^\d+$/.test(machineNum)||seen.has(machineNum))return;
+      seen.add(machineNum);
+      all.push({roomId:String(x.roomId||''),machineNum,rtp:x.rtp,score:x.score,isLocked:!!x.isLocked});
+    };
+    add(selected);
+    ((boards&&boards.composite)||[]).forEach(add);
+    ['volatility','premium','freegame'].forEach(k=>((boards&&boards[k])||[]).forEach(add));
+    return all;
+  }
+
   function handleGameCommand(url) {
     const command = String(url || '');
     if (!command) return;
     if (/__sethcmd__\/pick/.test(command)) {
-      let found = null;
+      let found=null, roomId='', machineNum='';
       try {
-        const parsed = new URL(command);
-        const roomId = parsed.searchParams.get('ri') || '';
-        const machineNum = parsed.searchParams.get('mn') || '';
-        found = ((boards && boards.composite) || []).find(x => String(x.roomId || '') === roomId || String(x.machineNum || '') === machineNum) || null;
+        const parsed=new URL(command);
+        roomId=parsed.searchParams.get('ri')||'';
+        machineNum=parsed.searchParams.get('mn')||'';
+        const pools=[];
+        if(boards) ['composite','volatility','premium','freegame'].forEach(k=>Array.isArray(boards[k])&&pools.push(...boards[k]));
+        found=pools.find(x=>String(x.roomId||'')===roomId||String(x.machineNum||'')===machineNum)||null;
       } catch (_) {}
-      // Close the old game first so its callbacks are invalidated, then start
-      // the newly selected room. The original selection rules are untouched.
-      closeGame('rooms');
-      if (found) setTimeout(() => selectRoom(found), 0);
+      if (!found && machineNum) found={roomId,machineNum};
+      const candidates=roomSwitchCandidates(found);
+      if (window.ScarabWebLauncher && typeof ScarabWebLauncher.switchRoom === 'function') {
+        const ok=ScarabWebLauncher.switchRoom({roomId:String(found&&found.roomId||roomId||''),machineNum:String(found&&found.machineNum||machineNum||''),candidates});
+        if(!ok) $('err2').textContent='遊戲內換房尚未就緒，請稍後再試';
+      }
       return;
     }
     if (/__sethcmd__\/rooms/.test(command)) { closeGame('rooms'); return; }
@@ -1272,6 +1297,26 @@
     $('announceBtn').classList.add('hide');
     box.classList.remove('hide');
   }
+
+  window.addEventListener('scarab:live-tables', event => {
+    try {
+      const d=event.detail||{};
+      const game=String(d.gameCode||'');
+      if(!session||!game||session.game!==game||!Array.isArray(d.tables)||!d.tables.length)return;
+      const next=SIM_RECOMMEND_GAMES.has(game)
+        ? normalizeBoards(simulatedBoardsFromTables(game,d.tables))
+        : normalizeBoards(realBoardsFromTables(d.tables));
+      if(usableBoardCount(next)<1)return;
+      next.updatedAt=Date.now();
+      boards=next;
+      boardCache[game]={at:Date.now(),value:next};
+      saveRealBoardStorage(game,next);
+      if(!$('roomView').classList.contains('hide')){
+        $('updTime').textContent='更新 '+formatTime(next.updatedAt);
+        renderBoard();
+      }
+    } catch (_) {}
+  });
 
   $('platformPicker').onclick = function () {
     $('platformMenu').classList.toggle('hide');
