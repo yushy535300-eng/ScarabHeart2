@@ -3,7 +3,7 @@
 
   const $ = id => document.getElementById(id);
   const log = (...args) => { try { console.log('[ScarabHeart]', ...args); } catch (_) {} };
-  const APP_VERSION = 'v3.16-roomid-wait-and-leading-zero-fix';
+  const APP_VERSION = 'v3.17-har-rooms-render-immediately';
   const GAMES = [
     ['golden-seth', '戰神賽特2 覺醒之力', 'media/game2.png'],
     ['egyptian-mythology', '戰神賽特', 'media/game8.png'],
@@ -122,18 +122,24 @@
     const headers = { Accept: 'application/json', 'Content-Type': 'application/json' };
     if (token) headers.Authorization = 'Bearer ' + token;
     let response;
+    const controller = new AbortController();
+    const requestTimer = setTimeout(() => controller.abort(), 15000);
     try {
       response = await fetch(url, {
         method: 'POST',
         mode: 'cors',
         credentials: 'omit',
         headers,
-        body: JSON.stringify(body)
+        body: JSON.stringify(body),
+        signal: controller.signal
       });
     } catch (error) {
+      if (error && error.name === 'AbortError') throw new Error('連線娛樂城逾時，請按刷新重試');
       const e = new Error('無法連線到 ' + loginPlatform + '，請確認網路後重試');
       e.cause = error;
       throw e;
+    } finally {
+      clearTimeout(requestTimer);
     }
     const text = await response.text();
     let data = null;
@@ -392,6 +398,7 @@
     $('room').value = '';
     $('err2').textContent = '';
     showOnly('roomView');
+    prepareGameEntry(code).catch(error => log('ATG 遊戲入口預先連線失敗', code, error && error.message));
     loadBoards(code);
   }
 
@@ -580,219 +587,59 @@
     'new-jinlian'
   ]);
 
-  // ONLY these six titles use instant simulated recommendation rows.
-  // Other titles continue to use the real recommendation pipeline.
-  // These six titles do not use the Seth recommendation API.
-  // The machine numbers below are not guessed ranges: each pair was verified
-  // against the user's supplied ATG HAR captures (number -> roomId, Empty at capture time).
-  // Recommendation metrics remain the assistant's indicator values.
+  // Only include room-number/roomId pairs confirmed in an available ATG HAR.
+  // Other rooms must come from the live table feed; never fill gaps by guessing.
   const SIM_MACHINE_POOLS = {
-    'tiger-princess': ['2002','2068','2122','2175','2228','2281','2337','2390','2442','2495'],
-    'hades': ['2','90','146','194','245','296','347','396','446','494'],
-    'wuxia-caishen': ['8','30','44','57','69','86','97','104','107','1'],
-    'son-go-ku': ['7','18','29','41','54','66','73','84','95','97'],
-    'new-vampire-hunter': ['18','30','51','73','84','109','128','147','176','198'],
-    'new-jinlian': ['18','73','109','176','251','333','368','421','475','497']
+    'tiger-princess': ['1019'],
+    'hades': ['9'],
+    'wuxia-caishen': [],
+    'son-go-ku': ['18'],
+    'new-vampire-hunter': ['17'],
+    'new-jinlian': ['29']
   };
 
   const SIM_ROOM_MAPS = {
     'tiger-princess': {
-      '2002':'355959','2068':'356096','2122':'356191','2175':'356233','2228':'356288',
-      '2281':'355843','2337':'355898','2390':'355962','2442':'356066','2495':'356178'
+      '1019':'354888',
     },
     'hades': {
-      '2':'308443','90':'308531','146':'308587','194':'308635','245':'308686',
-      '296':'308737','347':'308788','396':'308837','446':'308887','494':'308935'
+      '9':'308450',
     },
-    'wuxia-caishen': {
-      '8':'310109','30':'310131','44':'310145','57':'310158','69':'310170',
-      '86':'310187','97':'310198','104':'353811','107':'353815','1':'310102'
-    },
-    'son-go-ku': {
-      '7':'310008','18':'310019','29':'310030','41':'310042','54':'310055',
-      '66':'310067','73':'310074','84':'310085','95':'310096','97':'310098'
-    },
+    'wuxia-caishen': {},
+    'son-go-ku': { '18':'310019' },
     'new-vampire-hunter': {
-      '18':'369691','30':'369716','51':'369656','73':'369695','84':'369717',
-      '109':'376528','128':'376677','147':'376687','176':'376716','198':'376750'
+      '17':'369688',
     },
     'new-jinlian': {
-      '18':'377822','73':'377809','109':'377881','176':'378118','251':'378253',
-      '333':'378323','368':'377882','421':'377863','475':'377969','497':'378017'
+      '29':'377788',
     }
   };
 
-  function instantSimBoards(gameCode) {
-    const machines = (SIM_MACHINE_POOLS[gameCode] || []).slice(0, 10);
-
-    // Deterministic shuffle so each game has a stable but non-obvious ranking.
+  function harRoomBoards(gameCode) {
     const roomMap = SIM_ROOM_MAPS[gameCode] || {};
-    const ranked = machines.map(machineNum => ({
+    const machines = SIM_MACHINE_POOLS[gameCode] || [];
+    const rows = machines.map(machineNum => ({
       machineNum: String(machineNum),
-      roomId: String(roomMap[String(machineNum)] || ('__machine__' + String(machineNum))),
-      seed: simHash(gameCode + ':' + machineNum)
-    })).sort((a,b) => (b.seed % 100000) - (a.seed % 100000));
-
-    function makeRow(entry, rank, salt) {
-      const machineNum = entry.machineNum;
-      const seed = simHash(gameCode + ':' + machineNum + ':' + salt);
-
-      // RTP is ALWAYS below 100%.
-      // Top 1-3 are the only noticeably stronger recommendations.
-      // The rest deliberately spread down into normal-looking ranges.
-      let rtp;
-      if (rank === 0) {
-        rtp = 94.60 + (seed % 210) / 100;      // 94.60 ~ 96.69
-      } else if (rank === 1) {
-        rtp = 91.20 + (seed % 260) / 100;      // 91.20 ~ 93.79
-      } else if (rank === 2) {
-        rtp = 84.50 + (seed % 360) / 100;      // 84.50 ~ 88.09
-      } else {
-        const floors = [78.8, 72.6, 66.4, 59.8, 53.2, 46.8, 40.5];
-        const spans  = [4.2,  4.4,  4.6,  4.8,  5.0,  5.2,  4.8];
-        const idx = Math.min(rank - 3, floors.length - 1);
-        const base = floors[idx];
-        const span = spans[idx];
-        rtp = base + ((seed % Math.round(span * 100)) / 100);
-      }
-      rtp = Math.min(96.69, Math.round(rtp * 100) / 100);
-
-      // Scores also taper instead of clustering near 900.
-      const scoreBands = [895, 874, 856, 822, 803, 785, 766, 748, 731, 715];
-      const score = Math.max(700, scoreBands[rank] - (seed % 11));
-
-      const bet = 1200 + ((seed >>> 7) % 7800);
-      const win = Math.round(bet * rtp / 100);
-
-      return {
-        roomId: entry.roomId || ('__machine__' + machineNum),
-        machineNum,
-        status: 'test',
-        isLocked: false,
-        available: true,
-        rtp,
-        bet,
-        win,
-        profit: win - bet,
-        score,
-        simulated: true,
-        source: 'ATG_HAR_VERIFIED_MACHINE_INDICATOR',
-        metric: ''
-      };
-    }
-
-    const composite = ranked.map((x,i) => makeRow(x,i,'composite'));
-    const volatility = ranked
-      .map((x,i) => makeRow(x,i,'hot'))
-      .sort((a,b) => b.rtp - a.rtp);
-    const premium = ranked
-      .map((x,i) => makeRow(x,i,'premium'))
-      .sort((a,b) => b.bet - a.bet);
-    const freegame = ranked
-      .map((x,i) => makeRow(x,i,'free'))
-      .sort((a,b) => a.score - b.score);
-
-    return {
-      composite,
-      volatility,
-      premium,
-      freegame,
-      updatedAt: Date.now(),
-      source: 'ATG_HAR_VERIFIED_MACHINE_INDICATOR',
-      simulated: true
-    };
+      roomId: String(roomMap[String(machineNum)] || ''),
+      status: 'HAR 房號對照',
+      isLocked: false,
+      available: true,
+      score: null,
+      rtp: null,
+      simulated: false,
+      source: 'HAR_ROOM_MAPPING',
+      metric: 'HAR 房號對照'
+    })).filter(row => row.roomId);
+    const copy = () => rows.map(row => Object.assign({}, row));
+    return { composite:copy(), volatility:copy(), premium:copy(), freegame:copy(), updatedAt:Date.now(), source:'HAR_ROOM_MAPPING' };
   }
 
-
-  function simHash(text) {
-    let h = 2166136261 >>> 0;
-    const s = String(text || '');
-    for (let i = 0; i < s.length; i++) {
-      h ^= s.charCodeAt(i);
-      h = Math.imul(h, 16777619) >>> 0;
-    }
-    return h >>> 0;
-  }
-
-  function simulatedBoardsFromTables(gameCode, tables) {
-    // IMPORTANT: only the displayed recommendation metrics are simulated.
-    // machineNum / roomId / availability always come from the live ATG table.
-    const rawRows = (Array.isArray(tables) ? tables : []).map(raw => {
-      const machineNum = String(raw.machineNum == null ? '' : raw.machineNum);
-      const roomId = String(raw.roomId == null ? '' : raw.roomId);
-      const status = String(raw.status || '');
-      const locked = !!raw.isLocked || /locked/i.test(status);
-      if (!/^\d+$/.test(machineNum) || !roomId || locked) return null;
-
-      const liveRtp = Number(raw.todayBet || 0) > 0
-        ? Number(raw.todayWin || 0) / Number(raw.todayBet || 1) * 100
-        : (Number(raw.bet || 0) > 0 ? Number(raw.win || 0) / Number(raw.bet || 1) * 100 : NaN);
-
-      const seed = simHash(gameCode + ':' + machineNum);
-      // Keep values deliberately moderate. If a real RTP exists, stay close to it;
-      // otherwise use a conservative 82~122% range.
-      let rtp;
-      if (Number.isFinite(liveRtp) && liveRtp > 0) {
-        const jitter = ((seed % 700) / 100) - 3.5; // -3.5 ~ +3.49
-        rtp = Math.max(78, Math.min(128, liveRtp + jitter));
-      } else {
-        rtp = 82 + (seed % 4000) / 100; // 82.00 ~ 121.99
-      }
-
-      const score = 760 + (seed % 151); // 760 ~ 910
-      const heat = 1000 + ((seed >>> 8) % 9000);
-      return {
-        roomId,
-        machineNum,
-        status,
-        isLocked: false,
-        available: true,
-        rtp: Math.round(rtp * 100) / 100,
-        bet: heat,
-        win: Math.round(heat * rtp / 100),
-        profit: Math.round(heat * (rtp / 100 - 1)),
-        score,
-        simulated: true,
-        source: 'ATG_REAL_ROOM_SIM_METRIC'
-      };
-    }).filter(Boolean);
-
-    const seen = new Set();
-    const rows = rawRows.filter(row => {
-      if (seen.has(row.machineNum)) return false;
-      seen.add(row.machineNum);
-      return true;
-    });
-    if (!rows.length) return emptyBoards();
-
-    // Pick a stable top 10 from real currently available machines.
-    const composite = rows.slice().sort((a,b) => (b.score - a.score) || (b.rtp - a.rtp)).slice(0,10)
-      .map(x => Object.assign({}, x, {metric:'模擬綜合'}));
-    const volatility = rows.slice().sort((a,b) => (b.rtp - a.rtp) || (b.score - a.score)).slice(0,10)
-      .map(x => Object.assign({}, x, {metric:'模擬爆分'}));
-    const premium = rows.slice().sort((a,b) => (b.bet - a.bet) || (b.score - a.score)).slice(0,10)
-      .map(x => Object.assign({}, x, {metric:'模擬熱度'}));
-    const freegame = rows.slice().sort((a,b) => {
-      const ah = simHash('fg:'+gameCode+':'+a.machineNum);
-      const bh = simHash('fg:'+gameCode+':'+b.machineNum);
-      return (ah - bh) || (b.score - a.score);
-    }).slice(0,10).map(x => Object.assign({}, x, {metric:'模擬免遊'}));
-
-    return {
-      composite,
-      volatility,
-      premium,
-      freegame,
-      updatedAt: Date.now(),
-      source: 'ATG_REAL_ROOM_SIM_METRIC',
-      simulated: true
-    };
-  }
 
   async function probeAtgTables(gameCode) {
     stopRecommendationProbe();
     const serial = ++recommendationProbeSerial;
-    const finalUrl = await resolveAtgGameUrl(gameCode);
+    const finalUrl = await prepareGameEntry(gameCode);
+    if (!finalUrl) throw new Error('ATG 遊戲入口尚未準備好，請按刷新重試');
     if (!session || session.game !== gameCode || serial !== recommendationProbeSerial) throw new Error('probe-cancelled');
 
     const target = new URL(finalUrl);
@@ -840,18 +687,34 @@
     const box = $('recommend');
     pendingPick = null;
 
+    // Render the verified HAR room pairs immediately for the six supported
+    // titles. The background ATG probe may refresh availability, but must not
+    // block the room selector on a hidden iframe/network response.
+    const immediateHar = SIM_RECOMMEND_GAMES.has(game)
+      ? normalizeBoards(harRoomBoards(game)) : null;
+    if (immediateHar && usableBoardCount(immediateHar) > 0) {
+      boards = immediateHar;
+      boardCache[game] = { at: Date.now(), value: immediateHar };
+      $('updTime').textContent = '已載入 HAR 機台資料，正在更新…';
+      renderBoard();
+    } else if (SIM_RECOMMEND_GAMES.has(game)) {
+      boards = emptyBoards();
+      box.innerHTML = '<div style="color:#ffd27a;font-size:12px;padding:16px">目前 HAR 沒有可核對的機台對照；可進入 ATG 大廳查看完整房間，取得即時資料後會自動顯示。</div>';
+      $('updTime').textContent = '等待即時房間資料';
+    }
+
     // Show the last REAL result immediately while refreshing.
     // This removes the blank 10~20 second wait when returning to this game.
     let instant = null;
     const memory = boardCache[game] && boardCache[game].value;
-    if (memory && !memory.simulated && usableBoardCount(memory) > 0) instant = normalizeBoards(memory);
+    if (!immediateHar && memory && !memory.simulated && usableBoardCount(memory) > 0) instant = normalizeBoards(memory);
     if (!instant && !SIM_RECOMMEND_GAMES.has(game)) instant = loadRealBoardStorage(game);
 
     if (instant && usableBoardCount(instant) > 0) {
       boards = instant;
       $('updTime').textContent = '更新中';
       renderBoard();
-    } else {
+    } else if (!immediateHar) {
       boards = null;
       box.innerHTML = '<div style="color:#7893a9;font-size:12px;padding:16px">正在讀取真實機台資料…</div>';
       $('updTime').textContent = '讀取中';
@@ -898,11 +761,9 @@
     const probePromise = probeAtgTables(game)
       .then(tables => {
         if (!session || session.game !== game || serial !== boardLoadSerial) return null;
-        const value = SIM_RECOMMEND_GAMES.has(game)
-          ? normalizeBoards(simulatedBoardsFromTables(game, tables))
-          : normalizeBoards(realBoardsFromTables(tables));
+        const value = normalizeBoards(realBoardsFromTables(tables));
         if (usableBoardCount(value) < 1) throw new Error('ATG 沒有回傳可用機台');
-        showFresh(value, SIM_RECOMMEND_GAMES.has(game) ? 'ATG_REAL_ROOM_SIM_METRIC' : 'ATG_REALTIME');
+        showFresh(value, 'ATG_REALTIME');
         return value;
       })
       .catch(error => {
@@ -916,7 +777,12 @@
     if (!session || session.game !== game || serial !== boardLoadSerial) return;
 
     if (!renderedFresh && !apiResult && !probeResult) {
-      if (instant && usableBoardCount(instant) > 0 && !SIM_RECOMMEND_GAMES.has(game)) {
+      if (immediateHar && usableBoardCount(immediateHar) > 0) {
+        boards = immediateHar;
+        boardCache[game] = { at: Date.now(), value: immediateHar };
+        $('updTime').textContent = '使用 HAR 機台資料（即時更新未取得）';
+        renderBoard();
+      } else if (instant && usableBoardCount(instant) > 0 && !SIM_RECOMMEND_GAMES.has(game)) {
         boards = instant;
         $('updTime').textContent = '暫用最近真實資料';
         renderBoard();
