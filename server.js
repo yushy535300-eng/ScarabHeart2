@@ -10,6 +10,7 @@ const express = require('express');
 const { WebSocket, WebSocketServer } = require('ws');
 const { HttpsProxyAgent } = require('https-proxy-agent');
 const path = require('path');
+const { rewriteGameAssetHtml } = require('./game-asset-html');
 const crypto = require('crypto');
 const { adminPage } = require('./admin-page');
 const { authorizeWhitelist, listWhitelist, upsertWhitelist, setWhitelistEnabled, extendWhitelist, deleteWhitelist } = require('./whitelist');
@@ -416,6 +417,7 @@ app.use('/__game/:sid/*', express.raw({ type: '*/*', limit: '16mb' }), async (re
         .replace(/<meta\b[^>]*http-equiv=(['"])Content-Security-Policy\1[^>]*>/gi, '')
         .replace(/\s+integrity=(['"])[^'"]*\1/gi, '')
         .replace(/<base\b[^>]*>/gi, '');
+      body = rewriteGameAssetHtml(body, finalUrl.href);
       const isLobby = /\/egames\/lobby\//i.test(finalUrl.pathname);
       const boot = gameBoot(sid, finalUrl.href, session, !isLobby);
       // Keep document navigation inside the session proxy.
