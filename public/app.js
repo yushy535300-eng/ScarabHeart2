@@ -960,11 +960,12 @@
     });
   }
 
-  async function selectRoom(item) {
+  async function selectRoom(item, options) {
     if (!item || item.machineNum == null) return;
     const machineNum = String(item.machineNum);
+    if (item.board && BOARD_META[item.board]) activeBoard = item.board;
     prepareGameEntry(session && session.game).catch(() => null);
-    const accepted = await confirmRoom(machineNum);
+    const accepted = options && options.fromOverlay ? true : await confirmRoom(machineNum);
     if (!accepted) return;
 
     pendingPick = {
@@ -1179,12 +1180,14 @@
         const parsed = new URL(command);
         const roomId = parsed.searchParams.get('ri') || '';
         const machineNum = parsed.searchParams.get('mn') || '';
-        found = ((boards && boards.composite) || []).find(x => String(x.roomId || '') === roomId || String(x.machineNum || '') === machineNum) || null;
+        found = window.ScarabRoomCommand && ScarabRoomCommand.findRecommendedRoom(boards, roomId, machineNum);
       } catch (_) {}
-      // Close the old game first so its callbacks are invalidated, then start
-      // the newly selected room. The original selection rules are untouched.
+      if (!found || !/^[0-9]+$/.test(String(found.machineNum || ''))) {
+        log('懸浮前往指令無有效機台號碼');
+        return;
+      }
       closeGame('rooms');
-      if (found) setTimeout(() => selectRoom(found), 0);
+      setTimeout(() => selectRoom(found, {fromOverlay:true}), 0);
       return;
     }
     if (/__sethcmd__\/rooms/.test(command)) { closeGame('rooms'); return; }
