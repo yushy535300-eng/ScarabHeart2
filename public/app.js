@@ -3,7 +3,7 @@
 
   const $ = id => document.getElementById(id);
   const log = (...args) => { try { console.log('[ScarabHeart]', ...args); } catch (_) {} };
-  const APP_VERSION = 'v3.27-game-asset-loading';
+  const APP_VERSION = 'v3.29-overlay-command-bridge-fix';
   const GAMES = [
     ['golden-seth', '戰神賽特2 覺醒之力', 'media/game2.png'],
     ['egyptian-mythology', '戰神賽特', 'media/game8.png'],
@@ -1254,6 +1254,16 @@
   $('skipBtn').onclick = () => enterGame('manual');
   $('gameExit').onclick = () => closeGame('rooms');
   window.addEventListener('scarab:web-command', event => handleGameCommand(event && event.detail && event.detail.url));
+  window.addEventListener('message', event => {
+    // Support a detached floating-panel window. Embedded game commands are
+    // handled by web-iab-bridge.js and intentionally ignored here to avoid duplicates.
+    if (!event || event.source === window || event.origin !== location.origin) return;
+    const frame = document.getElementById('gameFrame');
+    if (frame && event.source === frame.contentWindow) return;
+    const data = event.data;
+    if (data && data.__scarabCommand === true && typeof data.url === 'string') handleGameCommand(data.url);
+  });
+
 
   syncShellOrientation();
   window.addEventListener('resize', () => {
