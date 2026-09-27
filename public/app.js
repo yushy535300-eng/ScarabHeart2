@@ -3,7 +3,7 @@
 
   const $ = id => document.getElementById(id);
   const log = (...args) => { try { console.log('[ScarabHeart]', ...args); } catch (_) {} };
-  const APP_VERSION = 'v3.17-har-rooms-render-immediately';
+  const APP_VERSION = 'v3.18-wuxia-har-room-map';
   const GAMES = [
     ['golden-seth', '戰神賽特2 覺醒之力', 'media/game2.png'],
     ['egyptian-mythology', '戰神賽特', 'media/game8.png'],
@@ -587,12 +587,45 @@
     'new-jinlian'
   ]);
 
+  // Extracted from the user's 2026-09-27 17:19 Taipei HAR after entering Wuxia #004.
+  // This is a room-number/roomId/status snapshot only; no player or balance fields are retained.
+  const WUXIA_HAR_ROOM_ROWS = [
+    [1,"310102","Full"], [2,"310103","Locked"], [3,"310104","Full"], [4,"310105","Full"], [5,"310106","Empty"],
+    [6,"310107","Empty"], [7,"310108","Full"], [8,"310109","Empty"], [9,"310110","Empty"], [10,"310111","Locked"],
+    [11,"310112","Full"], [12,"310113","Empty"], [13,"310114","Empty"], [14,"310115","Empty"], [15,"310116","Empty"],
+    [16,"310117","Empty"], [17,"310118","Empty"], [18,"310119","Empty"], [19,"310120","Full"], [20,"310121","Empty"],
+    [21,"310122","Empty"], [22,"310123","Empty"], [23,"310124","Empty"], [24,"310125","Empty"], [25,"310126","Full"],
+    [26,"310127","Empty"], [27,"310128","Empty"], [28,"310129","Empty"], [29,"310130","Full"], [30,"310131","Empty"],
+    [31,"310132","Empty"], [32,"310133","Empty"], [33,"310134","Full"], [34,"310135","Full"], [35,"310136","Empty"],
+    [36,"310137","Full"], [37,"310138","Empty"], [38,"310139","Empty"], [39,"310140","Full"], [40,"310141","Empty"],
+    [41,"310142","Empty"], [42,"310143","Empty"], [43,"310144","Empty"], [44,"310145","Empty"], [45,"310146","Empty"],
+    [46,"310147","Empty"], [47,"310148","Empty"], [48,"310149","Empty"], [49,"310150","Empty"], [50,"310151","Empty"],
+    [51,"310152","Full"], [52,"310153","Locked"], [53,"310154","Empty"], [54,"310155","Empty"], [55,"310156","Empty"],
+    [56,"310157","Empty"], [57,"310158","Empty"], [58,"310159","Empty"], [59,"310160","Locked"], [60,"310161","Full"],
+    [61,"310162","Empty"], [62,"310163","Empty"], [63,"310164","Empty"], [64,"310165","Empty"], [65,"310166","Full"],
+    [66,"310167","Empty"], [67,"310168","Empty"], [68,"310169","Empty"], [69,"310170","Empty"], [70,"310171","Full"],
+    [71,"310172","Empty"], [72,"310173","Empty"], [73,"310174","Empty"], [74,"310175","Empty"], [75,"310176","Empty"],
+    [76,"310177","Empty"], [77,"310178","Empty"], [78,"310179","Empty"], [79,"310180","Full"], [80,"310181","Empty"],
+    [81,"310182","Full"], [82,"310183","Empty"], [83,"310184","Empty"], [84,"310185","Empty"], [85,"310186","Empty"],
+    [86,"310187","Empty"], [87,"310188","Full"], [88,"310189","Empty"], [89,"310190","Empty"], [90,"310191","Empty"],
+    [91,"310192","Empty"], [92,"310193","Empty"], [93,"310194","Empty"], [94,"310195","Empty"], [95,"310196","Empty"],
+    [96,"310197","Empty"], [97,"310198","Empty"], [98,"310199","Empty"], [99,"310200","Empty"], [100,"310201","Empty"],
+    [101,"353814","Empty"], [102,"353807","Empty"], [103,"353808","Empty"], [104,"353811","Empty"], [105,"353810","Empty"],
+    [106,"353812","Empty"], [107,"353815","Locked"], [108,"353809","Empty"], [109,"353813","Full"], [110,"353806","Empty"]
+  ];
+  const WUXIA_HAR_EMPTY_AT_CAPTURE = WUXIA_HAR_ROOM_ROWS
+    .filter(row => row[2] === 'Empty')
+    .map(row => String(row[0]));
+  const WUXIA_HAR_ROOM_MAP = Object.fromEntries(
+    WUXIA_HAR_ROOM_ROWS.map(row => [String(row[0]), String(row[1])])
+  );
+
   // Only include room-number/roomId pairs confirmed in an available ATG HAR.
   // Other rooms must come from the live table feed; never fill gaps by guessing.
   const SIM_MACHINE_POOLS = {
     'tiger-princess': ['1019'],
     'hades': ['9'],
-    'wuxia-caishen': [],
+    'wuxia-caishen': WUXIA_HAR_EMPTY_AT_CAPTURE.slice(0, 10),
     'son-go-ku': ['18'],
     'new-vampire-hunter': ['17'],
     'new-jinlian': ['29']
@@ -605,7 +638,7 @@
     'hades': {
       '9':'308450',
     },
-    'wuxia-caishen': {},
+    'wuxia-caishen': WUXIA_HAR_ROOM_MAP,
     'son-go-ku': { '18':'310019' },
     'new-vampire-hunter': {
       '17':'369688',
@@ -621,14 +654,14 @@
     const rows = machines.map(machineNum => ({
       machineNum: String(machineNum),
       roomId: String(roomMap[String(machineNum)] || ''),
-      status: 'HAR 房號對照',
+      status: gameCode === 'wuxia-caishen' ? 'HAR 空房快照' : 'HAR 房號對照',
       isLocked: false,
       available: true,
       score: null,
       rtp: null,
       simulated: false,
       source: 'HAR_ROOM_MAPPING',
-      metric: 'HAR 房號對照'
+      metric: gameCode === 'wuxia-caishen' ? 'HAR 快照 2026-09-27 17:19（點選時以 ATG 即時房況確認）' : 'HAR 房號對照'
     })).filter(row => row.roomId);
     const copy = () => rows.map(row => Object.assign({}, row));
     return { composite:copy(), volatility:copy(), premium:copy(), freegame:copy(), updatedAt:Date.now(), source:'HAR_ROOM_MAPPING' };
