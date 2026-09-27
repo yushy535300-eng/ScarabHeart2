@@ -22,5 +22,29 @@
     if (number) return {roomId:'', machineNum:String(machineNum).trim(), source:'OVERLAY_COMMAND'};
     return null;
   }
-  return { findRecommendedRoom, roomKey };
+  function dispatchGameCommand(raw, boards, actions) {
+    let url;
+    try { url = new URL(String(raw || '')); } catch (_) { return false; }
+    if (url.hostname !== '__sethcmd__') return false;
+    if (url.pathname === '/rooms') {
+      actions.navigate('rooms');
+      return true;
+    }
+    if (url.pathname === '/home') {
+      actions.navigate('home');
+      return true;
+    }
+    if (url.pathname === '/pick') {
+      const room = findRecommendedRoom(boards, url.searchParams.get('ri'), url.searchParams.get('mn'));
+      if (!room || !/^\d+$/.test(String(room.machineNum || ''))) {
+        if (actions.invalid) actions.invalid();
+        return true;
+      }
+      actions.navigate('rooms');
+      actions.pick(room);
+      return true;
+    }
+    return false;
+  }
+  return { findRecommendedRoom, roomKey, dispatchGameCommand };
 });

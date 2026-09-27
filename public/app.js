@@ -1172,27 +1172,13 @@
   }
 
   function handleGameCommand(url) {
-    const command = String(url || '');
-    if (!command) return;
-    if (/__sethcmd__\/pick/.test(command)) {
-      let found = null;
-      try {
-        const parsed = new URL(command);
-        const roomId = parsed.searchParams.get('ri') || '';
-        const machineNum = parsed.searchParams.get('mn') || '';
-        found = window.ScarabRoomCommand && ScarabRoomCommand.findRecommendedRoom(boards, roomId, machineNum);
-      } catch (_) {}
-      if (!found || !/^[0-9]+$/.test(String(found.machineNum || ''))) {
-        log('懸浮前往指令無有效機台號碼');
-        return;
-      }
-      closeGame('rooms');
-      setTimeout(() => selectRoom(found, {fromOverlay:true}), 0);
-      return;
-    }
-    if (/__sethcmd__\/rooms/.test(command)) { closeGame('rooms'); return; }
-    if (/__sethcmd__\/home/.test(command)) { closeGame('home'); return; }
-    if (/__sethcmd__\/deposit/.test(command)) {
+    const handled = window.ScarabRoomCommand && ScarabRoomCommand.dispatchGameCommand(url, boards, {
+      navigate: destination => closeGame(destination),
+      pick: item => setTimeout(() => selectRoom(item, {fromOverlay:true}), 0),
+      invalid: () => log('懸浮前往指令無有效機台號碼')
+    });
+    if (handled) return;
+    if (/__sethcmd__\/deposit/.test(String(url || ''))) {
       closeGame('rooms');
       $('err2').textContent = '請回娛樂城完成儲值後再重新進入遊戲。';
     }
