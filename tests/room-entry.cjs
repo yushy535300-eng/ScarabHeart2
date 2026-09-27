@@ -24,7 +24,7 @@ const normalization = between('// v3.24: canonical', 'function a8(){');
 const functions = [between('function aG(){', 'function aH(){'), between('function aK(', 'function aL('),
   between('async function aP(', 'async function aS(')].join('\n');
 let count = 0;
-async function scenario({label='021', target='21', busy=false, stale=false, disabled=false, secondary=false, stuck=false, offPage=false} = {}) {
+async function scenario({label='021', target='21', busy=false, stale=false, disabled=false, secondary=false, stuck=false, offPage=false, missingSeatLabel=false, nestedSeatLabel=false} = {}) {
   let selected = '103', seat = null, pageVisible = !offPage, scrolls = 0;
   const touches = [];
   const button = {interactable: !disabled, enabled: true};
@@ -32,12 +32,14 @@ async function scenario({label='021', target='21', busy=false, stale=false, disa
   const second = {name: 'dialogConfirm', activeInHierarchy: false, getComponent: () => ({enabled:true, interactable:true})};
   const row = {name:'SlotTableItem2', activeInHierarchy:true, getComponent:()=>({}), children:[
     {name:'icon', getComponent:()=>({spriteFrame:{name:busy?'occupied_lock':'machine_available'}})}]};
+  const roomText = {name:'roomNumberText', activeInHierarchy:true};
+  const roomButton = {name:'slotTable2Btn', activeInHierarchy:true, getComponent:()=>null, children:[{name:'container',children:[roomText]}]};
   const selectedLabel = {name:'slotTableNumber'};
   const seatLabel = {name:'num', parent:{name:'slotTable2Btn'}};
   const a6 = {
-    walk: pred => [...(pageVisible ? [row] : []), selectedLabel, seatLabel, confirm, second].filter(pred),
+    walk: pred => [...(pageVisible ? [row] : []), selectedLabel, seatLabel, confirm, second, ...(nestedSeatLabel ? [roomButton] : [])].filter(pred),
     childText: node => node === row ? label : null,
-    label: node => node === selectedLabel ? selected : node === seatLabel ? seat : null,
+    label: node => node === selectedLabel ? selected : node === seatLabel ? (missingSeatLabel ? null : seat) : node === roomText ? seat : null,
     findOne: name => name === 'selectBtn' ? confirm : null,
     btnText: node => node === confirm || node === second ? '確定' : '',
     emitTouch: node => {
@@ -73,6 +75,9 @@ async function scenario({label='021', target='21', busy=false, stale=false, disa
   const disabled=await scenario({disabled:true});assert.equal(disabled.confirmed,false);assert.ok(!disabled.touches.includes('selectBtn'));
   const dialog=await scenario({secondary:true});assert.equal(dialog.confirmed,true);assert.deepEqual(dialog.touches,['SlotTableItem2','selectBtn','dialogConfirm']);
   const stuck=await scenario({stuck:true});assert.equal(stuck.confirmed,false);assert.deepEqual(stuck.touches,['SlotTableItem2','selectBtn']);
+  const missing=await scenario({missingSeatLabel:true});assert.equal(missing.confirmed,true);assert.equal(missing.seated,'21');
+  const nested=await scenario({missingSeatLabel:true,nestedSeatLabel:true});assert.equal(nested.seated,'21');
+  const unconfirmed=await scenario({missingSeatLabel:true,stuck:true});assert.equal(unconfirmed.seated,null);
   assert.equal(stuck.ctx.scarabMachineKey('310131'),'310131');
   assert.equal(stuck.ctx.scarabMachineKey(null),null);
   console.log(`PASS: ${count} runtime selection/confirmation scenarios; real engine functions with simulated Cocos nodes.`);
