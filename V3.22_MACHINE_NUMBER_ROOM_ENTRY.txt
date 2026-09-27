@@ -1,0 +1,9 @@
+V3.22 MACHINE NUMBER ROOM ENTRY
+
+- Recommendation selection now targets the ATG machine number shown by the in-game room picker.
+- SethEye/API roomId remains recommendation metadata and is not used as the entry target.
+- Target machine numbers drop leading zeroes for lookup (for example, 022 targets machine 22).
+- Exact-room waiting is enabled from the requested machine number, not from an API roomId.
+- HAR data and identifiers remain backend-only; the user interface does not expose HAR terminology.
+
+Validation: npm run check passed. Static checks only; live authenticated room entry still requires a real ATG session.
