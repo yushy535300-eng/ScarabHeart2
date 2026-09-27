@@ -57,6 +57,7 @@
   var READY_STABLE_MS = 650;
   var GAME_READY_TIMEOUT_MS = 90000;
   var roomWaitSince = 0;
+  var exactRoomWaitSince = 0;
   var portraitWasWaiting = false;
   var portraitClearSince = 0;
   var overlayRecovering = false;
@@ -213,24 +214,26 @@
         var portraitRoom=!!cfg.PORTRAIT_ROOM_MODE && !!String(cfg.MACHINENUM||'');
         if (waiting) {
           if (!roomWaitSince) roomWaitSince=Date.now();
+          if (!exactRoomWaitSince) exactRoomWaitSince=Date.now();
           if(portraitRoom){
             portraitWasWaiting=true;
             portraitClearSince=0;
-            // Portrait room pages can take longer to build their table/page map.
-            // Never let the generic watchdog cancel the user's exact machine.
-            window.__SCARAB_FORCE_MANUAL_ROOM=false;
             status('room-searching','正在定位機台 #'+String(cfg.MACHINENUM||'')+'…');
           }
 
           var exact=!!cfg.EXACT_ROOM;
           if (!exact && !portraitRoom && !window.__SCARAB_FORCE_MANUAL_ROOM && Date.now()-roomWaitSince>=ROOM_TIMEOUT_MS) {
             forceManualRoom();
+          } else if ((exact||portraitRoom) && !window.__SCARAB_FORCE_MANUAL_ROOM && Date.now()-exactRoomWaitSince>=30000) {
+            forceManualRoom();
+            status('room-fallback','找不到指定機台 #'+String(cfg.MACHINENUM||'')+'，請在 ATG 內自行選房或返回刷新');
           } else if ((exact||portraitRoom) && Date.now()-roomWaitSince>=ROOM_TIMEOUT_MS) {
             status('room-exact-wait','正在等待指定機台 #'+String(cfg.MACHINENUM||'')+' 的即時房間資料');
             roomWaitSince=Date.now();
           }
         } else {
           roomWaitSince=0;
+          exactRoomWaitSince=0;
           if(portraitRoom&&portraitWasWaiting){
             if(!portraitClearSince) portraitClearSince=Date.now();
             if(Date.now()-portraitClearSince>=1600){

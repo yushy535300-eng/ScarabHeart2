@@ -3,7 +3,7 @@
 
   const $ = id => document.getElementById(id);
   const log = (...args) => { try { console.log('[ScarabHeart]', ...args); } catch (_) {} };
-  const APP_VERSION = 'v3.14-har-roomid-direct-seat-no-duplicate-toast';
+  const APP_VERSION = 'v3.16-roomid-wait-and-leading-zero-fix';
   const GAMES = [
     ['golden-seth', '戰神賽特2 覺醒之力', 'media/game2.png'],
     ['egyptian-mythology', '戰神賽特', 'media/game8.png'],
@@ -834,21 +834,8 @@
     if (!game || !session || session.game !== game) return;
 
     const serial = ++boardLoadSerial;
-    if (SIM_RECOMMEND_GAMES.has(game)) {
-      // Do not block the room-analysis page on a hidden ATG iframe.
-      // v3.04's immediate-card behavior is restored: recommendation cards render
-      // at once, using machineNum/roomId pairs verified from the supplied ATG HARs.
-      // The existing v2.98/v3.04 enter-room runtime still treats machineNum as
-      // authoritative and validates/seats the room inside the real ATG session.
-      stopRecommendationProbe();
-      pendingPick = null;
-      const simulated = normalizeBoards(instantSimBoards(game));
-      boards = simulated;
-      boardCache[game] = { at: Date.now(), value: simulated };
-      $('updTime').textContent = '更新 ' + formatTime(simulated.updatedAt);
-      renderBoard();
-      return;
-    }
+    // A HAR is a snapshot, not a live room directory. All games must obtain
+    // selectable machineNum/roomId pairs from the current ATG session.
 
     const box = $('recommend');
     pendingPick = null;
@@ -857,8 +844,8 @@
     // This removes the blank 10~20 second wait when returning to this game.
     let instant = null;
     const memory = boardCache[game] && boardCache[game].value;
-    if (memory && usableBoardCount(memory) > 0) instant = normalizeBoards(memory);
-    if (!instant) instant = loadRealBoardStorage(game);
+    if (memory && !memory.simulated && usableBoardCount(memory) > 0) instant = normalizeBoards(memory);
+    if (!instant && !SIM_RECOMMEND_GAMES.has(game)) instant = loadRealBoardStorage(game);
 
     if (instant && usableBoardCount(instant) > 0) {
       boards = instant;
@@ -891,7 +878,7 @@
     // API can be much faster for titles it already supports.
     // ATG probe remains authoritative and replaces API data when it arrives.
     let apiPromise = Promise.resolve(null);
-    if (window.SethEyeAPI && SethEyeAPI.boards) {
+    if (!SIM_RECOMMEND_GAMES.has(game) && window.SethEyeAPI && SethEyeAPI.boards) {
       apiPromise = SethEyeAPI.boards(game, operatorCode())
         .then(value => {
           if (!session || session.game !== game || serial !== boardLoadSerial) return null;
@@ -929,7 +916,7 @@
     if (!session || session.game !== game || serial !== boardLoadSerial) return;
 
     if (!renderedFresh && !apiResult && !probeResult) {
-      if (instant && usableBoardCount(instant) > 0) {
+      if (instant && usableBoardCount(instant) > 0 && !SIM_RECOMMEND_GAMES.has(game)) {
         boards = instant;
         $('updTime').textContent = '暫用最近真實資料';
         renderBoard();
@@ -1146,7 +1133,10 @@
       GAME_MECHANISM: (GAME_META[session.game] || {}).mechanism || '',
       GAME_CHECKSUM: (GAME_META[session.game] || {}).checksum || '',
       FULL_ROOM_ID: pendingPick && pendingPick.roomId ? String(pendingPick.roomId) : '',
-      EXACT_ROOM: PORTRAIT_ROOM_GAMES.has(String(session.game || '')) && !!String(machineNum || '').trim(),
+      // Every recommendation selection carries the live ATG roomId. Keep its
+      // exact-room wait protection for all titles, not only portrait layouts;
+      // otherwise the generic 12-second watchdog can cancel a valid search.
+      EXACT_ROOM: !!String(target || '').trim() && /^\d+$/.test(String(target || '').trim()) && !!String(machineNum || '').trim(),
       PORTRAIT_ROOM_MODE: PORTRAIT_ROOM_GAMES.has(String(session.game || '')),
       VISUAL_TARGET: String(machineNum || target || ''),
       VISUAL_TARGET_KIND: 'machineNum',
@@ -1199,8 +1189,8 @@
         // MACHINENUM only as a fallback/display hint. Using "__machine__69"
         // makes findRoom() search for roomId "69", which can never match e.g.
         // Wuxia #69 -> roomId 310170 and causes endless page flipping.
-        const realHarRoomId = SIM_RECOMMEND_GAMES.has(requestedGame) && pendingPick.roomId && !String(pendingPick.roomId).startsWith('__machine__');
-        target = realHarRoomId ? String(pendingPick.roomId) : ('__machine__' + machineNum);
+        target = String(pendingPick.roomId || '');
+        if (!/^\d+$/.test(target)) throw new Error('這台機台缺少即時 roomId，請刷新機台資料');
       } else {
         machineNum = String($('room').value || '').trim();
         if (!machineNum) throw new Error('請輸入機台號碼，或選擇「進入大廳自行選擇」');

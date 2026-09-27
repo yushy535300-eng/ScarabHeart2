@@ -1,4 +1,4 @@
-v3.14
+v3.16
 
 1. Six HAR-backed games now pass the verified ATG roomId as TARGET when a recommendation is selected.
 2. machineNum remains the fallback/display hint.
