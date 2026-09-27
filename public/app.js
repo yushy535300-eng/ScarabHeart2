@@ -3,7 +3,7 @@
 
   const $ = id => document.getElementById(id);
   const log = (...args) => { try { console.log('[ScarabHeart]', ...args); } catch (_) {} };
-  const APP_VERSION = 'v3.22-machine-number-room-entry';
+  const APP_VERSION = 'v3.23-wuxia-and-room-entry-fix';
   const GAMES = [
     ['golden-seth', '戰神賽特2 覺醒之力', 'media/game2.png'],
     ['egyptian-mythology', '戰神賽特', 'media/game8.png'],
@@ -515,7 +515,10 @@
 
   function realBoardsFromTables(tables) {
     const rows = (Array.isArray(tables) ? tables : []).map(raw => {
-      const machineNum = String(raw.machineNum == null ? '' : raw.machineNum);
+      // ATG HAR snapshots use `number`; the live probe normalizes it to
+      // `machineNum`. Accept both shapes so captured room tables are not
+      // silently filtered out.
+      const machineNum = String(raw.machineNum == null ? (raw.number == null ? '' : raw.number) : raw.machineNum);
       const roomId = String(raw.roomId == null ? '' : raw.roomId);
       const status = String(raw.status || '');
       const todayBet = Number(raw.todayBet || 0);
@@ -528,6 +531,7 @@
       return {
         roomId,
         machineNum,
+        roomIdSource: 'ATG_REALTIME',
         status,
         isLocked: !!raw.isLocked || /locked/i.test(status),
         available: !raw.isLocked && !/locked/i.test(status) && !/full/i.test(status),
@@ -642,7 +646,10 @@
     ['composite', 'volatility', 'premium', 'freegame'].forEach(key => {
       (Array.isArray(value[key]) ? value[key] : []).forEach(row => {
         const machineNum = String(row && row.machineNum != null ? row.machineNum : '').replace(/^0+(?=\d)/, '');
-        if (roomMap[machineNum]) row.roomId = roomMap[machineNum];
+        if (roomMap[machineNum]) {
+          row.roomId = roomMap[machineNum];
+          row.roomIdSource = 'ATG_HAR_VERIFIED';
+        }
       });
     });
     return value;
@@ -962,6 +969,7 @@
 
     pendingPick = {
       roomId: String(item.roomId || ''),
+      roomIdSource: String(item.roomIdSource || (item.source === 'ATG' ? 'ATG_REALTIME' : '')),
       machineNum,
       board: activeBoard,
       boardName: BOARD_META[activeBoard][0]
@@ -1037,7 +1045,7 @@
       // The recommendation API's roomId is metadata and can differ from the
       // live ATG room key. Room selection is by the visible ATG machine number.
       // Keep the longer wait protection for that exact machine-number search.
-      EXACT_ROOM: targetKind === 'machineNum' && /^\d+$/.test(String(machineNum || '').trim()),
+      EXACT_ROOM: ['machineNum', 'roomId'].includes(targetKind) && /^\d+$/.test(String(machineNum || '').trim()),
       PORTRAIT_ROOM_MODE: PORTRAIT_ROOM_GAMES.has(String(session.game || '')),
       VISUAL_TARGET: String(machineNum || target || ''),
       VISUAL_TARGET_KIND: 'machineNum',
@@ -1079,21 +1087,23 @@
         target = '';
       } else if (pendingPick && String($('room').value).trim() === pendingPick.machineNum) {
         machineNum = String(pendingPick.machineNum || '');
-        targetKind = 'machineNum';
+        const verifiedAtgRoom = ['ATG_REALTIME', 'ATG_HAR_VERIFIED'].includes(String(pendingPick.roomIdSource || ''));
+        targetKind = verifiedAtgRoom ? 'roomId' : 'machineNum';
         boardName = pendingPick.boardName;
         const source = (boards && boards[pendingPick.board]) || [];
         boardList = source.filter(x => x && x.roomId && x.machineNum != null).map(x => ({ roomId: String(x.roomId), machineNum: String(x.machineNum), score: x.score }));
 
-        // The in-game picker displays ATG machine numbers. Do not pass the
-        // recommendation feed's roomId as TARGET: it is not guaranteed to be
-        // the key used by the live game's room selector.
-        machineNum = machineNum.replace(/^0+(?=\d)/, '');
-        target = '__machine__' + machineNum;
+        // Use roomId only when it came from the live ATG table or a verified
+        // ATG HAR pair. SethEye/API roomIds are not assumed to be ATG keys.
+        // Keep machine-number text intact (including leading zeroes) for the
+        // engine's exact table-label lookup.
+        target = verifiedAtgRoom && /^\d+$/.test(String(pendingPick.roomId || ''))
+          ? String(pendingPick.roomId)
+          : '__machine__' + machineNum;
         if (!/^\d+$/.test(machineNum)) throw new Error('這台機台號碼無效，請刷新機台資料');
       } else {
         machineNum = String($('room').value || '').trim();
         if (!machineNum) throw new Error('請輸入機台號碼，或選擇「進入大廳自行選擇」');
-        machineNum = machineNum.replace(/^0+(?=\d)/, '');
         target = '__machine__' + machineNum;
         targetKind = 'machineNum';
       }
