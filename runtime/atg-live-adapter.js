@@ -157,31 +157,57 @@
   }
 
   var wsAttached = typeof WeakSet === 'function' ? new WeakSet() : null;
-  function findSpoilerPacket(root, depth) {
-    if (!root || typeof root !== 'object' || Array.isArray(root) || depth > 5) return null;
-    if (root.engine && Array.isArray(root.engine.gameState)) return root;
-    var wrappers = ['data', 'result', 'payload', 'response', 'body'];
-    for (var i = 0; i < wrappers.length; i++) {
-      var found = findSpoilerPacket(root[wrappers[i]], depth + 1);
-      if (found) return found;
+  function parseDecodedPacket(value) {
+    if (typeof value === 'string') {
+      try { return JSON.parse(value); } catch (_) { return null; }
+    }
+    if (value && typeof value === 'object' && !Array.isArray(value) &&
+        typeof value.data === 'string' && value.engine == null) {
+      try { return JSON.parse(value.data); } catch (_) {}
+    }
+    return value;
+  }
+  function findSpoilerPacket(root) {
+    var queue = [root], seen = typeof WeakSet === 'function' ? new WeakSet() : null;
+    var index = 0, visited = 0;
+    while (index < queue.length && visited++ < 1000) {
+      var node = queue[index++];
+      if (!node || typeof node !== 'object') continue;
+      if (seen) {
+        try { if (seen.has(node)) continue; seen.add(node); } catch (_) {}
+      }
+      if (Array.isArray(node)) {
+        for (var i = 0; i < node.length && i < 50; i++) queue.push(node[i]);
+        continue;
+      }
+      if (node.engine && Array.isArray(node.engine.gameState)) return node;
+      var keys;
+      try { keys = Object.keys(node); } catch (_) { continue; }
+      for (var k = 0; k < keys.length && k < 50; k++) {
+        var child = node[keys[k]];
+        if (typeof child === 'string' && child.length < 200000) {
+          var parsed = parseDecodedPacket(child);
+          if (parsed && typeof parsed === 'object') queue.push(parsed);
+        } else if (child && typeof child === 'object') queue.push(child);
+      }
     }
     return null;
   }
-  function publishSpoilerPacket(packet) {
+  function publishSpoilerPacket(value) {
     try {
-      if (!packet || typeof packet !== 'object' || Array.isArray(packet)) return;
-      // Socket.IO ACK replies to a `spin` request often contain only the
-      // decoded response body; they do not repeat the request's eventName.
-      // Find the engine result through common response envelopes and validate
-      // its free-game contents instead of rejecting it by transport metadata.
-      var response = findSpoilerPacket(packet, 0);
+      var packet = parseDecodedPacket(value);
+      if (!packet || typeof packet !== 'object') return;
+      // Socket.IO ACK replies may be nested in arrays/envelopes and omit the
+      // request's eventName. Identify the result by its engine.gameState data.
+      var response = findSpoilerPacket(packet);
       if (!response || (response.status != null && String(response.status) !== '200')) return;
       var engine = response.engine, games = engine && engine.gameState;
       var panel = window.__sethEngine && window.__sethEngine.panel;
-      if (!panel || !panel.spoilerOn || !Array.isArray(games) || !games.length ||
+      if (!panel || !Array.isArray(games) || !games.length ||
           games.some(function (g) { return !g || typeof g !== 'object'; })) return;
-      var isFree = engine.buyFeatureType === 'freeGame' ||
-        games.some(function (g) { return +g.freeGameCount > 0 || g.startFreeGame === true; });
+      var isFree = /free.?game/i.test(String(engine.buyFeatureType || '')) ||
+        games.some(function (g) { return +g.freeGameCount > 0 || g.startFreeGame === true ||
+          g.isFreeGame === true || g.freeGame === true; });
       if (!isFree) return;
       var lastWin = games[games.length - 1].totalWinnings;
       if ((typeof lastWin !== 'number' && typeof lastWin !== 'string') ||

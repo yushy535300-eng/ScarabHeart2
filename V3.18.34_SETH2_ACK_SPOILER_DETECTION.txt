@@ -1,4 +1,0 @@
-v3.18.34
-- Accept decoded Socket.IO spin acknowledgements that omit eventName.
-- Find gameState results inside common data/result/payload/response/body envelopes.
-- Keep free-game validation and the user-enabled spoiler switch; preserve v3.18.33 audio and room-selection behavior.

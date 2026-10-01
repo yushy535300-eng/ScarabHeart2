@@ -1,0 +1,5 @@
+v3.18.35
+- Parse Seth2 decoded Socket.IO ACK payloads across nested objects, arrays, and JSON strings.
+- Detect superFreeGame response types and additional free-game state flags.
+- Keep the visible spoiler switch as the display control; packet capture no longer depends on internal toggle synchronization.
+- Preserve the v3.18.33 game-audio and room-selection fixes.

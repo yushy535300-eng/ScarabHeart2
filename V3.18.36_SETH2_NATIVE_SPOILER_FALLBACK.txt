@@ -1,0 +1,4 @@
+v3.18.36
+- Preserve the game's native spoiler frame when the custom packet parser has no score to display.
+- Avoid hiding the native Seth2 spoiler on toggle; hide it only after a replacement score frame is actually shown.
+- Keep the v3.18.35 ACK parser, v3.18.33 audio, and room-selection behavior.
