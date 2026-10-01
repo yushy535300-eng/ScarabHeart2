@@ -1,0 +1,8 @@
+Version 3.18.16 — All games free-game result visibility fix
+
+- Fix the shared result card CSS: the card was forced to display:none!important, and the ready state never overrode it. It now becomes visible when a result is ready.
+- Preserve the last result from the shared panel (spoilerWin) and provider state (spoiler) through free-game completion.
+- Keep the final score and free-game count visible after the engine clears its active state.
+- Other game controls and entry flows are unchanged.
+
+Verification: npm run check; CSS visibility rule confirmed; isolated test confirmed result persistence after state clears.

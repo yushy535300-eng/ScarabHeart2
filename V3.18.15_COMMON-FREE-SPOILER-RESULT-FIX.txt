@@ -1,8 +1,0 @@
-Version 3.18.15 — Common free-game result display fix
-
-- Preserve the latest predicted free-game result from both the shared game panel (spoilerWin) and provider engine (spoiler).
-- Keep the final score and free-game count visible after the engine clears its active spoiler state.
-- Show an explicit completion label after the free-game sequence ends.
-- Existing game launch, room selection, speed, and other panel controls are unchanged.
-
-Verification: npm run check; isolated test confirmed a score remains available after spoilerWin is set to null.
