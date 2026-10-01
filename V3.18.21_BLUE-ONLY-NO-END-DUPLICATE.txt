@@ -1,0 +1,8 @@
+V3.18.21 — blue-only spoiler popup and no end duplicate
+
+- Keep the custom blue top popup as the sole visible spoiler prompt while the spoiler toggle is ON.
+- Hide the game's gold __sethSpoiler popup to prevent overlapping duplicate boxes.
+- Treat clearing spoilerWin at free-game end as a reset; do not replay the saved score or label it as an end popup.
+- Keep the decoded Seth2 spin-packet reader from V3.18.20: last gameState totalWinnings and maximum freeGameCount.
+
+Checks: npm run check passed; static assertions confirm blue-only popup, native gold suppression, and no end-popup branch. Live play still needs confirmation in the user's session.
