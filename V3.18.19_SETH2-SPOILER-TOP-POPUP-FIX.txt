@@ -1,0 +1,9 @@
+V3.18.19 — Seth2 top spoiler popup fix
+
+- Read Seth2's decoded GameData gameState when the existing spoiler result path has no score.
+- Use the live free-game winnings and free-spin count fields; show the top prediction prompt once per free-game session.
+- Keep the original native top prompt when present and avoid a duplicate.
+- Keep the unwanted centered result box removed; panel result text remains inside the panel only.
+- HAR evidence: the capture records the buyFeature and subsequent spin flow over Socket.IO; its response payload is binary, so the HAR alone cannot provide a readable score. The source fix reads the parsed in-game GameData model.
+
+Checks: npm run check passed; a GameData fixture verified score/count extraction and one-shot display.

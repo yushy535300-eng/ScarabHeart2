@@ -1,0 +1,2 @@
+v3.18.18
+Keep the game-provided top spoiler score popup. Remove the extra assistant-generated centered popup so only the original top score box appears. The hidden/free-pane result row continues to update when results are detected.
