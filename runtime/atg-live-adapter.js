@@ -176,6 +176,7 @@
       panel.spoilerWin = {
         totalWin: Math.round(+lastWin * 100) / 100,
         fg: freeCount,
+        isFreeGame: true,
         ts: Date.now()
       };
       rememberEvent('spin');
