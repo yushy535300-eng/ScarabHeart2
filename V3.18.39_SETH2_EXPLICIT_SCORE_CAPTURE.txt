@@ -1,0 +1,4 @@
+v3.18.39
+- Restore the Seth2 decoded response path so verified free-game scores reach the top spoiler frame.
+- Accept explicit free-game cumulative fields only; ignore generic totalWinnings to prevent per-spin values from replacing the bonus total.
+- Keep GameData score reading as fallback and retain green score styling.
