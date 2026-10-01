@@ -1,0 +1,4 @@
+v3.18.29
+- Normalize the machine number from ATG's live room table to the three-digit format shown by the portrait picker (57 -> 057, 1 -> 001) before exact UI matching.
+- Keep roomId as the authoritative room lookup key; only normalize the mapped machine number used to match/select the visible machine tile.
+- Preserve four portrait games and the existing portrait search wait behavior.

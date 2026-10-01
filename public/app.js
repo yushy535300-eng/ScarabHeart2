@@ -3,7 +3,7 @@
 
   const $ = id => document.getElementById(id);
   const log = (...args) => { try { console.log('[ScarabHeart]', ...args); } catch (_) {} };
-  const APP_VERSION = 'v3.18.28-portrait-search-continues';
+  const APP_VERSION = 'v3.18.30-machine-number-and-live-availability-fix';
   const GAMES = [
     ['golden-seth', '戰神賽特2 覺醒之力', 'media/game2.png'],
     ['egyptian-mythology', '戰神賽特', 'media/game8.png'],
@@ -580,6 +580,7 @@
       const machineNum = String(raw.machineNum == null ? '' : raw.machineNum);
       const roomId = String(raw.roomId == null ? '' : raw.roomId);
       const status = String(raw.status || '');
+      const unavailableStatus = /locked|full|busy|occupied|playing|closed|unavailable|offline/i.test(status);
       const todayBet = Number(raw.todayBet || 0);
       const todayWin = Number(raw.todayWin || 0);
       const bet = Number(raw.bet || 0);
@@ -591,8 +592,8 @@
         roomId,
         machineNum,
         status,
-        isLocked: !!raw.isLocked || /locked/i.test(status),
-        available: !raw.isLocked && !/locked/i.test(status) && !/full/i.test(status),
+        isLocked: !!raw.isLocked || unavailableStatus || raw.available === false,
+        available: !raw.isLocked && raw.available !== false && !unavailableStatus,
         rtp: Number.isFinite(rtp) ? Math.round(rtp * 100) / 100 : 0,
         bet: liveBet,
         win: liveWin,
@@ -790,7 +791,7 @@
       const machineNum = String(raw.machineNum == null ? '' : raw.machineNum);
       const roomId = String(raw.roomId == null ? '' : raw.roomId);
       const status = String(raw.status || '');
-      const locked = !!raw.isLocked || /locked/i.test(status);
+      const locked = !!raw.isLocked || raw.available === false || /locked|full|busy|occupied|playing|closed|unavailable|offline/i.test(status);
       if (!/^\d+$/.test(machineNum) || !roomId || locked) return null;
 
       const liveRtp = Number(raw.todayBet || 0) > 0
@@ -1021,6 +1022,12 @@
       box.innerHTML = '<div style="color:#7893a9;font-size:12px;padding:16px">推薦資料正在同步；你也可以輸入機台號碼或進入大廳。</div>';
       return;
     }
+    if (boards && boards.source === 'ATG_HAR_VERIFIED_MACHINE_INDICATOR') {
+      const note = document.createElement('div');
+      note.style.cssText = 'color:#a8bac8;font-size:11px;padding:2px 4px 6px';
+      note.textContent = '即時機台狀態同步中，更新後即可選擇可進入的機台';
+      box.appendChild(note);
+    }
     if (usingFallback) {
       const note = document.createElement('div');
       note.style.cssText = 'color:#7893a9;font-size:11px;padding:2px 4px 6px';
@@ -1029,7 +1036,8 @@
     }
     list.slice(0, 10).forEach((item, index) => {
       const machine = item.machineNum == null ? '—' : String(item.machineNum);
-      const locked = !hasLiveRoomId(item.roomId) || item.isLocked === true;
+      const historicalFallback = item.source === 'ATG_HAR_VERIFIED_MACHINE_INDICATOR';
+      const locked = !hasLiveRoomId(item.roomId) || item.isLocked === true || item.available === false || historicalFallback;
       const row = document.createElement('div');
       row.className = 'room-card';
       const metric = item.metric ? ' · ' + item.metric : '';
@@ -1127,6 +1135,16 @@
 
   async function selectRoom(item) {
     if (!item || item.machineNum == null) return;
+    if (item.source === 'ATG_HAR_VERIFIED_MACHINE_INDICATOR') {
+      $('err2').style.color = '#ffbf66';
+      $('err2').textContent = '正在同步即時機台狀態，請稍候再選擇';
+      return;
+    }
+    if (item.available === false || item.isLocked === true) {
+      $('err2').style.color = '#ffbf66';
+      $('err2').textContent = '這台目前無法進入，請選擇其他機台';
+      return;
+    }
     const machineNum = String(item.machineNum);
     prepareGameEntry(session && session.game).catch(() => null);
     const accepted = await confirmRoom(machineNum);

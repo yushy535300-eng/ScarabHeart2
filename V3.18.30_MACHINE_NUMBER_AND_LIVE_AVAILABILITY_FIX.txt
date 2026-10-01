@@ -1,0 +1,5 @@
+v3.18.30
+- Normalize live room-table machine numbers to three digits before matching the portrait picker (57 -> 057; 1 -> 001); roomId remains the lookup key.
+- Do not allow recommendation fallback rows without current availability to launch a room entry.
+- Exclude explicitly full, busy, occupied, closed, unavailable, or offline live rows from selectable recommendations.
+- Keep the four portrait games and existing UI/spoiler styling.
