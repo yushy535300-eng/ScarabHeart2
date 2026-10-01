@@ -2,20 +2,33 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 
-function runPacket(packet) {
+function runSpinAck(ack) {
   const panel = { spoilerOn: true, spoilerWin: null };
-  const cryptoTool = { variant: 'custom', decrypt: value => value };
+  const intervals = [];
+  const socket = {
+    connected: true,
+    handlers: {},
+    on(name, fn) { this.handlers[name] = fn; },
+    emit(...args) { this.lastEmit = args; return 'emit-return'; }
+  };
   const window = {
     __sethEngine: { panel },
-    System: { get: () => ({ CryptoTool: cryptoTool }) },
+    App: { serviceManager: { services: [{ _client: { _io: socket } }] } },
     addEventListener() {}
   };
   const context = {
     window, Date, Number, Array, Object, Math, String,
-    setTimeout() {}, setInterval() { return 1; }, clearInterval() {}
+    setTimeout() {}, setInterval(fn) { intervals.push(fn); return intervals.length; },
+    clearInterval() {}
   };
   vm.runInNewContext(fs.readFileSync('runtime/atg-live-adapter.js', 'utf8'), context);
-  cryptoTool.decrypt(packet);
+  intervals.forEach(fn => fn()); // runs service/socket discovery
+  let callbackCalled = false;
+  const emitResult = socket.emit('spin', { action: 'buyFeature' }, function () { callbackCalled = true; });
+  const ackCallback = socket.lastEmit[2];
+  ackCallback(ack);
+  assert.equal(callbackCalled, true);
+  assert.equal(emitResult, 'emit-return');
   return panel.spoilerWin;
 }
 
@@ -30,7 +43,7 @@ const explicit = {
     }]
   }
 };
-const captured = runPacket({ data: { result: [explicit] } });
+const captured = runSpinAck({ data: { result: [explicit] } });
 assert.equal(captured.totalWin, 125.5);
 assert.equal(captured.fg, 10);
 assert.equal(typeof captured.ts, 'number');
@@ -42,5 +55,5 @@ const ambiguousOnly = {
     gameState: [{ totalWinnings: 8888, freeGameCount: 10 }]
   }
 };
-assert.equal(runPacket(ambiguousOnly), null);
-console.log('PASS: Seth2 captures explicit free-game totals and rejects ambiguous per-spin totalWinnings.');
+assert.equal(runSpinAck(ambiguousOnly), null);
+console.log('PASS: spin ACK callback is observed; explicit bonus totals pass and per-spin totals are rejected.');

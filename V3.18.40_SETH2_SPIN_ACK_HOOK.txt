@@ -1,0 +1,4 @@
+v3.18.40
+- Observe the Socket.IO spin acknowledgement callback recorded in the Seth2 HAR.
+- Keep explicit free-game cumulative score validation; ignore generic per-spin totalWinnings.
+- Preserve the GameData fallback, top spoiler frame, and green score styling.

@@ -345,6 +345,32 @@
 
   installDecodedPacketHooks();
 
+  var ackWrapped = typeof WeakSet === 'function' ? new WeakSet() : null;
+  function installSpinAckPeek(socket) {
+    if (!socket || typeof socket.emit !== 'function' || (ackWrapped && ackWrapped.has(socket))) return;
+    if (ackWrapped) ackWrapped.add(socket);
+    var original = socket.emit;
+    var wrapped = function () {
+      var args = Array.prototype.slice.call(arguments);
+      if (args[0] === 'spin') {
+        for (var i = args.length - 1; i >= 1; i--) {
+          if (typeof args[i] !== 'function') continue;
+          var callback = args[i];
+          args[i] = function () {
+            try {
+              for (var j = 0; j < arguments.length; j++) publishSpoilerPacket(arguments[j]);
+            } catch (_) {}
+            return callback.apply(this, arguments);
+          };
+          break;
+        }
+      }
+      return original.apply(this, args);
+    };
+    try { Object.defineProperty(wrapped, '__scarabSpinAckPeek', { value: true }); } catch (_) {}
+    socket.emit = wrapped;
+  }
+
   function scanSockets() {
     var services;
     try { services = window.App && window.App.serviceManager && window.App.serviceManager.services; }
@@ -358,7 +384,9 @@
         var transport = engineSocket && engineSocket.transport;
         attachWebSocket(transport && (transport.ws || transport._ws));
       } catch (_) {}
-      if (!socket || typeof socket.on !== 'function' || watched.has(socket)) return;
+      if (!socket) return;
+      installSpinAckPeek(socket);
+      if (typeof socket.on !== 'function' || watched.has(socket)) return;
       var handlers = [];
       ['connect', 'disconnect', 'connect_error', 'initial', 'slotTableUpdated', 'spin', 'closeSpin'].forEach(function (event) {
         var handler = function () {
