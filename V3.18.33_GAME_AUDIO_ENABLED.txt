@@ -1,0 +1,3 @@
+v3.18.33
+- Enable game audio by setting the game launch MUTE option to false.
+- Leave room selection, room ID matching, and all other behavior unchanged.

@@ -3,7 +3,7 @@
 
   const $ = id => document.getElementById(id);
   const log = (...args) => { try { console.log('[ScarabHeart]', ...args); } catch (_) {} };
-  const APP_VERSION = 'v3.18.32-room-number-zero-pad-match';
+  const APP_VERSION = 'v3.18.34-seth2-ack-spoiler-detection';
   const GAMES = [
     ['golden-seth', '戰神賽特2 覺醒之力', 'media/game2.png'],
     ['egyptian-mythology', '戰神賽特', 'media/game8.png'],
@@ -1202,7 +1202,7 @@
       TARGET: String(target || ''),
       TARGET_KIND: targetKind || null,
       MACHINENUM: engineMachineNum,
-      MUTE: true,
+      MUTE: false,
       DEBUG: false,
       TAKE_PROFIT: 0,
       STOP_LOSS: 0,

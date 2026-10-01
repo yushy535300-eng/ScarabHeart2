@@ -157,11 +157,26 @@
   }
 
   var wsAttached = typeof WeakSet === 'function' ? new WeakSet() : null;
+  function findSpoilerPacket(root, depth) {
+    if (!root || typeof root !== 'object' || Array.isArray(root) || depth > 5) return null;
+    if (root.engine && Array.isArray(root.engine.gameState)) return root;
+    var wrappers = ['data', 'result', 'payload', 'response', 'body'];
+    for (var i = 0; i < wrappers.length; i++) {
+      var found = findSpoilerPacket(root[wrappers[i]], depth + 1);
+      if (found) return found;
+    }
+    return null;
+  }
   function publishSpoilerPacket(packet) {
     try {
-      if (!packet || typeof packet !== 'object' || Array.isArray(packet) ||
-          (packet.status != null && packet.status !== 200) || packet.eventName !== 'spin') return;
-      var engine = packet.engine, games = engine && engine.gameState;
+      if (!packet || typeof packet !== 'object' || Array.isArray(packet)) return;
+      // Socket.IO ACK replies to a `spin` request often contain only the
+      // decoded response body; they do not repeat the request's eventName.
+      // Find the engine result through common response envelopes and validate
+      // its free-game contents instead of rejecting it by transport metadata.
+      var response = findSpoilerPacket(packet, 0);
+      if (!response || (response.status != null && String(response.status) !== '200')) return;
+      var engine = response.engine, games = engine && engine.gameState;
       var panel = window.__sethEngine && window.__sethEngine.panel;
       if (!panel || !panel.spoilerOn || !Array.isArray(games) || !games.length ||
           games.some(function (g) { return !g || typeof g !== 'object'; })) return;
