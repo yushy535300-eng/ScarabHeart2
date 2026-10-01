@@ -1,0 +1,2 @@
+v3.18.17
+Restores the independent floating spoiler score popup when server free-game results are detected. The popup now displays the score and free-game count, and auto-hides after 6.5 seconds. The panel result row continues to update when present.
