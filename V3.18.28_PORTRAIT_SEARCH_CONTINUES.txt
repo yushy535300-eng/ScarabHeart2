@@ -1,0 +1,4 @@
+v3.18.28
+- Restore the known portrait room behavior: keep auto-locating the selected machine across page loads.
+- Do not let the 30-second exact-room watchdog force portrait selection into manual mode.
+- Keep the four portrait games and the green spoiler score/frame changes.

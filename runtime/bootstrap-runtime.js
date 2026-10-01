@@ -218,13 +218,17 @@
           if(portraitRoom){
             portraitWasWaiting=true;
             portraitClearSince=0;
+            // Portrait room lists may need several page loads to expose the
+            // target. Keep the original portrait behavior: continue searching
+            // instead of letting a generic timeout switch to manual mode.
+            window.__SCARAB_FORCE_MANUAL_ROOM=false;
             status('room-searching','正在定位機台 #'+String(cfg.MACHINENUM||'')+'…');
           }
 
           var exact=!!cfg.EXACT_ROOM;
           if (!exact && !portraitRoom && !window.__SCARAB_FORCE_MANUAL_ROOM && Date.now()-roomWaitSince>=ROOM_TIMEOUT_MS) {
             forceManualRoom();
-          } else if ((exact||portraitRoom) && !window.__SCARAB_FORCE_MANUAL_ROOM && Date.now()-exactRoomWaitSince>=30000) {
+          } else if ((exact||portraitRoom) && !portraitRoom && !window.__SCARAB_FORCE_MANUAL_ROOM && Date.now()-exactRoomWaitSince>=30000) {
             forceManualRoom();
             status('room-fallback','找不到指定機台 #'+String(cfg.MACHINENUM||'')+'，請在 ATG 內自行選房或返回刷新');
           } else if ((exact||portraitRoom) && Date.now()-roomWaitSince>=ROOM_TIMEOUT_MS) {
