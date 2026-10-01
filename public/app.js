@@ -915,10 +915,14 @@
     const memory = boardCache[game] && boardCache[game].value;
     if (memory && !memory.simulated && usableBoardCount(memory) > 0) instant = normalizeBoards(memory);
     if (!instant) instant = loadRealBoardStorage(game);
+    // Restore the previously working six-title first paint: these machineNum/roomId
+    // pairs were verified from the user's captures. Keep them visible while the
+    // live ATG table probe runs; an actual live packet replaces them immediately.
+    if (!instant && SIM_RECOMMEND_GAMES.has(game)) instant = instantSimBoards(game);
 
     if (instant && usableBoardCount(instant) > 0) {
       boards = instant;
-      $('updTime').textContent = '更新中';
+      $('updTime').textContent = instant.source === 'ATG_HAR_VERIFIED_MACHINE_INDICATOR' ? '清單已載入｜更新中' : '更新中';
       renderBoard();
     } else {
       boards = null;
@@ -987,7 +991,7 @@
     if (!renderedFresh && !apiResult && !probeResult) {
       if (instant && usableBoardCount(instant) > 0) {
         boards = instant;
-        $('updTime').textContent = '暫用最近真實資料';
+        $('updTime').textContent = instant.source === 'ATG_HAR_VERIFIED_MACHINE_INDICATOR' ? '暫用已核對清單' : '暫用最近真實資料';
         renderBoard();
       } else {
         boards = emptyBoards();

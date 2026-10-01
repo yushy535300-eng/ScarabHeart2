@@ -1,0 +1,6 @@
+V3.18.24 — restore immediate six-game machine list
+
+- Restore the six previously working ATG game lists using machineNum/roomId pairs verified against the user's supplied captures.
+- Render the list immediately while the current live ATG table probe runs; replace it with live data as soon as a valid response arrives.
+- If live data is unavailable, keep the verified list visible with a temporary-list status instead of leaving the page blank.
+- Keep the five-minute real-list cache fallback and the cyan spoiler score / blue-only popup behavior.
