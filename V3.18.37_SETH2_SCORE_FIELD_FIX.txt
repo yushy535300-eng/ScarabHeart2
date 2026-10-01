@@ -1,0 +1,4 @@
+v3.18.37
+- Read spoiler scores only from explicit free-game cumulative fields; do not treat generic totalWinnings as the bonus total.
+- Restore the game's GameData free-game score reader as a fallback when a decoded response lacks those explicit fields.
+- Keep the native spoiler frame visible when no verified replacement score is available.

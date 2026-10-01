@@ -209,12 +209,23 @@
         games.some(function (g) { return +g.freeGameCount > 0 || g.startFreeGame === true ||
           g.isFreeGame === true || g.freeGame === true; });
       if (!isFree) return;
-      var lastWin = games[games.length - 1].totalWinnings;
-      if ((typeof lastWin !== 'number' && typeof lastWin !== 'string') ||
-          String(lastWin).trim() === '' || !Number.isFinite(+lastWin) || +lastWin < 0) return;
+      // Use only explicit free-game cumulative fields. Generic totalWinnings
+      // can be a single-spin result and was producing incorrect spoiler scores.
+      var lastGame = games[games.length - 1];
+      var records = lastGame.freeGameRecords || engine.freeGameRecords || {};
+      var candidates = [records.totalWin, records.totalWinnings, records.cumWin,
+        lastGame.freespinWinnings, lastGame.freeGameTotalWin];
+      var score = null;
+      for (var si = 0; si < candidates.length; si++) {
+        var candidate = candidates[si];
+        if (candidate == null || String(candidate).trim() === '') continue;
+        var numeric = Number(candidate);
+        if (Number.isFinite(numeric) && numeric > 0) { score = numeric; break; }
+      }
+      if (score == null) return;
       var freeCount = Math.max.apply(null, games.map(function (g) { return +g.freeGameCount || 0; }));
       panel.spoilerWin = {
-        totalWin: Math.round(+lastWin * 100) / 100,
+        totalWin: Math.round(score * 100) / 100,
         fg: freeCount,
         ts: Date.now()
       };
