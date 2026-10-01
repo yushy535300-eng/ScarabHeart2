@@ -10,7 +10,6 @@ const express = require('express');
 const { WebSocket, WebSocketServer } = require('ws');
 const { HttpsProxyAgent } = require('https-proxy-agent');
 const path = require('path');
-const { rewriteGameAssetHtml } = require('./game-asset-html');
 const crypto = require('crypto');
 const { adminPage } = require('./admin-page');
 const { authorizeWhitelist, listWhitelist, upsertWhitelist, setWhitelistEnabled, extendWhitelist, deleteWhitelist } = require('./whitelist');
@@ -26,10 +25,16 @@ const websocketAgent = /^https?:\/\//i.test(String(outboundProxy || ''))
   ? new HttpsProxyAgent(outboundProxy)
   : undefined;
 
-function gameAllowed(url) {
+function gameAllowed(url, provider) {
   if (!url || (url.protocol !== 'https:' && url.protocol !== 'wss:')) return false;
   const host = url.hostname.toLowerCase();
-  return host === 'godeebxp.com' || host.endsWith('.godeebxp.com');
+  if (!provider || provider === 'atg') return host === 'godeebxp.com' || host.endsWith('.godeebxp.com');
+  const exactHosts = {
+    rsg: ['gameweb.rsgaming666.com', 'gameresource3.rsgaming666.com', 'gameserver.rsgaming666.com'],
+    qt: ['lobby.qtlauncher.com', 'client.qtlauncher.com', 'ga8.gahypergaming.com', 'dt589qboipkze.cloudfront.net']
+  }[provider];
+  if (provider === 'qt' && (host === 'qtlauncher.com' || host.endsWith('.qtlauncher.com'))) return true;
+  return !!exactHosts && exactHosts.includes(host);
 }
 
 function apiAllowed(url) {
@@ -54,7 +59,7 @@ function decodePayload(raw) {
     const normalized = input.replace(/-/g, '+').replace(/_/g, '/');
     const json = Buffer.from(normalized, 'base64').toString('utf8');
     const payload = JSON.parse(json);
-    if (!payload || payload.kind !== 'atg' || !payload.cfg ||
+    if (!payload || !['atg', 'rsg', 'qt'].includes(payload.kind) || !payload.cfg ||
         typeof payload.cfg !== 'object' || Array.isArray(payload.cfg)) return null;
     return payload;
   } catch (_) {
@@ -117,7 +122,7 @@ app.post('/api/access/login',accessJson,async(req,res)=>{try{const username=Stri
 app.get('/api/access/check',async(req,res)=>{const id=String(req.query.sessionId||''),current=accessSessions.get(id);if(!current)return res.status(401).json({valid:false,reason:'session_invalid'});try{const access=await authorizeWhitelist(current.username,current.platform);if(!access.allowed){accessSessions.delete(id);return res.status(403).json({valid:false,reason:access.reason});}res.json({valid:true,reason:'ok'});}catch(e){res.status(503).json({valid:false,reason:'database_unavailable',temporary:true});}});
 app.post('/api/access/logout',accessJson,(req,res)=>{const id=String(req.body&&req.body.sessionId||'');if(id)accessSessions.delete(id);res.json({success:true});});
 app.get('/healthz', (_req, res) => {
-  res.status(200).json({ ok: true, version: '3.14-har-roomid-direct-seat-no-duplicate-toast' });
+  res.status(200).json({ ok: true, version: '3.17-moon-rabbit-and-thor' });
 });
 
 app.use('/__api', express.raw({ type: '*/*', limit: '2mb' }), async (req, res) => {
@@ -242,6 +247,41 @@ function gameBoot(sid, originalHref, session, withRuntime) {
   return proxyBoot + runtimeBoot;
 }
 
+function providerBoot(sid, originalHref, session, withRuntime) {
+  const provider = session.provider;
+  const prefix = '/__game/' + sid;
+  const boot = '<script>window.__SCARAB_ORIGINAL_URL=' + scriptJson(originalHref) +
+    ';window.__SCARAB_PROXY_PREFIX=' + scriptJson(prefix) +
+    ';(function(){var O=window.__SCARAB_ORIGINAL_URL,P=' + scriptJson(prefix) +
+    ';function allowed(x){var h=x.hostname.toLowerCase();return ' + (provider === 'rsg'
+      ? 'h==="gameweb.rsgaming666.com"||h==="gameresource3.rsgaming666.com"||h==="gameserver.rsgaming666.com"'
+      : 'h==="qtlauncher.com"||h.endsWith(".qtlauncher.com")||h==="ga8.gahypergaming.com"||h==="dt589qboipkze.cloudfront.net"') + '}' +
+    'function U(raw){try{var x=new URL(String(raw),document.baseURI||O);if(x.origin===location.origin){var m=x.pathname.match(/^\\/__game\\/[a-f0-9]{24}(\\/.*)$/i);if(m)x=new URL(m[1]+x.search,O);else if(!/^\\/(?:provider|media)\\//i.test(x.pathname)&&x.pathname!=="/logo.png")x=new URL(x.pathname+x.search,O)}return x}catch(e){return null}}' +
+    'function H(raw){try{var x=U(raw);if(x&&/^https?:$/.test(x.protocol)&&allowed(x))return location.origin+P+"/__remote?url="+encodeURIComponent(x.href)}catch(e){}return raw}' +
+    'var F=window.fetch;if(F)window.fetch=function(i,n){var raw=typeof i==="string"?i:(i&&i.url)||String(i),u=H(raw);try{if(i instanceof Request&&u!==raw)i=new Request(u,i);else if(u!==raw)i=u}catch(e){i=u}return F.call(this,i,n)};' +
+    'var XO=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(m,u){arguments[1]=H(u);return XO.apply(this,arguments)};' +
+    'var SA=Element.prototype.setAttribute;Element.prototype.setAttribute=function(k,v){if(/^(src|href|action|poster)$/i.test(k))arguments[1]=H(v);return SA.apply(this,arguments)};' +
+    'try{var d=Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype,"src");if(d&&d.set&&d.get)Object.defineProperty(HTMLIFrameElement.prototype,"src",{configurable:true,enumerable:d.enumerable,get:d.get,set:function(v){return d.set.call(this,H(v))}})}catch(e){};' +
+    'var N=window.WebSocket;window.WebSocket=function(u,p){try{var x=new URL(u,O);if(/^wss?:$/.test(x.protocol)&&allowed(x)){var q=(location.protocol==="https:"?"wss:":"ws:")+"//"+location.host+"/__socket/' + sid + '?url="+encodeURIComponent(x.href);return p?new N(q,p):new N(q)}}catch(e){}return p?new N(u,p):new N(u)};window.WebSocket.prototype=N.prototype;Object.keys(N).forEach(function(k){try{window.WebSocket[k]=N[k]}catch(e){}});["CONNECTING","OPEN","CLOSING","CLOSED"].forEach(function(k){try{Object.defineProperty(window.WebSocket,k,{value:N[k],configurable:true})}catch(e){}});' +
+    '})();<\/script>';
+  if (!withRuntime) return boot;
+  const config = session.payload && session.payload.cfg || {};
+  const gameCode = provider === 'qt' ? 'qt-lunar-rabbit' : 'thor';
+  const engine = '<script src="/provider/hud-ui-bundle.js"></script>' + (provider === 'qt'
+    ? '<script src="/provider/lunar-engine.js"></script>'
+    : '<script src="/provider/thor-engine-code.js"></script>') + '<script src="/provider/scarab-floating-theme.js"></script>';
+  const start = '<script>(function(){var cfg=' + scriptJson({
+    UI: 'overlay', DEBUG: false, SPEED: 2, GAME_CODE: gameCode,
+    SETH_ACCOUNT: String(config.SETH_ACCOUNT || ''), APP_VER: String(config.APP_VER || '')
+  }) + ';var n=0;var t=setInterval(function(){n++;try{' +
+    (provider === 'qt'
+      ? 'if(window.SETH_UI_ADAPTER_SRC&&!window.__scarabHudAdapterLoaded){try{(0,eval)(window.SETH_UI_ADAPTER_SRC);window.__scarabHudAdapterLoaded=true}catch(e){console.warn("[ScarabHeart HUD]",e&&e.message)}}if(typeof window.lunarEngine==="function"&&(window.PIXI||/LunarRabbit|gameart/i.test(location.href))){window.lunarEngine(cfg);clearInterval(t);}'
+      : 'if(window.SETH_UI_ADAPTER_SRC&&!window.__scarabHudAdapterLoaded){try{(0,eval)(window.SETH_UI_ADAPTER_SRC);window.__scarabHudAdapterLoaded=true}catch(e){console.warn("[ScarabHeart HUD]",e&&e.message)}}if(window.THOR_ENGINE_SRC&&!window.__thorEngineLoaded){try{(0,eval)(window.THOR_ENGINE_SRC);window.__thorEngineLoaded=true}catch(e){console.warn("[ScarabHeart Thor]",e&&e.message)}}if(typeof window.thorEngine==="function"&&/SlotGame/i.test(location.pathname)){window.thorEngine(cfg);clearInterval(t);}') +
+    '}catch(e){console.warn("[ScarabHeart provider]",e&&e.message)}if(n>240)clearInterval(t)},500)})();<\/script>';
+  const nav = provider === 'rsg' && /\/Lobby2?\//i.test(new URL(originalHref).pathname) ? '<script src="/provider-rsg-nav.js"></script>' : '';
+  return boot + engine + start + nav;
+}
+
 function upstreamHeaders(req, url, sessionOrigin) {
   const origin = sessionOrigin || url.origin;
   const headers = {
@@ -264,24 +304,49 @@ function sendCookies(res, upstream, sid) {
     .replace(/;\s*Path=[^;]*/ig, '; Path=/__game/' + sid + '/')));
 }
 
-app.get('/__game/open', (req, res) => {
+app.get('/__game/open', async (req, res) => {
+  const payload = decodePayload(req.query.cfg);
+  if (!payload) return res.status(400).send('Invalid game configuration');
   let url;
   try { url = new URL(String(req.query.url || '')); }
   catch (_) { return res.status(400).send('Invalid game URL'); }
-  if (!gameAllowed(url) || url.protocol !== 'https:') {
+  if (!gameAllowed(url, payload.kind) || url.protocol !== 'https:') {
     return res.status(403).send('Game host is not allowed');
   }
-  const payload = decodePayload(req.query.cfg);
-  if (!payload) return res.status(400).send('Invalid game configuration');
+  if (payload.kind === 'qt' && url.hostname === 'lobby.qtlauncher.com') {
+    const match = url.pathname.match(/[a-f0-9]{32}/i);
+    if (!match) return res.status(400).send('月兔入口已失效，請重新選擇遊戲。');
+    try {
+      const endpoint = new URL('/services/games/GA-lunarrabbit/launch-url/real', url);
+      endpoint.searchParams.set('deviceType', /Android|iPhone|iPad/i.test(req.headers['user-agent'] || '') ? 'MOBILE' : 'DESKTOP');
+      endpoint.searchParams.set('returnUrl', url.origin + url.pathname.replace(/\/+$/, '') + '/exit');
+      const launch = await fetch(endpoint, {headers:{Authorization:'Bearer '+match[0],Accept:'application/json'},signal:AbortSignal.timeout(15000)});
+      if (!launch.ok) return res.status(502).send('月兔暫時無法進入，請返回後重試。');
+      const data = await launch.json();
+      const target = new URL(data.url);
+      if (target.protocol !== 'https:' || target.hostname !== 'client.qtlauncher.com') return res.status(502).send('月兔入口不正確。');
+      url = target;
+    } catch (_) { return res.status(502).send('月兔連線逾時，請返回後重試。'); }
+  }
   const sid = crypto.randomBytes(12).toString('hex');
   sessions.set(sid, {
     origin: url.origin,
+    provider: payload.kind,
     createdAt: Date.now(),
     payload,
     documentReady: false,
     lastGoodDocumentUrl: ''
   });
   res.redirect(302, '/__game/' + sid + url.pathname + url.search);
+});
+
+app.post('/__game/close', (req, res) => {
+  const match = String(req.headers.cookie || '').match(/(?:^|;\s*)scarab_provider_sid=([a-f0-9]{24})(?:;|$)/i);
+  if (match) sessions.delete(match[1]);
+  const secure = String(req.headers['x-forwarded-proto'] || req.protocol).split(',')[0].trim() === 'https:' ||
+    String(req.headers['x-forwarded-proto'] || req.protocol).split(',')[0].trim() === 'https';
+  res.set('Set-Cookie', 'scarab_provider_sid=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0' + (secure ? '; Secure' : ''));
+  res.status(204).end();
 });
 
 app.all('/__game/:sid/__remote', express.raw({ type: '*/*', limit: '16mb' }), async (req, res) => {
@@ -291,7 +356,7 @@ app.all('/__game/:sid/__remote', express.raw({ type: '*/*', limit: '16mb' }), as
   let url;
   try { url = new URL(String(req.query.url || '')); }
   catch (_) { return res.status(400).send('Invalid upstream URL'); }
-  if (!gameAllowed(url) || url.protocol !== 'https:') {
+  if (!gameAllowed(url, session.provider) || url.protocol !== 'https:') {
     return res.status(403).send('Invalid upstream URL');
   }
   try {
@@ -317,13 +382,20 @@ app.all('/__game/:sid/__remote', express.raw({ type: '*/*', limit: '16mb' }), as
     const location = upstream.headers.get('location');
     if (location && upstream.status >= 300 && upstream.status < 400) {
       const next = new URL(location, url);
-      if (!gameAllowed(next)) return res.status(403).send('Invalid redirect URL');
+      if (!gameAllowed(next, session.provider)) return res.status(403).send('Invalid redirect URL');
       sendCookies(res, upstream, sid);
       return res.status(upstream.status)
         .set('Location', '/__game/' + sid + '/__remote?url=' + encodeURIComponent(next.href))
         .end();
     }
-    const bytes = Buffer.from(await upstream.arrayBuffer());
+    let bytes = Buffer.from(await upstream.arrayBuffer());
+    if (session.provider !== 'atg' && /text\/html/i.test(upstream.headers.get('content-type') || '')) {
+      let html = bytes.toString('utf8').replace(/<base\b[^>]*>/gi, '').replace(/<meta\b[^>]*http-equiv=(['"])Content-Security-Policy\1[^>]*>/gi, '').replace(/\s+integrity=(['"])[^'"]*\1/gi, '');
+      const base = new URL('.', url).href.replace(/"/g, '&quot;');
+      const head = '<head><base href="' + base + '">' + providerBoot(sid, url.href, session, true);
+      html = /<head(?:\s[^>]*)?>/i.test(html) ? html.replace(/<head(?:\s[^>]*)?>/i, head) : head + html;
+      bytes = Buffer.from(html);
+    }
     res.status(upstream.status);
     res.type(upstream.headers.get('content-type') || 'application/octet-stream');
     ['content-range', 'accept-ranges', 'etag', 'last-modified'].forEach(key => {
@@ -345,7 +417,7 @@ app.use('/__game/:sid/*', express.raw({ type: '*/*', limit: '16mb' }), async (re
   const tail = req.params[0] || '/';
   const query = new URL(req.originalUrl, 'http://local').search;
   const url = new URL((tail.startsWith('/') ? tail : '/' + tail) + query, session.origin + '/');
-  if (!gameAllowed(url)) return res.status(403).send('Invalid game session');
+  if (!gameAllowed(url, session.provider)) return res.status(403).send('Invalid game session');
 
   try {
     const dest = String(req.headers['sec-fetch-dest'] || '').toLowerCase();
@@ -386,7 +458,7 @@ app.use('/__game/:sid/*', express.raw({ type: '*/*', limit: '16mb' }), async (re
     const redirectLocation = upstream.headers.get('location');
     if (redirectLocation && upstream.status >= 300 && upstream.status < 400) {
       const next = new URL(redirectLocation, url);
-      if (!gameAllowed(next)) return res.status(403).send('Invalid redirect URL');
+      if (!gameAllowed(next, session.provider)) return res.status(403).send('Invalid redirect URL');
       sendCookies(res, upstream, sid);
       const isDocument = isDocumentRequest;
       // Only a real page navigation may change the session's document origin.
@@ -417,9 +489,11 @@ app.use('/__game/:sid/*', express.raw({ type: '*/*', limit: '16mb' }), async (re
         .replace(/<meta\b[^>]*http-equiv=(['"])Content-Security-Policy\1[^>]*>/gi, '')
         .replace(/\s+integrity=(['"])[^'"]*\1/gi, '')
         .replace(/<base\b[^>]*>/gi, '');
-      body = rewriteGameAssetHtml(body, finalUrl.href);
       const isLobby = /\/egames\/lobby\//i.test(finalUrl.pathname);
-      const boot = gameBoot(sid, finalUrl.href, session, !isLobby);
+      if (isDocumentRequest) session.origin = finalUrl.origin;
+      const boot = session.provider === 'atg'
+        ? gameBoot(sid, finalUrl.href, session, !isLobby)
+        : providerBoot(sid, finalUrl.href, session, true);
       // Keep document navigation inside the session proxy.
       // Static assets are already rewritten to the real ATG origin by D()/H()
       // and server directStatic/slotFramework handling. A remote <base> caused
@@ -438,6 +512,13 @@ app.use('/__game/:sid/*', express.raw({ type: '*/*', limit: '16mb' }), async (re
     res.type(type);
     res.set('Cache-Control', upstream.headers.get('cache-control') || 'no-store');
     sendCookies(res, upstream, sid);
+    if (session.provider !== 'atg' && isDocumentRequest) {
+      const upstreamCookies = res.get('Set-Cookie') || [];
+      const forwardedProto = String(req.headers['x-forwarded-proto'] || req.protocol).split(',')[0].trim();
+      res.set('Set-Cookie', [...(Array.isArray(upstreamCookies) ? upstreamCookies : [upstreamCookies]),
+        'scarab_provider_sid=' + sid + '; Path=/; HttpOnly; SameSite=Lax; Max-Age=21600' +
+          (forwardedProto === 'https' || forwardedProto === 'https:' ? '; Secure' : '')]);
+    }
     res.send(bytes);
   } catch (error) {
     res.status(502).send('遊戲資源載入失敗：' + String(error && error.message || error));
@@ -506,6 +587,15 @@ app.all('/slotFramework/*', express.raw({ type: '*/*', limit: '256kb' }), async 
   }
 });
 
+app.use((req, res, next) => {
+  if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+  const reserved = /^\/(?:__|api\/|admin(?:\/|$)|provider\/|media\/|logo\.png$|manifest\.webmanifest$|admin-|icon|healthz$)/i;
+  if (reserved.test(req.path)) return next();
+  const match = String(req.headers.cookie || '').match(/(?:^|;\s*)scarab_provider_sid=([a-f0-9]{24})(?:;|$)/i);
+  const session = match && sessions.get(match[1]);
+  if (!session || !['qt', 'rsg'].includes(session.provider)) return next();
+  return res.redirect(302, '/__game/' + match[1] + req.originalUrl);
+});
 app.use(express.static(publicDir, { extensions: ['html'] }));
 app.get('*', (_req, res) => res.sendFile(path.join(publicDir, 'index.html')));
 
@@ -520,7 +610,7 @@ setInterval(() => {
 }, 30 * 60 * 1000).unref();
 
 const server = app.listen(process.env.PORT || 3000, '0.0.0.0', () => {
-  console.log('ScarabHeart ATG web service listening on ' + (process.env.PORT || 3000));
+  console.log('ScarabHeart game service listening on ' + (process.env.PORT || 3000));
 });
 const socketServer = new WebSocketServer({
   noServer: true,
@@ -562,7 +652,7 @@ server.on('upgrade', (req, socket, head) => {
     const lobby = /^\/__lobby-socket(?:\?|$)/.test(requestUrl);
     const session = match ? sessions.get(match[1]) : null;
     const target = new URL(String(new URL(requestUrl, 'http://local').searchParams.get('url') || ''));
-    if ((!lobby && (!match || !session)) || !gameAllowed(target)) {
+    if ((!lobby && (!match || !session)) || !gameAllowed(target, lobby ? 'atg' : session.provider)) {
       return rejectUpgrade(socket, '403 Forbidden');
     }
 

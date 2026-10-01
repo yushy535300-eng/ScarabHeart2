@@ -1,9 +1,0 @@
-V3.23 WUXIA AND ROOM ENTRY FIX
-
-- Wuxia and Son Go Ku captured HAR snapshots now accept ATG's `number` field as the machine number, so valid rows are not discarded by a `machineNum`-only parser.
-- Room targeting uses roomId only when it comes from a live ATG table or a verified ATG HAR pair. SethEye/API roomIds are retained as metadata and are not assumed to be ATG room keys.
-- Machine-number targeting preserves the original label, including leading zeroes, for the ATG room-picker lookup.
-- Exact-room watchdog protection applies to both trusted ATG roomId and machine-number targets.
-- HAR details remain backend-only.
-
-Validation: npm run check, Wuxia snapshot row-count/identity check, HAR event inspection, and ZIP integrity check passed. Live automatic room entry still needs a real ATG session for end-to-end verification.

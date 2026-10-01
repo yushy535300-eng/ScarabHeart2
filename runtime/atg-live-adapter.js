@@ -67,10 +67,41 @@
     try {
       time.setTimeScale(actual);
       if (Number(time._timeScale) !== actual) return false;
+
+      // Some ATG builds expose a TimeManager whose _timeScale changes but is
+      // not wired into Cocos' scheduler. Mirror the value into the scheduler
+      // when the manager did not already do so. This makes the multiplier
+      // affect scheduled game updates and actions, rather than only the HUD.
+      var scheduler = null;
+      try {
+        var director = window.cc && window.cc.director;
+        scheduler = director && typeof director.getScheduler === 'function'
+          ? director.getScheduler()
+          : director && director._scheduler;
+      } catch (_) {}
+      if (scheduler && typeof scheduler.setTimeScale === 'function') {
+        var schedulerScale = NaN;
+        try {
+          schedulerScale = typeof scheduler.getTimeScale === 'function'
+            ? Number(scheduler.getTimeScale())
+            : Number(scheduler._timeScale);
+        } catch (_) {}
+        if (schedulerScale !== actual) {
+          scheduler.setTimeScale(actual);
+          var verifiedScale = NaN;
+          try {
+            verifiedScale = typeof scheduler.getTimeScale === 'function'
+              ? Number(scheduler.getTimeScale())
+              : Number(scheduler._timeScale);
+          } catch (_) {}
+          if (Number.isFinite(verifiedScale) && verifiedScale !== actual) return false;
+        }
+      }
       requested = numeric;
       applied = actual;
       lastManager = time;
       live.timeScale = actual;
+      live.schedulerScale = scheduler && Number(scheduler._timeScale);
       return true;
     } catch (_) {
       return false;
@@ -96,8 +127,10 @@
       engine.setSpeed = function (value) {
         var numeric = Number(value);
         if (!validSpeed(numeric)) return false;
-        if (!applyTimeScale(numeric)) return false;
+        // Keep the engine's own speed bookkeeping first; some game builds
+        // reset their time manager from the original method.
         try { if (original) original(numeric); } catch (_) {}
+        if (!applyTimeScale(numeric)) return false;
         // Overlay verifies this requested value. MAX stays 999 here while the
         // real Cocos scale is the safe 32x value above.
         engine.speed = numeric;

@@ -1,7 +1,0 @@
-V3.20 ALL-GAMES RECOMMENDATION FEED
-
-All supported games now use the same recommendation screen and the same data-loading path as Seth 2. The recommendation API is queried for every game code with its configured backend aliases; live ATG table data can refresh those results afterward. The old one-room fallback mappings were removed, so an unverified single room is never shown as a complete recommendation list. Wuxia retains its verified ranked snapshot while live data refreshes.
-
-The recommendation screen uses neutral status text and does not display HAR references. Recommendation-probe JavaScript is included in the syntax check.
-
-Validation: npm run check passed.

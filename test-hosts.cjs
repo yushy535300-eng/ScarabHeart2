@@ -1,0 +1,13 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert');
+const source=fs.readFileSync(__dirname+'/server.js','utf8');
+const helper=source.match(/function gameAllowed\(url, provider\) \{[\s\S]*?\n\}/);
+assert(helper,'gameAllowed exists');
+const context={};vm.runInNewContext(helper[0]+';this.gameAllowed=gameAllowed;',context);
+const allowed=u=>context.gameAllowed(new URL(u),'qt');
+assert.equal(allowed('https://lobby.qtlauncher.com/start'),true);
+assert.equal(allowed('https://client.qtlauncher.com/client/game-launcher.html'),true);
+assert.equal(allowed('https://cdn.qtlauncher.com/asset.js'),true);
+assert.equal(allowed('https://dt589qboipkze.cloudfront.net/game/index.html'),true);
+assert.equal(allowed('https://qtlauncher.com.attacker.invalid/'),false);
+assert.equal(allowed('http://lobby.qtlauncher.com/'),false);
+console.log('PASS: QT launcher hosts accepted; deceptive and insecure hosts rejected.');

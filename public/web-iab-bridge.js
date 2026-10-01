@@ -104,6 +104,8 @@
   }
 
   function openInApp(raw, payload) {
+    var kind = String(payload && payload.kind || 'atg');
+    var label = kind === 'qt' ? '月兔' : kind === 'rsg' ? '雷神' : 'ATG';
     currentRoomSessionId = String(payload && payload.cfg && payload.cfg.ROOM_SESSION_ID || '');
     try {
       sessionStorage.removeItem('SCARAB_FORCE_MANUAL_ROOM');
@@ -121,14 +123,14 @@
       source = new URL(raw, location.href);
       if (source.protocol !== 'https:') throw new Error('invalid protocol');
     } catch (_) {
-      throw new Error('ATG 遊戲網址無效');
+      throw new Error(label + '遊戲網址無效');
     }
     var ui = elements();
     if (!ui.view || !ui.frame) throw new Error('找不到程式內遊戲視窗');
     clearTimeout(loadTimer);
     frameLoaded = false;
     var openId = ++currentOpenId;
-    setLoading('正在連線 ATG 遊戲…', false);
+    setLoading('正在連線 ' + label + ' 遊戲…', false);
     ui.view.classList.remove('hide');
     document.documentElement.style.overflow = 'hidden';
     document.body.style.overflow = 'hidden';
@@ -157,6 +159,7 @@
 
   function closeInApp() {
     var ui = elements();
+    try { nativeFetch('/__game/close', { method: 'POST', credentials: 'same-origin' }).catch(function(){}); } catch (_) {}
     clearTimeout(loadTimer);
     frameLoaded = false;
     currentOpenId++;

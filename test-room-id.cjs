@@ -1,0 +1,11 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert');
+const source=fs.readFileSync(__dirname+'/public/app.js','utf8');
+const helpers=source.match(/function roomIdSuffix\(value\) \{[\s\S]*?function hasLiveRoomId\(value\) \{[\s\S]*?\n  \}/);
+assert(helpers,'room ID helpers are present');
+const context={};vm.runInNewContext(helpers[0]+';this.roomIdSuffix=roomIdSuffix;this.hasLiveRoomId=hasLiveRoomId;',context);
+assert.equal(context.roomIdSuffix('seth2_022'),'022');
+assert.equal(context.hasLiveRoomId('seth2_022'),true);
+assert.equal(context.hasLiveRoomId('022'),true);
+assert.equal(context.hasLiveRoomId('__machine__2176'),false);
+assert.equal(context.hasLiveRoomId(''),false);
+console.log('PASS: prefixed ATG room IDs, leading zero preservation, and synthetic placeholder rejection.');
