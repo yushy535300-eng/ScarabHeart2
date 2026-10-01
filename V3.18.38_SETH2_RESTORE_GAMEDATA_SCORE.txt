@@ -1,0 +1,4 @@
+v3.18.38
+- Restore GameData as the authoritative source for free-game cumulative scores.
+- Stop decoded Socket.IO ACK values from overwriting the displayed score with per-spin totals.
+- Preserve the top spoiler frame and green score styling.

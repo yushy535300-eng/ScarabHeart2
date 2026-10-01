@@ -194,43 +194,10 @@
     return null;
   }
   function publishSpoilerPacket(value) {
-    try {
-      var packet = parseDecodedPacket(value);
-      if (!packet || typeof packet !== 'object') return;
-      // Socket.IO ACK replies may be nested in arrays/envelopes and omit the
-      // request's eventName. Identify the result by its engine.gameState data.
-      var response = findSpoilerPacket(packet);
-      if (!response || (response.status != null && String(response.status) !== '200')) return;
-      var engine = response.engine, games = engine && engine.gameState;
-      var panel = window.__sethEngine && window.__sethEngine.panel;
-      if (!panel || !Array.isArray(games) || !games.length ||
-          games.some(function (g) { return !g || typeof g !== 'object'; })) return;
-      var isFree = /free.?game/i.test(String(engine.buyFeatureType || '')) ||
-        games.some(function (g) { return +g.freeGameCount > 0 || g.startFreeGame === true ||
-          g.isFreeGame === true || g.freeGame === true; });
-      if (!isFree) return;
-      // Use only explicit free-game cumulative fields. Generic totalWinnings
-      // can be a single-spin result and was producing incorrect spoiler scores.
-      var lastGame = games[games.length - 1];
-      var records = lastGame.freeGameRecords || engine.freeGameRecords || {};
-      var candidates = [records.totalWin, records.totalWinnings, records.cumWin,
-        lastGame.freespinWinnings, lastGame.freeGameTotalWin];
-      var score = null;
-      for (var si = 0; si < candidates.length; si++) {
-        var candidate = candidates[si];
-        if (candidate == null || String(candidate).trim() === '') continue;
-        var numeric = Number(candidate);
-        if (Number.isFinite(numeric) && numeric > 0) { score = numeric; break; }
-      }
-      if (score == null) return;
-      var freeCount = Math.max.apply(null, games.map(function (g) { return +g.freeGameCount || 0; }));
-      panel.spoilerWin = {
-        totalWin: Math.round(score * 100) / 100,
-        fg: freeCount,
-        ts: Date.now()
-      };
-      rememberEvent('spin');
-    } catch (_) {}
+    // Do not synthesize the spoiler score from a Socket.IO ACK. The ACK's
+    // totalWinnings fields may be per-spin values and can overwrite the
+    // authoritative free-game accumulator. The overlay reads GameData instead.
+    return;
   }
   function parseCompressedFrame(bytes) {
     try {
@@ -318,8 +285,7 @@
     var forgeReady = installForgePeek();
     if ((!cryptoReady || !forgeReady) && decodeRetry++ < 120) setTimeout(installDecodedPacketHooks, 250);
   }
-  installDecodedPacketHooks();
-
+  // Socket.IO payloads are not used for score extraction; keep the transport untouched.
   function installWsPeek() {
     try {
       var Original = window.WebSocket, proto = Original && Original.prototype;
@@ -350,7 +316,7 @@
       try { Object.setPrototypeOf(window.WebSocket, Original); } catch (_) {}
     } catch (_) {}
   }
-  installWsPeek();
+  // Do not wrap WebSocket/decrypt handlers for spoiler scoring.
 
   function scanSockets() {
     var services;
@@ -359,12 +325,6 @@
     if (!Array.isArray(services)) return;
     services.forEach(function (service) {
       var socket = service && service._client && service._client._io;
-      try {
-        var manager = socket && (socket.io || socket);
-        var engineSocket = (manager && manager.engine) || (socket && socket.engine);
-        var transport = engineSocket && engineSocket.transport;
-        attachWebSocket(transport && (transport.ws || transport._ws));
-      } catch (_) {}
       if (!socket || typeof socket.on !== 'function' || watched.has(socket)) return;
       var handlers = [];
       ['connect', 'disconnect', 'connect_error', 'initial', 'slotTableUpdated', 'spin', 'closeSpin'].forEach(function (event) {

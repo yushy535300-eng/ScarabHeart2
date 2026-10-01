@@ -19,28 +19,18 @@ function runPacket(packet) {
   return panel.spoilerWin;
 }
 
-const explicit = {
-  status: 200,
-  engine: {
-    buyFeatureType: 'superFreeGame',
-    gameState: [{
-      totalWinnings: 8888, // Single-spin/round value must not be mistaken for the bonus total.
-      freeGameCount: 10,
-      freeGameRecords: { totalWin: 125.5 }
-    }]
-  }
-};
-const captured = runPacket({ data: { result: [explicit] } });
-assert.equal(captured.totalWin, 125.5);
-assert.equal(captured.fg, 10);
-assert.equal(typeof captured.ts, 'number');
-
-const ambiguousOnly = {
-  status: 200,
-  engine: {
-    buyFeatureType: 'superFreeGame',
-    gameState: [{ totalWinnings: 8888, freeGameCount: 10 }]
-  }
-};
-assert.equal(runPacket(ambiguousOnly), null);
-console.log('PASS: captures explicit free-game cumulative score and rejects ambiguous totalWinnings.');
+for (const score of [125.5, 8888]) {
+  const ack = {
+    status: 200,
+    engine: {
+      buyFeatureType: 'superFreeGame',
+      gameState: [{
+        totalWinnings: score,
+        freeGameCount: 10,
+        freeGameRecords: { totalWin: 125.5 }
+      }]
+    }
+  };
+  assert.equal(runPacket(ack), null);
+}
+console.log('PASS: Socket.IO ACK values cannot overwrite the GameData spoiler score.');
