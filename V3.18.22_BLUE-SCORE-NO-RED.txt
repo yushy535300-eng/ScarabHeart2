@@ -1,0 +1,6 @@
+V3.18.22 — spoiler score color
+
+- Change the spoiler score from red to cyan on the blue popup and related spoiler score elements.
+- Keep V3.18.21 behavior: blue popup only, hide the gold native duplicate, and do not replay a popup at free-game end.
+
+Checks: npm run check passed; verify the deployed game session to confirm the on-screen result.

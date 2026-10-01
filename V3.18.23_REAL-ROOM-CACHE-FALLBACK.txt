@@ -1,0 +1,6 @@
+V3.18.23 — retain recent verified machine list during live refresh
+
+- For ATG titles that rely on the live table probe, show the last successfully captured real machine/room list for up to five minutes while fetching fresh live data.
+- Replace the displayed list as soon as a new live response arrives; after the live request fails, keep the recent verified list and label it as temporary.
+- No machine numbers, room IDs, or recommendation metrics are fabricated by this fallback.
+- Keep V3.18.22 spoiler score cyan/white and V3.18.21 blue-only/no-end-duplicate behavior.

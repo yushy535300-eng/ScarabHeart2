@@ -914,7 +914,7 @@
     let instant = null;
     const memory = boardCache[game] && boardCache[game].value;
     if (memory && !memory.simulated && usableBoardCount(memory) > 0) instant = normalizeBoards(memory);
-    if (!instant && !SIM_RECOMMEND_GAMES.has(game)) instant = loadRealBoardStorage(game);
+    if (!instant) instant = loadRealBoardStorage(game);
 
     if (instant && usableBoardCount(instant) > 0) {
       boards = instant;
@@ -985,7 +985,7 @@
     if (!session || session.game !== game || serial !== boardLoadSerial) return;
 
     if (!renderedFresh && !apiResult && !probeResult) {
-      if (instant && usableBoardCount(instant) > 0 && !SIM_RECOMMEND_GAMES.has(game)) {
+      if (instant && usableBoardCount(instant) > 0) {
         boards = instant;
         $('updTime').textContent = '暫用最近真實資料';
         renderBoard();
