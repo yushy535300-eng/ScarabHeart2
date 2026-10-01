@@ -3,7 +3,7 @@
 
   const $ = id => document.getElementById(id);
   const log = (...args) => { try { console.log('[ScarabHeart]', ...args); } catch (_) {} };
-  const APP_VERSION = 'v3.18.4-room-and-qt-host-fix';
+  const APP_VERSION = 'v3.18.26-four-portrait-live-room-fix';
   const GAMES = [
     ['golden-seth', '戰神賽特2 覺醒之力', 'media/game2.png'],
     ['egyptian-mythology', '戰神賽特', 'media/game8.png'],
@@ -1132,8 +1132,32 @@
     const accepted = await confirmRoom(machineNum);
     if (!accepted) return;
 
+    // HAR-backed rows are a display fallback only. Their room IDs describe an
+    // older capture, so resolve this machine against the current ATG session
+    // before launching; otherwise a stale ID can cause endless portrait paging.
+    let selectedRoomId = String(item.roomId || '');
+    if (item.source === 'ATG_HAR_VERIFIED_MACHINE_INDICATOR') {
+      const game = String(session && session.game || '');
+      try {
+        $('err2').style.color = '#70e7b0';
+        $('err2').textContent = '正在確認 #' + machineNum + ' 的即時房號…';
+        const tables = await probeAtgTables(game);
+        const live = (Array.isArray(tables) ? tables : []).find(row =>
+          String(row && row.machineNum != null ? row.machineNum : '') === machineNum &&
+          String(row && row.roomId || '').trim() &&
+          !row.isLocked && !/locked|full/i.test(String(row.status || ''))
+        );
+        if (!live) throw new Error('目前即時清單找不到可進入的 #' + machineNum + ' 機台');
+        selectedRoomId = String(live.roomId);
+      } catch (error) {
+        $('err2').style.color = '#ffbf66';
+        $('err2').textContent = (error && error.message) || '即時房號確認失敗，請更新清單後再試';
+        return;
+      }
+    }
+
     pendingPick = {
-      roomId: String(item.roomId || ''),
+      roomId: selectedRoomId,
       machineNum,
       board: activeBoard,
       boardName: BOARD_META[activeBoard][0]

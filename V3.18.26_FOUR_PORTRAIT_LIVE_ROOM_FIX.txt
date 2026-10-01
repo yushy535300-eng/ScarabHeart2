@@ -1,0 +1,4 @@
+v3.18.26
+- Keep portrait room mode limited to the four titles explicitly configured for portrait layout: Wuxia, Son Go Ku, New Vampire Hunter, and New Jinlian.
+- Keep all six recommendation titles on the corrected live room-ID verification path when a HAR fallback row is selected.
+- Refine the top free-game spoiler frame and use green for the displayed score.

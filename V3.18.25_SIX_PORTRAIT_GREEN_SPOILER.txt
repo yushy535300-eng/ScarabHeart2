@@ -1,0 +1,5 @@
+v3.18.25
+- Mark all six ATG recommendation games as portrait room-picker games.
+- Verify HAR fallback machine numbers against the current ATG table list before entry, avoiding stale captured room IDs.
+- Refine the top free-game spoiler frame and use green for the displayed score.
+- Keep the existing blue-only top score behavior and single popup behavior otherwise unchanged.
