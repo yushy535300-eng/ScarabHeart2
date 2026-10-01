@@ -51,8 +51,9 @@
   }
 
   function validSpeed(value) {
-    if ([1, 2, 4, 8].indexOf(value) >= 0) return true;
     var game = String(window.__SC_GAME_CODE || '');
+    if (game === 'hades') return [1, 2, 4].indexOf(value) >= 0;
+    if ([1, 2, 4, 8].indexOf(value) >= 0) return true;
     return specialGames.test(game) && (value === 16 || value === 999);
   }
 
