@@ -1,0 +1,5 @@
+v3.18.27
+- Remove the extra ATG table probe that blocked recommendation selection and ended in timeout.
+- Selecting a recommendation again immediately launches the selected machine with its configured room ID.
+- Keep the four explicitly configured portrait room titles and six-game recommendation behavior.
+- Keep the refined spoiler frame and green score.
