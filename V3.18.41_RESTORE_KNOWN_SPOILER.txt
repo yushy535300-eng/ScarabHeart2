@@ -1,0 +1,4 @@
+v3.18.41
+- Restore the original Seth2 spoiler listener and top-frame behavior from the previously working v3.18.21 baseline.
+- Keep the later green score styling.
+- Preserve the current game's room, audio, and platform features.

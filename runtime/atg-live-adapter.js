@@ -157,71 +157,26 @@
   }
 
   var wsAttached = typeof WeakSet === 'function' ? new WeakSet() : null;
-  function parseDecodedPacket(value) {
-    if (typeof value === 'string') {
-      try { return JSON.parse(value); } catch (_) { return null; }
-    }
-    if (value && typeof value === 'object' && !Array.isArray(value) &&
-        typeof value.data === 'string' && value.engine == null) {
-      try { return JSON.parse(value.data); } catch (_) {}
-    }
-    return value;
-  }
-  function findSpoilerPacket(root) {
-    var queue = [root], seen = typeof WeakSet === 'function' ? new WeakSet() : null;
-    var index = 0, visited = 0;
-    while (index < queue.length && visited++ < 1000) {
-      var node = queue[index++];
-      if (!node || typeof node !== 'object') continue;
-      if (seen) {
-        try { if (seen.has(node)) continue; seen.add(node); } catch (_) {}
-      }
-      if (Array.isArray(node)) {
-        for (var i = 0; i < node.length && i < 50; i++) queue.push(node[i]);
-        continue;
-      }
-      if (node.engine && Array.isArray(node.engine.gameState)) return node;
-      var keys;
-      try { keys = Object.keys(node); } catch (_) { continue; }
-      for (var k = 0; k < keys.length && k < 50; k++) {
-        var child = node[keys[k]];
-        if (typeof child === 'string' && child.length < 200000) {
-          var parsed = parseDecodedPacket(child);
-          if (parsed && typeof parsed === 'object') queue.push(parsed);
-        } else if (child && typeof child === 'object') queue.push(child);
-      }
-    }
-    return null;
-  }
-  function publishSpoilerPacket(value) {
+  function publishSpoilerPacket(packet) {
     try {
-      var packet = parseDecodedPacket(value);
-      if (!packet || typeof packet !== 'object') return;
-      var response = findSpoilerPacket(packet);
-      if (!response || (response.status != null && String(response.status) !== '200')) return;
-      var engine = response.engine, games = engine && engine.gameState;
+      if (!packet || typeof packet !== 'object' || Array.isArray(packet) ||
+          (packet.status != null && packet.status !== 200) || packet.eventName !== 'spin') return;
+      var engine = packet.engine, games = engine && engine.gameState;
       var panel = window.__sethEngine && window.__sethEngine.panel;
-      if (!panel || !Array.isArray(games) || !games.length ||
+      if (!panel || !panel.spoilerOn || !Array.isArray(games) || !games.length ||
           games.some(function (g) { return !g || typeof g !== 'object'; })) return;
-      var isFree = /free.?game/i.test(String(engine.buyFeatureType || '')) ||
-        games.some(function (g) { return +g.freeGameCount > 0 || g.startFreeGame === true ||
-          g.isFreeGame === true || g.freeGame === true; });
+      var isFree = engine.buyFeatureType === 'freeGame' ||
+        games.some(function (g) { return +g.freeGameCount > 0 || g.startFreeGame === true; });
       if (!isFree) return;
-      // Only accept explicit free-game accumulators. Generic totalWinnings can
-      // reflect one spin and was the source of the incorrect displayed score.
-      var lastGame = games[games.length - 1];
-      var records = lastGame.freeGameRecords || engine.freeGameRecords || {};
-      var candidates = [records.totalWin, records.totalWinnings, records.cumWin,
-        lastGame.freespinWinnings, lastGame.freeGameTotalWin];
-      var score = null;
-      for (var i = 0; i < candidates.length; i++) {
-        if (candidates[i] == null || String(candidates[i]).trim() === '') continue;
-        var numeric = Number(candidates[i]);
-        if (Number.isFinite(numeric) && numeric > 0) { score = numeric; break; }
-      }
-      if (score == null) return;
+      var lastWin = games[games.length - 1].totalWinnings;
+      if ((typeof lastWin !== 'number' && typeof lastWin !== 'string') ||
+          String(lastWin).trim() === '' || !Number.isFinite(+lastWin) || +lastWin < 0) return;
       var freeCount = Math.max.apply(null, games.map(function (g) { return +g.freeGameCount || 0; }));
-      panel.spoilerWin = { totalWin: Math.round(score * 100) / 100, fg: freeCount, ts: Date.now() };
+      panel.spoilerWin = {
+        totalWin: Math.round(+lastWin * 100) / 100,
+        fg: freeCount,
+        ts: Date.now()
+      };
       rememberEvent('spin');
     } catch (_) {}
   }
@@ -311,6 +266,8 @@
     var forgeReady = installForgePeek();
     if ((!cryptoReady || !forgeReady) && decodeRetry++ < 120) setTimeout(installDecodedPacketHooks, 250);
   }
+  installDecodedPacketHooks();
+
   function installWsPeek() {
     try {
       var Original = window.WebSocket, proto = Original && Original.prototype;
@@ -343,34 +300,6 @@
   }
   installWsPeek();
 
-  installDecodedPacketHooks();
-
-  var ackWrapped = typeof WeakSet === 'function' ? new WeakSet() : null;
-  function installSpinAckPeek(socket) {
-    if (!socket || typeof socket.emit !== 'function' || (ackWrapped && ackWrapped.has(socket))) return;
-    if (ackWrapped) ackWrapped.add(socket);
-    var original = socket.emit;
-    var wrapped = function () {
-      var args = Array.prototype.slice.call(arguments);
-      if (args[0] === 'spin') {
-        for (var i = args.length - 1; i >= 1; i--) {
-          if (typeof args[i] !== 'function') continue;
-          var callback = args[i];
-          args[i] = function () {
-            try {
-              for (var j = 0; j < arguments.length; j++) publishSpoilerPacket(arguments[j]);
-            } catch (_) {}
-            return callback.apply(this, arguments);
-          };
-          break;
-        }
-      }
-      return original.apply(this, args);
-    };
-    try { Object.defineProperty(wrapped, '__scarabSpinAckPeek', { value: true }); } catch (_) {}
-    socket.emit = wrapped;
-  }
-
   function scanSockets() {
     var services;
     try { services = window.App && window.App.serviceManager && window.App.serviceManager.services; }
@@ -384,9 +313,7 @@
         var transport = engineSocket && engineSocket.transport;
         attachWebSocket(transport && (transport.ws || transport._ws));
       } catch (_) {}
-      if (!socket) return;
-      installSpinAckPeek(socket);
-      if (typeof socket.on !== 'function' || watched.has(socket)) return;
+      if (!socket || typeof socket.on !== 'function' || watched.has(socket)) return;
       var handlers = [];
       ['connect', 'disconnect', 'connect_error', 'initial', 'slotTableUpdated', 'spin', 'closeSpin'].forEach(function (event) {
         var handler = function () {
