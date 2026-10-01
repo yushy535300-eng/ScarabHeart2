@@ -1,0 +1,9 @@
+V3.18.20 — Seth2 spoiler packet fix
+
+- Read Seth2's decoded Socket.IO response packet rather than guessing from current screen/model values.
+- Support both the game's CryptoTool decrypt result and its forge decrypt output; retain the compressed WebSocket path for games that use it.
+- For a spin packet that contains a free-game result, take the last gameState entry's totalWinnings and the maximum freeGameCount.
+- Respect the spoiler toggle and show only the top popup; prefer the game's native popup when it is present.
+- Preserve the original top-only layout; the unwanted centered result box remains removed.
+
+Checks: npm run check passed; a response-packet fixture verified score/count extraction and the spoiler-toggle gate. Live game replay still needs confirmation in the user's session.

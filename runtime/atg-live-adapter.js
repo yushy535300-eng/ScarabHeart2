@@ -156,6 +156,150 @@
     live.lastEventAt = Date.now();
   }
 
+  var wsAttached = typeof WeakSet === 'function' ? new WeakSet() : null;
+  function publishSpoilerPacket(packet) {
+    try {
+      if (!packet || typeof packet !== 'object' || Array.isArray(packet) ||
+          (packet.status != null && packet.status !== 200) || packet.eventName !== 'spin') return;
+      var engine = packet.engine, games = engine && engine.gameState;
+      var panel = window.__sethEngine && window.__sethEngine.panel;
+      if (!panel || !panel.spoilerOn || !Array.isArray(games) || !games.length ||
+          games.some(function (g) { return !g || typeof g !== 'object'; })) return;
+      var isFree = engine.buyFeatureType === 'freeGame' ||
+        games.some(function (g) { return +g.freeGameCount > 0 || g.startFreeGame === true; });
+      if (!isFree) return;
+      var lastWin = games[games.length - 1].totalWinnings;
+      if ((typeof lastWin !== 'number' && typeof lastWin !== 'string') ||
+          String(lastWin).trim() === '' || !Number.isFinite(+lastWin) || +lastWin < 0) return;
+      var freeCount = Math.max.apply(null, games.map(function (g) { return +g.freeGameCount || 0; }));
+      panel.spoilerWin = {
+        totalWin: Math.round(+lastWin * 100) / 100,
+        fg: freeCount,
+        ts: Date.now()
+      };
+      rememberEvent('spin');
+    } catch (_) {}
+  }
+  function parseCompressedFrame(bytes) {
+    try {
+      if (!bytes || bytes.length < 4 || typeof DecompressionStream !== 'function' ||
+          typeof Blob !== 'function' || typeof Response !== 'function') return;
+      var start = -1;
+      for (var i = 0; i < Math.min(8, bytes.length - 1); i++) {
+        if (bytes[i] === 0x78 && (bytes[i + 1] === 0x9c || bytes[i + 1] === 0x01 || bytes[i + 1] === 0xda)) { start = i; break; }
+      }
+      if (start < 0) return;
+      var compressed = bytes.subarray(start);
+      new Response(new Blob([compressed]).stream().pipeThrough(new DecompressionStream('deflate')))
+        .text().then(function (text) {
+          try { publishSpoilerPacket(JSON.parse(text)); } catch (_) {}
+        }).catch(function () {});
+    } catch (_) {}
+  }
+  function attachWebSocket(ws) {
+    if (!ws || !ws.addEventListener || (wsAttached && wsAttached.has(ws))) return;
+    if (wsAttached) wsAttached.add(ws);
+    try {
+      ws.addEventListener('message', function (event) {
+        try {
+          var data = event && event.data;
+          if (data instanceof ArrayBuffer) parseCompressedFrame(new Uint8Array(data));
+          else if (ArrayBuffer.isView(data)) parseCompressedFrame(new Uint8Array(data.buffer, data.byteOffset, data.byteLength));
+          else if (data && typeof data.arrayBuffer === 'function') data.arrayBuffer().then(function (buffer) { parseCompressedFrame(new Uint8Array(buffer)); }).catch(function () {});
+        } catch (_) {}
+      });
+    } catch (_) {}
+  }
+  function parseCompressedText(text) {
+    try {
+      if (typeof text !== 'string' || text.length < 4 || typeof DecompressionStream !== 'function' ||
+          typeof Blob !== 'function' || typeof Response !== 'function') return;
+      var bytes = new Uint8Array(text.length);
+      for (var i = 0; i < text.length; i++) bytes[i] = text.charCodeAt(i) & 255;
+      parseCompressedFrame(bytes);
+    } catch (_) {}
+  }
+  function installCryptoToolPeek() {
+    try {
+      var sys = window.System;
+      var mod = sys && typeof sys.get === 'function' && sys.get('chunks:///_virtual/CryptoTool.ts');
+      var tool = mod && (mod.CryptoTool || (mod.default && mod.default.CryptoTool));
+      if (tool && tool.variant === 'custom' && typeof tool.decrypt === 'function') {
+        if (tool.decrypt.__scarabDecodedObserver) return true;
+        var original = tool.decrypt;
+        var wrapped = function () {
+          var result = original.apply(this, arguments);
+          try {
+            if (result && typeof result.then === 'function') result.then(publishSpoilerPacket, function () {});
+            else publishSpoilerPacket(result);
+          } catch (_) {}
+          return result;
+        };
+        wrapped.__scarabDecodedObserver = true;
+        tool.decrypt = wrapped;
+        return true;
+      }
+    } catch (_) {}
+    return false;
+  }
+  function installForgePeek() {
+    try {
+      var forge = window.forge, proto = forge && forge.cipher && forge.cipher.BlockCipher && forge.cipher.BlockCipher.prototype;
+      if (!proto || typeof proto.finish !== 'function') return false;
+      if (proto.__scarabDecodedObserver) return true;
+      Object.defineProperty(proto, '__scarabDecodedObserver', { value: true, configurable: true });
+      var original = proto.finish;
+      proto.finish = function () {
+        var result = original.apply(this, arguments);
+        try {
+          var output = this.output, data = output && output.data;
+          if (typeof data === 'string' && data.charCodeAt(0) === 0x78) parseCompressedText(data);
+        } catch (_) {}
+        return result;
+      };
+      return true;
+    } catch (_) { return false; }
+  }
+  var decodeRetry = 0;
+  function installDecodedPacketHooks() {
+    var cryptoReady = installCryptoToolPeek();
+    var forgeReady = installForgePeek();
+    if ((!cryptoReady || !forgeReady) && decodeRetry++ < 120) setTimeout(installDecodedPacketHooks, 250);
+  }
+  installDecodedPacketHooks();
+
+  function installWsPeek() {
+    try {
+      var Original = window.WebSocket, proto = Original && Original.prototype;
+      if (!proto || proto.__scarabBinaryPeek) return;
+      Object.defineProperty(proto, '__scarabBinaryPeek', { value: true, configurable: true });
+      var originalAdd = proto.addEventListener;
+      if (typeof originalAdd === 'function') {
+        proto.addEventListener = function (type, listener, options) {
+          if (type === 'message') attachWebSocket(this);
+          return originalAdd.call(this, type, listener, options);
+        };
+      }
+      try {
+        var descriptor = Object.getOwnPropertyDescriptor(proto, 'onmessage');
+        if (descriptor && descriptor.set && originalAdd) {
+          Object.defineProperty(proto, 'onmessage', {
+            configurable: true, enumerable: descriptor.enumerable, get: descriptor.get,
+            set: function (listener) { attachWebSocket(this); return descriptor.set.call(this, listener); }
+          });
+        }
+      } catch (_) {}
+      window.WebSocket = function (url, protocols) {
+        var ws = protocols === undefined ? new Original(url) : new Original(url, protocols);
+        attachWebSocket(ws);
+        return ws;
+      };
+      window.WebSocket.prototype = proto;
+      try { Object.setPrototypeOf(window.WebSocket, Original); } catch (_) {}
+    } catch (_) {}
+  }
+  installWsPeek();
+
   function scanSockets() {
     var services;
     try { services = window.App && window.App.serviceManager && window.App.serviceManager.services; }
@@ -163,6 +307,12 @@
     if (!Array.isArray(services)) return;
     services.forEach(function (service) {
       var socket = service && service._client && service._client._io;
+      try {
+        var manager = socket && (socket.io || socket);
+        var engineSocket = (manager && manager.engine) || (socket && socket.engine);
+        var transport = engineSocket && engineSocket.transport;
+        attachWebSocket(transport && (transport.ws || transport._ws));
+      } catch (_) {}
       if (!socket || typeof socket.on !== 'function' || watched.has(socket)) return;
       var handlers = [];
       ['connect', 'disconnect', 'connect_error', 'initial', 'slotTableUpdated', 'spin', 'closeSpin'].forEach(function (event) {
