@@ -1,0 +1,4 @@
+v3.18.32
+- Normalize numeric machine numbers sent to the ATG room engine to three digits, matching the live picker/table representation (11 -> 011; 57 -> 057; 1 -> 001).
+- Keep the actual roomId as the exact-room lookup key and use the normalized machine number as the picker matching/display hint.
+- Preserve the v3.18.31 behavior that keeps verified fallback recommendations selectable unless explicitly unavailable or missing a roomId.

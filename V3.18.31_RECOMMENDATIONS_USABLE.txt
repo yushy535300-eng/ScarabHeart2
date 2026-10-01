@@ -1,0 +1,4 @@
+v3.18.31
+- Remove the blanket lock from the verified fallback recommendation list so recommendations stay selectable while live status refreshes.
+- Keep rows locked only when they have no roomId or are explicitly marked locked/unavailable.
+- Keep portrait machine-number normalization (57 -> 057; 1 -> 001) and the roomId lookup behavior.

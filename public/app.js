@@ -3,7 +3,7 @@
 
   const $ = id => document.getElementById(id);
   const log = (...args) => { try { console.log('[ScarabHeart]', ...args); } catch (_) {} };
-  const APP_VERSION = 'v3.18.30-machine-number-and-live-availability-fix';
+  const APP_VERSION = 'v3.18.32-room-number-zero-pad-match';
   const GAMES = [
     ['golden-seth', '戰神賽特2 覺醒之力', 'media/game2.png'],
     ['egyptian-mythology', '戰神賽特', 'media/game8.png'],
@@ -1022,12 +1022,6 @@
       box.innerHTML = '<div style="color:#7893a9;font-size:12px;padding:16px">推薦資料正在同步；你也可以輸入機台號碼或進入大廳。</div>';
       return;
     }
-    if (boards && boards.source === 'ATG_HAR_VERIFIED_MACHINE_INDICATOR') {
-      const note = document.createElement('div');
-      note.style.cssText = 'color:#a8bac8;font-size:11px;padding:2px 4px 6px';
-      note.textContent = '即時機台狀態同步中，更新後即可選擇可進入的機台';
-      box.appendChild(note);
-    }
     if (usingFallback) {
       const note = document.createElement('div');
       note.style.cssText = 'color:#7893a9;font-size:11px;padding:2px 4px 6px';
@@ -1036,8 +1030,7 @@
     }
     list.slice(0, 10).forEach((item, index) => {
       const machine = item.machineNum == null ? '—' : String(item.machineNum);
-      const historicalFallback = item.source === 'ATG_HAR_VERIFIED_MACHINE_INDICATOR';
-      const locked = !hasLiveRoomId(item.roomId) || item.isLocked === true || item.available === false || historicalFallback;
+      const locked = !hasLiveRoomId(item.roomId) || item.isLocked === true || item.available === false;
       const row = document.createElement('div');
       row.className = 'room-card';
       const metric = item.metric ? ' · ' + item.metric : '';
@@ -1135,11 +1128,6 @@
 
   async function selectRoom(item) {
     if (!item || item.machineNum == null) return;
-    if (item.source === 'ATG_HAR_VERIFIED_MACHINE_INDICATOR') {
-      $('err2').style.color = '#ffbf66';
-      $('err2').textContent = '正在同步即時機台狀態，請稍候再選擇';
-      return;
-    }
     if (item.available === false || item.isLocked === true) {
       $('err2').style.color = '#ffbf66';
       $('err2').textContent = '這台目前無法進入，請選擇其他機台';
@@ -1198,6 +1186,11 @@
   }
 
   function gameConfig(target, machineNum, boardName, boardList, targetKind) {
+    // The ATG room picker exposes numeric machine numbers as three digits
+    // (011), while recommendations may carry them without leading zeroes
+    // (11). Match the engine's normalized live table value on both sides.
+    const rawMachineNum = String(machineNum || '').trim();
+    const engineMachineNum = /^\d+$/.test(rawMachineNum) ? rawMachineNum.padStart(3, '0') : rawMachineNum;
     const goodRooms = ((boards && boards.composite) || []).filter(x => x && x.machineNum != null).slice(0, 3).map(x => ({
       roomId: x.roomId,
       machineNum: x.machineNum,
@@ -1208,7 +1201,7 @@
     return {
       TARGET: String(target || ''),
       TARGET_KIND: targetKind || null,
-      MACHINENUM: String(machineNum || ''),
+      MACHINENUM: engineMachineNum,
       MUTE: true,
       DEBUG: false,
       TAKE_PROFIT: 0,
@@ -1229,7 +1222,7 @@
       // otherwise the generic 12-second watchdog can cancel a valid search.
       EXACT_ROOM: hasLiveRoomId(target) && !!String(machineNum || '').trim(),
       PORTRAIT_ROOM_MODE: PORTRAIT_ROOM_GAMES.has(String(session.game || '')),
-      VISUAL_TARGET: String(machineNum || target || ''),
+      VISUAL_TARGET: engineMachineNum || String(target || ''),
       VISUAL_TARGET_KIND: 'machineNum',
       ROOM_SESSION_ID: currentRoomSessionId,
       FORCE_ROOM_RESET: true,
