@@ -20,17 +20,19 @@ const {JSDOM}=require('jsdom');
  const originalRect=anchor.getBoundingClientRect;const signalHost=w.document.querySelector('#sc-signal');
  const back=w.document.createElement('button');back.textContent='返回';back.getBoundingClientRect=()=>({left:760,top:12,right:832,bottom:50,width:72,height:38});w.document.body.append(back);
  w.innerWidth=844;w.innerHeight=390;anchor.getBoundingClientRect=()=>({left:12,top:50,right:210,bottom:360,width:198,height:310});w.dispatchEvent(new w.Event('resize'));
- assert.ok(parseFloat(signalHost.style.left)>=220,'landscape mini must sit outside main assistant');assert.ok(parseFloat(signalHost.style.left)+245<=750,'mini avoids return button');
+ assert.ok(parseFloat(signalHost.style.left)>=220,'landscape mini must sit outside main assistant');assert.ok(parseFloat(signalHost.style.left)+195<=750,'mini avoids return button');
  const mini=w.document.querySelector('.mini'),head=mini.querySelector('.head');
- const measured=()=>({left:parseFloat(signalHost.style.left),top:parseFloat(signalHost.style.top),right:parseFloat(signalHost.style.left)+245,bottom:parseFloat(signalHost.style.top)+215,width:245,height:215});
+ const measured=()=>{const mobile=w.innerWidth<=900||w.innerHeight<=500,width=mobile?195:245,height=mobile?160:215;return {left:parseFloat(signalHost.style.left),top:parseFloat(signalHost.style.top),right:parseFloat(signalHost.style.left)+width,bottom:parseFloat(signalHost.style.top)+height,width,height};};
  signalHost.getBoundingClientRect=measured;mini.getBoundingClientRect=measured;head.setPointerCapture=()=>{};
  const pos=measured();head.onpointerdown({target:head,clientX:pos.left,clientY:pos.top,pointerId:1});head.onpointermove({clientX:20,clientY:100});
  assert.equal(parseFloat(signalHost.style.left),20);await wait(120);assert.equal(parseFloat(signalHost.style.left),20,'no snapping during drag');
  head.onpointerup();assert.ok(parseFloat(signalHost.style.left)>=220,'overlapping drag snaps into free area after release');
+ const safe=measured();head.onpointerdown({target:head,clientX:safe.left,clientY:safe.top,pointerId:2});head.onpointermove({clientX:360,clientY:180});head.onpointerup();const held={left:signalHost.style.left,top:signalHost.style.top};await wait(220);assert.equal(signalHost.style.left,held.left,'dragged position persists across reconciliation');assert.equal(signalHost.style.top,held.top);w.document.querySelector('.expand').click();w.document.querySelector('.minimize').click();assert.equal(signalHost.style.left,held.left,'minimize restores dragged location');assert.equal(signalHost.style.top,held.top);
+
 
  w.document.querySelector('.expand').click();const full=w.document.querySelector('.shell');assert.ok(parseFloat(signalHost.style.left)>=220);assert.ok(parseFloat(full.style.width)<=460);assert.ok(parseFloat(full.style.maxHeight)<=366);
  w.document.querySelector('.minimize').click();assert.equal(w.document.querySelector('.mini').hidden,false);
- w.innerWidth=390;w.innerHeight=844;anchor.getBoundingClientRect=()=>({left:12,top:50,right:210,bottom:350,width:198,height:300});back.remove();w.dispatchEvent(new w.Event('resize'));assert.equal(signalHost.style.top,'360px','portrait returns below main assistant');
+ w.innerWidth=390;w.innerHeight=844;anchor.getBoundingClientRect=()=>({left:12,top:50,right:210,bottom:350,width:198,height:300});back.remove();w.dispatchEvent(new w.Event('resize'));assert.ok(parseFloat(signalHost.style.top)>=360,'portrait moves to nearest nonoverlapping location');
  w.innerWidth=1024;w.innerHeight=768;anchor.getBoundingClientRect=originalRect;w.dispatchEvent(new w.Event('resize'));
 
  assert.equal(w.document.querySelector('.toast').hidden,true,'spinning must not alert');w.dispatch('GameEvent:CREATE_EARLY_SPIN_FLOW');assert.equal(w.prefetches,1,'unmatched native pre-run must complete normally');

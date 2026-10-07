@@ -49,6 +49,19 @@ host.innerHTML=`<style>
 #sc-signal .signal-modal:not([open]){display:none}
 #sc-signal .signal-modal::backdrop{background:rgba(0,8,15,.4)}
 @media(max-width:900px),(max-height:500px){
+#sc-signal .mini{width:195px;padding:9px;border-radius:13px}
+#sc-signal .mini .symbols{gap:3px;margin:8px 0}
+#sc-signal .mini img:not(.brand-logo){height:30px;margin-bottom:4px}
+#sc-signal .mini .count{font-size:13px}
+#sc-signal .mini .brand-logo{width:22px;height:22px;flex-basis:22px}
+#sc-signal .mini .mini-brand{gap:5px}
+#sc-signal .mini .room{font-size:10px}
+#sc-signal .mini .row{margin-top:8px;font-size:11px;gap:4px}
+#sc-signal .mini .score{font-size:14px}
+#sc-signal .mini .expand{padding:5px 8px;min-height:30px}
+#sc-signal .mini .mini-status{font-size:10px}
+#sc-signal .mini .note{font-size:8px;white-space:nowrap;margin-top:7px}
+
 #sc-signal .shell{padding:12px;border-radius:17px}
 #sc-signal .shell .head{padding-bottom:8px}
 #sc-signal .shell .head b{font-size:14px;letter-spacing:.5px}
@@ -97,7 +110,10 @@ for(const type of ['pointerdown','pointerup','mousedown','mouseup','touchstart',
 
 const button=document.createElement('button');button.title='訊號推薦';button.setAttribute('aria-label','訊號推薦');button.innerHTML='<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><path d="M12 12l6-6M12 2v2M22 12h-2M12 22v-2M2 12h2"/></svg>';button.type='button';button.dataset.signal='true';
 function mount(){const original=document.getElementById('scarab-heart-ui');if(original){const css=getComputedStyle(original);host.style.fontFamily=css.fontFamily;}if(!miniPlaced)placeMini();}
-let miniPlaced=false,miniPosition=null,layoutDragging=false;
+let miniPlaced=false,miniPosition=null,layoutDragging=false,miniDragged=false;
+function miniSize(){const mobile=innerWidth<=900||innerHeight<=500;return {width:mobile?195:245,height:q('.mini').offsetHeight||(mobile?160:215)};}
+function clampPosition(p,width,height){const b=layoutBounds();return {left:Math.max(b.left,Math.min(b.right-width,p.left)),top:Math.max(b.top,Math.min(b.bottom-height,p.top))};}
+function nearestPosition(p,width,height){const candidates=freeRegions().filter(r=>r.right-r.left>=width&&r.bottom-r.top>=height).map(r=>({left:Math.max(r.left,Math.min(r.right-width,p.left)),top:Math.max(r.top,Math.min(r.bottom-height,p.top))}));return candidates.sort((a,b)=>((a.left-p.left)**2+(a.top-p.top)**2)-((b.left-p.left)**2+(b.top-p.top)**2))[0];}
 function layoutBounds(){return {left:12,top:12,right:innerWidth-12,bottom:innerHeight-12};}
 function layoutObstacles(){const result=[];const panel=document.getElementById('scPanel');if(panel){const r=panel.getBoundingClientRect();if(r.right>r.left&&r.bottom>r.top)result.push(r);}
  for(const el of document.querySelectorAll('button,a,[role="button"]')){if(host.contains(el)||el.textContent.trim()!=='返回')continue;const r=el.getBoundingClientRect();if(r.width>0&&r.height>0)result.push(r);}
@@ -112,9 +128,10 @@ function freeRegions(){const bounds=layoutBounds();let regions=[bounds];
 }
 function fits(position,width,height){const b=layoutBounds();return position.left>=b.left&&position.top>=b.top&&position.left+width<=b.right&&position.top+height<=b.bottom&&!layoutObstacles().some(r=>position.left<r.right+10&&position.left+width>r.left-10&&position.top<r.bottom+10&&position.top+height>r.top-10);}
 function placeMini(preferSaved=true){const anchor=document.getElementById('scPanel')?.getBoundingClientRect();if(!anchor)return;
- const mini=q('.mini'),width=245,height=mini.offsetHeight||215;mini.style.transform='';
+ const mini=q('.mini'),{width,height}=miniSize();mini.style.transform='';
  const below={left:Math.max(12,Math.min(anchor.left,innerWidth-width-12)),top:innerWidth>900&&innerHeight>500?Math.max(anchor.bottom+10,innerHeight-height-20):anchor.bottom+10};
  let position=preferSaved&&miniPosition&&fits(miniPosition,width,height)?miniPosition:null;
+ if(!position&&miniDragged&&miniPosition)position=nearestPosition(clampPosition(miniPosition,width,height),width,height);
  if(!position&&fits(below,width,height))position=below;
  if(!position){position=freeRegions().filter(r=>r.right-r.left>=width&&r.bottom-r.top>=height).sort((a,b)=>a.top-b.top||b.right-a.right).map(r=>({left:r.right-width,top:r.top}))[0];}
  if(!position){const regions=freeRegions().map(r=>({r,scale:Math.min(1,(r.right-r.left)/width,(r.bottom-r.top)/height)})).sort((a,b)=>b.scale-a.scale);const best=regions[0];if(!best){mini.hidden=true;miniPlaced=false;return;}mini.style.transform='scale('+best.scale+')';mini.style.transformOrigin='top left';position={left:best.r.right-width*best.scale,top:best.r.top};}
@@ -129,7 +146,7 @@ function placeFull(){const shell=q('.shell'),mobile=innerWidth<=900||innerHeight
  host.style.left=(area.right-width)+'px';host.style.top=area.top+'px';
 }
 function reconcileLayout(){if(alertLocked||layoutDragging)return;if(mode==='full'){const shell=q('.shell'),r=shell.getBoundingClientRect();if(r.width&&r.height&&!fits({left:r.left,top:r.top},r.width,r.height))placeFull();}
- else{const r=q('.mini').getBoundingClientRect();if(r.width&&r.height&&!fits({left:r.left,top:r.top},r.width,r.height))placeMini(false);}}
+ else{const r=q('.mini').getBoundingClientRect();if(r.width&&r.height&&!fits({left:r.left,top:r.top},r.width,r.height))placeMini(true);}}
 function show(m){document.body.appendChild(host);mode=m;q('.shell').hidden=m!=='full';q('.mini').hidden=m!=='mini';button.classList.toggle('on',m==='full');
  if(m==='full'){document.querySelectorAll('#scarab-heart-ui .scPane.on').forEach(el=>el.classList.remove('on'));document.querySelectorAll('#scarab-heart-ui .scNav button[data-tab].on').forEach(el=>el.classList.remove('on'));placeFull();}
  else placeMini();
@@ -139,7 +156,7 @@ document.addEventListener('pointerdown',function(e){if(q('.shell').hidden||host.
 window.addEventListener('resize',()=>{if(!q('.shell').hidden)placeFull();else{miniPlaced=false;placeMini();}});
 q('.close').onclick=()=>show('mini');q('.minimize').onclick=()=>show('mini');q('.expand').onclick=()=>show('full');q('.mini').onclick=e=>{if(e.target.closest('button')||Date.now()-lastDragAt<300)return;show('full');};
 q('.toggle').onclick=()=>{enabled=!enabled;board=null;q('.toggle').textContent=enabled?'開啟 ●':'關閉 ○';q('.toggle').setAttribute('aria-pressed',String(enabled));render();};
-all('.head').forEach(el=>{let drag=null;el.onpointerdown=e=>{if(e.target.closest('button'))return;const r=host.getBoundingClientRect();layoutDragging=true;drag={x:e.clientX,y:e.clientY,left:r.left,top:r.top};el.setPointerCapture(e.pointerId);};el.onpointermove=e=>{if(!drag)return;if(Math.abs(e.clientX-drag.x)+Math.abs(e.clientY-drag.y)>5)lastDragAt=Date.now();host.style.left=Math.max(0,Math.min(innerWidth-host.offsetWidth,drag.left+e.clientX-drag.x))+'px';host.style.top=Math.max(0,Math.min(innerHeight-50,drag.top+e.clientY-drag.y))+'px';if(mode==='mini'){miniPlaced=true;miniPosition={left:parseFloat(host.style.left),top:parseFloat(host.style.top)};}};el.onpointerup=el.onpointercancel=el.onlostpointercapture=()=>{if(!drag)return;drag=null;layoutDragging=false;reconcileLayout();};});
+all('.head').forEach(el=>{let drag=null;el.onpointerdown=e=>{if(e.target.closest('button'))return;const r=host.getBoundingClientRect();layoutDragging=true;drag={x:e.clientX,y:e.clientY,left:r.left,top:r.top};el.setPointerCapture(e.pointerId);};el.onpointermove=e=>{if(!drag)return;if(Math.abs(e.clientX-drag.x)+Math.abs(e.clientY-drag.y)>5)lastDragAt=Date.now();const size=mode==='mini'?miniSize():{width:q('.shell').getBoundingClientRect().width||host.offsetWidth,height:q('.shell').getBoundingClientRect().height||50};const position=clampPosition({left:drag.left+e.clientX-drag.x,top:drag.top+e.clientY-drag.y},size.width,size.height);host.style.left=position.left+'px';host.style.top=position.top+'px';if(mode==='mini'){miniDragged=true;miniPlaced=true;miniPosition={left:parseFloat(host.style.left),top:parseFloat(host.style.top)};}};el.onpointerup=el.onpointercancel=el.onlostpointercapture=()=>{if(!drag)return;drag=null;layoutDragging=false;reconcileLayout();};});
 function icons(){all('.symbols').forEach(box=>{box.replaceChildren();if(!rule)return;rule.symbols.forEach(s=>{const item=document.createElement('div');item.className='symbol';const img=document.createElement('img');img.src=location.origin+s.asset;img.alt=s.name;const count=document.createElement('div');count.className='count';count.textContent='×'+s.count;item.append(img,count);if(!box.closest('.mini')){const cur=document.createElement('div');cur.className='current';cur.dataset.symbol=s.id;cur.textContent='本盤 —';item.append(cur);}box.append(item);});});}
 function render(){const diag=window.__SCARAB_SIGNAL_DIAG;const state=q('.read-state');if(state)state.textContent='房號：'+(room||'尚未取得')+'｜盤面：'+(diag?.board?Object.values(diag.board).reduce((a,b)=>a+b,0)+' 個圖形':'尚未取得')+'｜房間訊號：'+(rule?'已取得':'尚未取得');const usable=enabled&&!round.freeGame&&board&&rule;const played=entryCaptured&&round.spinId&&round.spinId!==entrySpinId;const hit=usable&&!pendingRotation&&played&&round.settled&&rule.symbols.every(s=>(board[s.id]||0)>=s.count);const status=!enabled?'已暫停偵測':round.freeGame?'免費遊戲中，暫停偵測':!room?(window.__SCARAB_SIGNAL_DIAG?.board?'已讀到盤面，等待房號':'等待房間資料'):!usable?(window.__SCARAB_SIGNAL_API_ERROR?'訊號載入失敗，稍後重試':'等待盤面資料'):!played?'完成一轉後開始比對':!round.settled?'盤面更新中':hit?'本盤符合訊號':'本轉未符合訊號條件';q('.mini-status').textContent=round.freeGame?status:usable?status:(!enabled?'已暫停偵測':'');all('.detect-text').forEach(el=>el.textContent=enabled?(round.freeGame?'免遊暫停':'偵測中'):'已關閉');all('.detect-dot').forEach(el=>el.classList.toggle('off',!enabled||!!round.freeGame));all('.score').forEach(el=>el.textContent=rule&&strength!==null?strength+'%':'—');q('.fill').style.width=(rule?strength||0:0)+'%';all('[data-symbol]').forEach(el=>el.textContent=(usable&&!round.settled?'上盤 ':'本盤 ')+(usable?board[el.dataset.symbol]||0:'—'));button.style.boxShadow=hit?'0 0 14px #42dae8':'';q('.mini').classList.toggle('hit',!!hit);
 if(hit&&round.settled&&round.spinId&&!seen.has(room+':'+round.spinId)){seen.add(room+':'+round.spinId);if(seen.size>100)seen.delete(seen.values().next().value);notified=spin;const reason='本盤 '+rule.symbols.map(s=>`${board[s.id]||0} 個${s.name}`).join('＋');history.unshift(new Date().toLocaleTimeString('zh-TW',{hour12:false})+'　'+reason);history=history.slice(0,8);q('.logs').replaceChildren(...history.map(t=>{const el=document.createElement('div');el.textContent=t;return el;}));notify(reason,{...board});}}
