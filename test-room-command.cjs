@@ -1,0 +1,11 @@
+'use strict';
+const fs=require('fs'),vm=require('vm'),assert=require('node:assert/strict');
+const src=fs.readFileSync('public/app.js','utf8');const body=src.slice(src.indexOf('  function handleGameCommand('),src.indexOf('  function safeAnnouncementUrl('));
+const els={room:{value:''},err2:{textContent:''}};let frame,closed=0,entered=0;
+const c={URL,session:{game:'golden-seth'},boards:{composite:[{roomId:'other',machineNum:'3558'}]},pendingPick:null,BOARD_META:{composite:['綜合分數']},hasLiveRoomId:x=>!!x,$:id=>els[id],closeGame:()=>{closed++;c.boards=null;c.pendingPick=null;},requestAnimationFrame:f=>frame=f,enterGame:mode=>{assert.equal(mode,'target');entered++;}};
+vm.createContext(c);vm.runInContext(body,c);c.handleGameCommand('https://__sethcmd__/pick?ri=chosen-room&mn=3983');assert.equal(closed,1);assert.equal(entered,0);assert.equal(c.pendingPick.roomId,'chosen-room');assert.equal(els.room.value,'3983');frame();assert.equal(entered,1);
+c.handleGameCommand('https://__sethcmd__/rooms');assert.equal(closed,2);assert.equal(c.pendingPick,null);
+const overlay=fs.readFileSync('runtime/overlay-runtime.js','utf8');const block=overlay.slice(overlay.indexOf("document.addEventListener('click',function(ev)"),overlay.indexOf('function toast('));let listener,sent='',stopped=false,prevented=false;
+vm.runInNewContext(block,{document:{addEventListener:(type,fn,capture)=>{assert.equal(capture,true);listener=fn;}},window:{},eng:()=>({stopAuto:()=>stopped=true,panel:{}}),goCmd:url=>sent=url});
+const btn={textContent:'↩ 回到選房頁',closest:selector=>selector==='#__sethOcc'};listener({target:{closest:()=>btn},preventDefault:()=>{},stopImmediatePropagation:()=>prevented=true});assert.ok(stopped&&prevented);assert.equal(sent,'https://__sethcmd__/rooms');assert.equal(btn.disabled,true);
+console.log('PASS: clicked room snapshot survives missing/refreshed recommendations; returns before launching exact target; occupied cancel routes to room page');

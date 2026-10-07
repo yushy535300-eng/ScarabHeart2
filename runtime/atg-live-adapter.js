@@ -160,8 +160,10 @@
   var wsAttached = typeof WeakSet === 'function' ? new WeakSet() : null;
   function publishSpoilerPacket(packet) {
     try {
+      try { var reader=window.__SCARAB_SIGNAL_DATA, room=reader && reader.packetRoom(packet, window.__sethEngine && window.__sethEngine.tables); if (room) window.__SCARAB_SIGNAL_PACKET_ROOM={room:room,at:Date.now()}; } catch (_) {}
       if (!packet || typeof packet !== 'object' || Array.isArray(packet) ||
           (packet.status != null && packet.status !== 200) || packet.eventName !== 'spin') return;
+      try { window.dispatchEvent(new CustomEvent('scarab:signal-spin')); } catch (_) {}
       var engine = packet.engine, games = engine && engine.gameState;
       var panel = window.__sethEngine && window.__sethEngine.panel;
       if (!panel || !panel.spoilerOn || !Array.isArray(games) || !games.length ||

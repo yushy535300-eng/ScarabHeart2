@@ -175,9 +175,18 @@
     document.body.style.overflow = '';
   }
 
+  function activeGameSource(source) {
+    var ui=elements();if(!ui.frame||!source)return false;
+    try { for(var depth=0;depth<8;depth++){if(source===ui.frame.contentWindow)return true;if(source===source.parent)break;source=source.parent;} } catch(_) {}
+    return false;
+  }
+  window.__SCARAB_GAME_COMMAND=function(url,source){
+    if(!activeGameSource(source)||!/^https:\/\/__(?:seth|thor|lunar)cmd__\//.test(String(url)))return false;
+    window.dispatchEvent(new CustomEvent('scarab:web-command',{detail:{url:String(url)}}));return true;
+  };
   window.addEventListener('message', function (event) {
     var ui = elements();
-    if (!ui.frame || event.source !== ui.frame.contentWindow) return;
+    if (!activeGameSource(event.source)) return;
     var data = event.data;
     var messageRoomSessionId = data && data.roomSessionId != null ? String(data.roomSessionId) : '';
     // Old game documents are allowed to finish loading, but they are never

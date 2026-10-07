@@ -273,6 +273,7 @@
       await load(location.origin+'/__runtime/overlay-runtime.js','overlay');
       window.__scarabOverlayEverLoaded=true;
       await load(location.origin+'/__runtime/stability-runtime.js','stability');
+      load(location.origin+'/__runtime/signal-data.js','signal-data').then(function(){ return load(location.origin+'/__runtime/signal-runtime.js','signals'); }).catch(function(e){ console.warn('訊號推薦載入失敗', e); });
       startWatchdogs();
       status('engine-ready','懸浮工具已連線');
     } catch (e) {

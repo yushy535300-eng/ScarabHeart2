@@ -1,0 +1,14 @@
+'use strict';
+const assert=require('node:assert/strict'),fs=require('fs');const {JSDOM}=require('jsdom');
+const dom=new JSDOM('<body><main id="roomView" class="hide"></main><section id="gameView"><iframe id="gameFrame"></iframe></section><input id="room"><div id="err2"></div>',{url:'https://scarab.test/',runScripts:'outside-only'}),w=dom.window;
+w.fetch=async()=>({ok:true,json:async()=>({})});w.eval(fs.readFileSync('public/web-iab-bridge.js','utf8'));
+const app=fs.readFileSync('public/app.js','utf8');let closed=0;
+w.closeGame=destination=>{assert.equal(destination,'rooms');closed++;w.ScarabWebLauncher.close();w.document.getElementById('roomView').classList.remove('hide');w.pendingPick=null;};
+w.session={game:'golden-seth'};w.boards={composite:[]};w.pendingPick=null;w.BOARD_META={composite:['綜合分數']};w.$=id=>w.document.getElementById(id);w.hasLiveRoomId=x=>!!x;let launched=0;w.enterGame=()=>launched++;w.requestAnimationFrame=f=>f();
+w.eval(app.slice(app.indexOf('  function handleGameCommand('),app.indexOf('  function safeAnnouncementUrl(')));w.addEventListener('scarab:web-command',e=>w.handleGameCommand(e.detail.url));
+const frame=w.document.getElementById('gameFrame'),child=frame.contentWindow;child.document.body.innerHTML='<iframe id="nested"></iframe>';const nested=child.document.getElementById('nested').contentWindow;
+assert.equal(w.__SCARAB_GAME_COMMAND('https://__sethcmd__/rooms',nested),true);assert.equal(closed,1);assert.equal(w.document.getElementById('gameView').classList.contains('hide'),true);assert.equal(w.document.getElementById('roomView').classList.contains('hide'),false);
+assert.equal(w.__SCARAB_GAME_COMMAND('https://__sethcmd__/pick?ri=exact-id&mn=3983',frame.contentWindow),true);assert.equal(closed,2);assert.equal(w.pendingPick.roomId,'exact-id');assert.equal(launched,1);
+assert.equal(w.__SCARAB_GAME_COMMAND('https://__sethcmd__/home',frame.contentWindow),true);assert.equal(closed,3);
+assert.equal(w.__SCARAB_GAME_COMMAND('https://__sethcmd__/rooms',w),false);assert.equal(w.__SCARAB_GAME_COMMAND('https://other.example/',frame.contentWindow),false);
+console.log('PASS: actual bridge + app handler accepts active nested game, hides game, shows app room page, preserves target; stale/unrelated sources rejected');dom.window.close();

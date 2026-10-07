@@ -191,6 +191,40 @@ app.get('/__runtime/atg-recommendation-probe.js', (_req, res) => {
   res.set('Cache-Control', 'no-store');
   res.sendFile(path.join(runtimeDir, 'atg-recommendation-probe.js'));
 });
+const signalRules = require('./signal-rules.cjs');
+const signalClock = require('./signal-clock.cjs');
+app.get('/api/signals', async (req, res) => {
+ try{
+  res.set('Cache-Control', 'no-store');
+  const rule = await signalClock.get(String(req.query.game || ''), req.query.room);
+  if (!rule) return res.status(400).json({error:'遊戲或房間資料無效'});
+  res.json(rule);
+ }catch(e){res.status(503).json({error:'訊號暫時無法更新'});}
+});
+app.post('/api/signals/free-finished', accessJson, async (req,res)=>{
+ const sid=String(req.body?.sid||''),session=sessions.get(sid);
+ if(!session)return res.status(401).json({error:'登入已失效'});
+ const game=String(session.payload?.gameCode||session.payload?.cfg?.GAME_CODE||'');
+ if(game!==req.body?.game||typeof req.body?.ruleId!=='string')return res.status(400).json({error:'遊戲資料無效'});
+ try{const rule=await signalClock.rotate(game,req.body.room,req.body.ruleId);if(!rule)return res.status(400).json({error:'房間資料無效'});res.set('Cache-Control','no-store').json(rule);}catch(e){res.status(503).json({error:'訊號暫時無法更新'});}
+});
+app.get('/api/signals/:sid', async (req, res) => {
+ try{
+  res.set('Cache-Control', 'no-store');
+  const session = sessions.get(req.params.sid);
+  if (!session) return res.status(401).json({error:'登入已失效'});
+  const rule = await signalClock.get(String(session.payload?.gameCode || session.payload?.cfg?.GAME_CODE || ''), req.query.room);
+  if (!rule) return res.status(400).json({error:'等待房間資料'});
+  res.json(rule);
+ }catch(e){res.status(503).json({error:'訊號暫時無法更新'});}
+});
+app.get('/__runtime/signal-data.js', (_req, res) => res.sendFile(path.join(runtimeDir, 'signal-data.js')));
+app.get('/__runtime/signal-runtime.js', (_req, res) => res.sendFile(path.join(runtimeDir, 'signal-runtime.js')));
+app.get('/signal-assets/:asset', (req, res) => {
+  if (!/^(seth(?:[4-9]|1[0-2])|tiger[1-9])$/.test(req.params.asset)) return res.sendStatus(404);
+  res.type(req.params.asset.startsWith('tiger') ? 'image/webp' : 'image/png');
+  res.sendFile(path.join(publicDir, 'signal-assets', req.params.asset));
+});
 app.get('/__runtime/overlay-runtime.js', (_req, res) => {
   res.sendFile(path.join(runtimeDir, 'overlay-runtime.js'));
 });

@@ -7,7 +7,7 @@
   },
   "scripts": {
     "start": "node server.js",
-    "check": "node --check server.js && node --check public/web-iab-bridge.js && node --check public/app.js && node --check public/seth-eye-api.js && node --check public/provider/lunar-engine.js && node --check public/provider/hud-ui-bundle.js && node --check public/provider/thor-engine-code.js && node --check runtime/atg-engine-runtime.js && node --check runtime/atg-live-adapter.js && node --check runtime/overlay-runtime.js && node --check runtime/bootstrap-runtime.js && node --check runtime/stability-runtime.js"
+    "check": "node --check server.js && node --check public/web-iab-bridge.js && node --check public/app.js && node --check public/seth-eye-api.js && node --check public/provider/lunar-engine.js && node --check public/provider/hud-ui-bundle.js && node --check public/provider/thor-engine-code.js && node --check runtime/atg-engine-runtime.js && node --check runtime/atg-live-adapter.js && node --check runtime/overlay-runtime.js && node --check runtime/bootstrap-runtime.js && node --check runtime/stability-runtime.js && node --check signal-rules.cjs && node --check runtime/signal-runtime.js && node --check runtime/signal-data.js && node --check signal-clock.cjs"
   },
   "dependencies": {
     "express": "4.21.2",

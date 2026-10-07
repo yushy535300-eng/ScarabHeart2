@@ -1264,7 +1264,7 @@
         machineNum = String(pendingPick.machineNum || '');
         targetKind = 'roomId';
         boardName = pendingPick.boardName;
-        const source = (boards && boards[pendingPick.board]) || [];
+        const source = pendingPick.boardList || (boards && boards[pendingPick.board]) || [];
         boardList = source.filter(x => x && x.roomId && x.machineNum != null).map(x => ({ roomId: String(x.roomId), machineNum: String(x.machineNum), score: x.score }));
 
         // The six HAR-backed titles have a REAL ATG roomId for every displayed
@@ -1349,21 +1349,29 @@
     const command = String(url || '');
     if (!command) return;
     if (/__sethcmd__\/pick/.test(command)) {
-      let found = null;
+      let picked = null;
       try {
         const parsed = new URL(command);
         const roomId = parsed.searchParams.get('ri') || '';
-        const machineNum = parsed.searchParams.get('mn') || '';
-        found = ((boards && boards.composite) || []).find(x => String(x.roomId || '') === roomId || String(x.machineNum || '') === machineNum) || null;
+        const machineNum = (parsed.searchParams.get('mn') || '').trim();
+        if (hasLiveRoomId(roomId) && /^\d+$/.test(machineNum)) picked = { roomId, machineNum };
       } catch (_) {}
-      // Close the old game first so its callbacks are invalidated, then start
-      // the newly selected room. The original selection rules are untouched.
+      // Snapshot the clicked row before refreshing recommendations or closing
+      // the iframe. Never substitute another current recommendation.
+      const requestedGame = session && session.game;
+      const selectedBoardList = ((boards && boards.composite) || []).map(x => ({ ...x }));
       closeGame('rooms');
-      if (found) setTimeout(() => selectRoom(found), 0);
+      if (!picked) { $('err2').textContent = '這間房的資料不完整，請重新選擇'; return; }
+      pendingPick = { ...picked, board: 'composite', boardName: BOARD_META.composite[0], boardList: selectedBoardList };
+      $('room').value = picked.machineNum;
+      $('err2').textContent = '正在前往 #' + picked.machineNum + ' 房…';
+      requestAnimationFrame(() => {
+        if (session && session.game === requestedGame && pendingPick && pendingPick.roomId === picked.roomId) enterGame('target');
+      });
       return;
     }
     if (/__sethcmd__\/rooms/.test(command)) { closeGame('rooms'); return; }
-    if (/__(?:seth|thor|lunar)cmd__\/home/.test(command)) { closeGame('home'); return; }
+    if (/__(?:seth|thor|lunar)cmd__\/home/.test(command)) { closeGame('rooms'); return; }
     if (/__sethcmd__\/deposit/.test(command)) {
       closeGame('rooms');
       $('err2').textContent = '請回娛樂城完成儲值後再重新進入遊戲。';
