@@ -1,6 +1,6 @@
 'use strict';
 const crypto = require('crypto');
-const games = {'golden-seth':'賽特二代','egyptian-mythology':'賽特一代','tiger-princess':'虎小妹','scarlet-three-kingdoms':'赤三國'};
+const games = {'golden-seth':'賽特二代','egyptian-mythology':'賽特一代','tiger-princess':'虎小妹','scarlet-three-kingdoms':'赤三國','hades':'古神巴風特'};
 function recipe(game, room, now=Date.now(), anchor=null) {
  if (!games[game] || !/^\d{1,6}$/.test(String(room))) return null;
  room=String(Number(room));
@@ -8,23 +8,24 @@ function recipe(game, room, now=Date.now(), anchor=null) {
  const digest=crypto.createHmac('sha256',process.env.SIGNAL_SEED||'scarab-room-signals-v1').update(`${game}:${room}:${epoch}${anchor==null?'':':reset:'+anchor}`).digest();
  function choose(source){
   let i=0;const rand=n=>source[i++%source.length]%n;
-  const pool=Array.from({length:9},(_,i)=>i+1);
-  for(let k=8;k>0;k--){const j=rand(k+1);[pool[k],pool[j]]=[pool[j],pool[k]];}
+  const pool=game==='hades'?Array.from({length:7},(_,i)=>i+2):Array.from({length:9},(_,i)=>i+1);
+  const isBig=n=>game==='hades'?n>=2&&n<=5:n<=4;
+  for(let k=pool.length-1;k>0;k--){const j=rand(k+1);[pool[k],pool[j]]=[pool[j],pool[k]];}
   const sizes=[2,2,2,2,2,2,2,2,2,3,3,3,3,3,3,3,3,4,4,5],size=sizes[rand(sizes.length)];
   const selected=pool.slice(0,size);
-  if(selected.every(n=>n>=5))selected[0]=pool.find(n=>n<=4);
+  if(selected.every(n=>!isBig(n)))selected[0]=pool.find(isBig);
   const gemMinimum=size<=3?4:3,gemMaximum=size<=3?6:4;
-  const options=selected.map(n=>n>=5?Array.from({length:gemMaximum-gemMinimum+1},(_,j)=>gemMinimum+j):[2,4,6]);
+  const options=selected.map(n=>!isBig(n)?Array.from({length:gemMaximum-gemMinimum+1},(_,j)=>gemMinimum+j):[2,4,6]);
   const limits={2:[6,11],3:[8,14],4:[10,16],5:[12,18]},[lo,hi]=limits[size];
   const candidates=[];
   function enumerate(counts){if(counts.length<size){for(const n of options[counts.length])enumerate([...counts,n]);return;}
-   const six=counts.filter((n,j)=>selected[j]<=4&&n===6).length;
+   const six=counts.filter((n,j)=>isBig(selected[j])&&n===6).length;
    if(six>1)return;
-   if(six&&counts.some((n,j)=>selected[j]<=4?n!==6&&n!==2:n!==gemMinimum))return;
+   if(six&&counts.some((n,j)=>isBig(selected[j])?n!==6&&n!==2:n!==gemMinimum))return;
    const sum=counts.reduce((a,b)=>a+b,0);if(sum>=lo&&sum<=hi)candidates.push(counts);
   }
   enumerate([]);
-  const wantsSix=rand(5)===0,preferred=candidates.filter(c=>c.some((n,j)=>selected[j]<=4&&n===6)===wantsSix);
+  const wantsSix=rand(5)===0,preferred=candidates.filter(c=>c.some((n,j)=>isBig(selected[j])&&n===6)===wantsSix);
   const available=preferred.length?preferred:candidates,counts=available[rand(available.length)];
   return {selected,counts};
  }
@@ -43,8 +44,8 @@ function recipe(game, room, now=Date.now(), anchor=null) {
   if(strength+direction*delta<15)direction=1;
   strength+=direction*delta;
  }
- const names=game==='scarlet-three-kingdoms'?['青獅','羽冠','羽扇','弩','黃玉','紅玉','紫玉','藍玉','綠玉']:game==='tiger-princess'?['斧頭','盾牌','啤酒','錢袋','黃寶石','紅寶石','紫寶石','藍寶石','綠寶石']:['眼睛','蛇','弓','彎刀','黃寶石','紅寶石','紫寶石','藍寶石','綠寶石'];
- return {id:`${game}:${room}:${epoch}:${anchor??'global'}:balanced-v4`,game,gameName:games[game],room,strength,strengthSource:'server-recommendation',symbols:selected.map((n,j)=>({id:`symbol_${String(n).padStart(2,'0')}`,name:names[n-1],count:counts[j],asset:`/signal-assets/${game==='scarlet-three-kingdoms'?'red3k'+n:game==='tiger-princess'?'tiger'+n:'seth'+(n+3)}`}))};
+ const names=game==='hades'?['WILD','巴風特','女神','三頭犬','骷髏','A','K','Q']:game==='scarlet-three-kingdoms'?['青獅','羽冠','羽扇','弩','黃玉','紅玉','紫玉','藍玉','綠玉']:game==='tiger-princess'?['斧頭','盾牌','啤酒','錢袋','黃寶石','紅寶石','紫寶石','藍寶石','綠寶石']:['眼睛','蛇','弓','彎刀','黃寶石','紅寶石','紫寶石','藍寶石','綠寶石'];
+ return {id:`${game}:${room}:${epoch}:${anchor??'global'}:balanced-v4`,game,gameName:games[game],room,strength,strengthSource:'server-recommendation',symbols:selected.map((n,j)=>({id:`symbol_${String(n).padStart(2,'0')}`,name:names[n-1],count:counts[j],asset:`/signal-assets/${game==='hades'?'hades'+n:game==='scarlet-three-kingdoms'?'red3k'+n:game==='tiger-princess'?'tiger'+n:'seth'+(n+3)}`}))};
 }
 function evaluate(rule,board){
  if(!rule||!board)return null;

@@ -100,3 +100,8 @@ console.log('PASS: free-game rotation event only after return to main game');
  watcher.dispose();assert.equal(game.judgeIsOpenEarlyFlag,original);
  console.log('PASS: native pre-run disabled before wager; accepted wager preserved; disabled detector restores native behavior');
 }
+
+// Hades merged tiles occupy their covered cells, not just one anchor node.
+{const state={view:Array.from({length:5},()=>[6,6,6,6,6]),groupSymbols:[{symbolId:2,size:2,symbolPos:[0,1,5,6]}]};const game={data:{parser:{currentGameState:state}}};const w={__SC_GAME_CODE:'hades',System:{get:n=>n.includes('GameData')?{default:game}:null}};
+ assert.deepEqual(data.sample(w).board,{symbol_02:4,symbol_06:21});state.view.pop();assert.equal(data.sample(w).board,null);
+ console.log('PASS: Hades group occupies four of 25 cells; incomplete view cannot trigger');}

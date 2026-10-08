@@ -23,7 +23,18 @@ function componentBoard(w,list){
  if(!bad&&validBoard(counts))return {board:counts,source:'SymbolView.symbolsMap',candidateCount:positions.size,frames:[]};
  }}return null;
 }
-function readBoard(w,list){const live=componentBoard(w,list);if(live)return live;const counts={},frames=new Set(),positions=new Set();let candidateCount=0;
+function hadesBoard(w){
+ try{const game=modelInstance(w,'GameData'),d=game?.getData?.()||game?.data,state=d?.parser?.currentGameState;
+  if(!Array.isArray(state?.view)||state.view.length!==5||state.view.some(row=>!Array.isArray(row)||row.length!==5))return null;
+  const cells=state.view.flat();if(cells.some(id=>!Number.isInteger(id)||id<1||id>10))return null;
+  const occupied=new Set();for(const group of state.groupSymbols||[]){if(!Number.isInteger(group.symbolId)||group.symbolId<1||group.symbolId>10||!Array.isArray(group.symbolPos))return null;
+   for(const pos of group.symbolPos){if(!Number.isInteger(pos)||pos<0||pos>=25||occupied.has(pos))return null;occupied.add(pos);cells[pos]=group.symbolId;}
+  }
+  const counts={};for(const id of cells){const key='symbol_'+String(id).padStart(2,'0');counts[key]=(counts[key]||0)+1;}
+  return {board:counts,source:'GameData.currentGameState.group-overlay',candidateCount:25,frames:[]};
+ }catch(_){return null;}
+}
+function readBoard(w,list){if(w.__SC_GAME_CODE==='hades')return hadesBoard(w)||{board:null,source:'none',candidateCount:0,frames:[],error:'waiting-hades-final-view'};const live=componentBoard(w,list);if(live)return live;const counts={},frames=new Set(),positions=new Set();let candidateCount=0;
  for(const n of list){const chain=ancestors(n),path=chain.map(p=>p.name||'').join('/');if(/paytable|pay[_-]?table|help|rules|symbolPool|template/i.test(path))continue;
  const sprite=component(n,w.cc?.Sprite)||component(n,'cc.Sprite');if(!sprite||sprite.enabled===false||n.opacity===0)continue;const frame=sprite.spriteFrame||sprite._spriteFrame,id=symbolId(frame);if(/symbol|reel|roller|column|grid|board/i.test(path)&&frame&&(frame.name||frame._name)&&frames.size<30)frames.add(frame.name||frame._name);if(!id)continue;
  frames.add(frame.name||frame._name);if(!/symbol|reel|roller|column|grid|board/i.test(path))continue;candidateCount++;if(!visibleInMask(n,w))continue;
@@ -113,7 +124,7 @@ function watchEarlyDecision(w,isEnabled){
 function watchFreeFinish(w,onFinish){
  const installed=new Map();
  function refresh(){for(const n of nodes(w))for(const c of n.components||n._components||[]){
-  if(typeof c?.finishFreeGame!=='function'||typeof c?.goToMainGame!=='function')continue;
+  if(typeof c?.finishFreeGame!=='function'||(w.__SC_GAME_CODE!=='hades'&&typeof c?.goToMainGame!=='function'))continue;
   if(installed.get(c)?.wrapped===c.finishFreeGame)continue;
   const original=c.finishFreeGame;
   const wrapped=function(...args){const result=original.apply(this,args);try{onFinish();}catch(error){w.__SCARAB_SIGNAL_EVENT_ERROR=String(error);}return result;};

@@ -2,7 +2,7 @@
 'use strict';
 if(window.__SCARAB_SIGNALS)return;
 const game=window.__SC_GAME_CODE;
-if(!['golden-seth','egyptian-mythology','tiger-princess','scarlet-three-kingdoms'].includes(game))return;
+if(!['golden-seth','egyptian-mythology','tiger-princess','scarlet-three-kingdoms','hades'].includes(game))return;
 window.__SCARAB_SIGNALS=true;
 let room='',rule=null,enabled=true,board=null,signature='',stableAt=0,strength=null,spin=0,lastSpinAt=0,notified=-1,request=0,lastFetch=0,history=[],mode='mini',lastRoomAt=0,scoredSignature='',lastDragAt=0;
 let confirmedRoom=false,entrySpinId=null,entryCaptured=false,alertLocked=false,pendingRotation=null,rotating=false,lastRotateTry=0;
@@ -187,7 +187,7 @@ if(!actual&&!confirmedRoom){try{actual=window.__SCARAB_SIGNAL_DATA.normalizeRoom
 if(actual&&/^\d{1,6}$/.test(String(actual).trim())){lastRoomAt=Date.now();actual=String(Number(actual));if(actual!==room){room=actual;entrySpinId=null;entryCaptured=false;rule=null;board=null;signature='';scoredSignature='';alertVersion++;q('.toast').hidden=true;icons();all('.room').forEach(el=>el.textContent=room.padStart(3,'0')+' 號房 · 載入訊號中');history=[];q('.logs').textContent='尚無命中紀錄';strength=null;request++;fetchRule();}}else if(Date.now()-lastRoomAt>2000){room='';rule=null;board=null;strength=null;request++;all('.room').forEach(el=>el.textContent='等待房間資料');icons();}
 if(sample.room===room&&!entryCaptured&&round.spinId){entrySpinId=round.spinId;entryCaptured=true;}
 if(room&&!round.freeGame&&Date.now()-lastFetch>3000)fetchRule();
-if(enabled&&!round.freeGame&&room&&rule){try{if(sample.room!==room)throw Error('not-seated');if(window.__SCARAB_LIVE?.sockets>0&&!window.__SCARAB_LIVE.connected)throw Error('disconnected');const b=sample.board;if(!b)throw Error('board');const keys=Object.keys(b).sort(),values=keys.map(k=>b[k]),total=values.reduce((a,b)=>a+b,0);if(!keys.length||total>30||total!==30||values.some(v=>!Number.isInteger(v)||v<0))throw Error('board');const sig=keys.map(k=>k+':'+b[k]).join(',');signature=sig;if(round.settled)board=b;}catch(_){signature='';round={...round,settled:false};}}render();}
+if(enabled&&!round.freeGame&&room&&rule){try{if(sample.room!==room)throw Error('not-seated');if(window.__SCARAB_LIVE?.sockets>0&&!window.__SCARAB_LIVE.connected)throw Error('disconnected');const b=sample.board;if(!b)throw Error('board');const keys=Object.keys(b).sort(),values=keys.map(k=>b[k]),total=values.reduce((a,b)=>a+b,0);if(!keys.length||total>(game==='hades'?25:30)||total!==(game==='hades'?25:30)||values.some(v=>!Number.isInteger(v)||v<0))throw Error('board');const sig=keys.map(k=>k+':'+b[k]).join(',');signature=sig;if(round.settled)board=b;}catch(_){signature='';round={...round,settled:false};}}render();}
 // Observe the committed idle event before other handlers enqueue the next auto spin.
 // Never trigger on spin packet arrival or unfinished cascading symbols.
 let originalDispatch=null,wrappedDispatch=null;
@@ -202,7 +202,7 @@ function hookDispatch(){if(wrappedDispatch&&window.dispatch===wrappedDispatch)re
  // Never discard a game flow for a wager already accepted by the server.
  // Native autoplay is stopped; normal settlement must continue.
  const idleEvent=window.System?.get?.('chunks:///_virtual/SlotFrameworkEvent.ts')?.SlotFrameworkEvent?.UPDATE_SPIN_STATUS;
- const finalEvent=gameEvents?.CREATE_CLOSE_SPIN_FLOW||'GameEvent:CREATE_CLOSE_SPIN_FLOW';
+ const finalEvent=game==='hades'?(window.System?.get?.('chunks:///_virtual/SlotFrameworkEvent.ts')?.SlotFrameworkEvent?.SEND_CLOSE_REQUEST||'SlotFrameworkEvent:SEND_CLOSE_REQUEST'):(gameEvents?.CREATE_CLOSE_SPIN_FLOW||'GameEvent:CREATE_CLOSE_SPIN_FLOW');
  if(event===finalEvent){try{tick(true);}catch(error){window.__SCARAB_SIGNAL_EVENT_ERROR=String(error);}}
  return original.apply(this,arguments);
  };window.dispatch=wrappedDispatch;}

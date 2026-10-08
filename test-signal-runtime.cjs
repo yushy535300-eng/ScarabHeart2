@@ -6,14 +6,14 @@ const {JSDOM}=require('jsdom');
  const dom=new JSDOM('<html><body><div id="scarab-heart-ui"><div class="scNav"></div></div></body></html>',{url:'http://signal.test/__game/abcdefabcdefabcdefabcdef/play',runScripts:'outside-only',pretendToBeVisual:true});
  const w=dom.window;let fail=false,rotationPosts=0,ruleVersion='room-rule';
  try{
- w.__SC_GAME_CODE=process.env.TEST_SIGNAL_GAME||'golden-seth';w.phase='idle';w.id='entry';w.auto={active:true,spinsRemaining:50};w.queued=0;
+ w.__SC_GAME_CODE=process.env.TEST_SIGNAL_GAME||'golden-seth';const finalEvent=w.__SC_GAME_CODE==='hades'?'SlotFrameworkEvent:SEND_CLOSE_REQUEST':'GameEvent:CREATE_CLOSE_SPIN_FLOW';w.phase='idle';w.id='entry';w.auto={active:true,spinsRemaining:50};w.queued=0;
  w.System={get:name=>name.includes('AutoPlayModel')?{default:w.auto}:name.includes('SlotFrameworkEvent')?{SlotFrameworkEvent:{UPDATE_SPIN_STATUS:'phase',STOP_AUTO_SPIN:'stop'}}:null};
- w.prefetches=0;w.directSpins=0;w.dispatch=(event,payload)=>{if(event==='GameEvent:CREATE_EARLY_SPIN_FLOW')w.prefetches++;if(event==='GameEvent:CREATE_SPIN_FLOW')w.directSpins++;if(event==='stop'&&w.preparedEarly)w.dispatch('GameEvent:CREATE_SPIN_FLOW',{data:{earlySpin:true}});if(event==='phase'){w.phase=payload.data;}if(event==='GameEvent:CREATE_CLOSE_SPIN_FLOW'&&w.auto.active)w.queued++;};
+ w.prefetches=0;w.directSpins=0;w.dispatch=(event,payload)=>{if(event==='GameEvent:CREATE_EARLY_SPIN_FLOW')w.prefetches++;if(event==='GameEvent:CREATE_SPIN_FLOW')w.directSpins++;if(event==='stop'&&w.preparedEarly)w.dispatch('GameEvent:CREATE_SPIN_FLOW',{data:{earlySpin:true}});if(event==='phase'){w.phase=payload.data;}if(event===finalEvent&&w.auto.active)w.queued++;};
  w.fetch=async(url,options)=>{if(options?.method==='POST'){assert.equal(JSON.parse(options.body).sid,'abcdefabcdefabcdefabcdef');rotationPosts++;ruleVersion='free-rotated';}return ({ok:!fail,status:fail?503:200,json:async()=>({id:ruleVersion,gameName:w.__SC_GAME_CODE==='scarlet-three-kingdoms'?'赤三國':'賽特二代',strength:58,symbols:[{id:'symbol_09',name:'綠寶石',count:3,asset:w.__SC_GAME_CODE==='scarlet-three-kingdoms'?'/signal-assets/red3k9':'/signal-assets/seth12'},{id:'symbol_04',name:'彎刀',count:1,asset:w.__SC_GAME_CODE==='scarlet-three-kingdoms'?'/signal-assets/red3k4':'/signal-assets/seth7'}]})});};
- const anchor=w.document.createElement('div');anchor.id='scPanel';anchor.getBoundingClientRect=()=>({left:30,bottom:120,top:20,right:230});w.document.body.append(anchor);w.AbortSignal=AbortSignal;let landed;const nativeView={symbolsMap:new Map(),showSymbolsIn(cb){landed=cb;}};const freeView={goToMainGame(){},finishFreeGame(){this.goToMainGame();}};w.__SCARAB_ROOM_SESSION_ID='test-session';w.cc={director:{getScene:()=>({_components:[nativeView,freeView],children:[]})}};
+ const anchor=w.document.createElement('div');anchor.id='scPanel';anchor.getBoundingClientRect=()=>({left:30,bottom:120,top:20,right:230});w.document.body.append(anchor);w.AbortSignal=AbortSignal;let landed;const nativeView={symbolsMap:new Map(),showSymbolsIn(cb){landed=cb;}};const freeView=w.__SC_GAME_CODE==='hades'?{finishFreeGame(){w.inFree=false;}}:{goToMainGame(){},finishFreeGame(){this.goToMainGame();}};w.__SCARAB_ROOM_SESSION_ID='test-session';w.cc={director:{getScene:()=>({_components:[nativeView,freeView],children:[]})}};
  w.eval(fs.readFileSync(path.join(__dirname,'runtime/signal-data.js'),'utf8'));
  const real=w.__SCARAB_SIGNAL_DATA;
- w.__SCARAB_SIGNAL_DATA={...real,sample:()=>({room:'3272',board:{symbol_09:5,symbol_04:2,symbol_01:23}}),roundState:()=>({spinId:w.id,settled:w.phase==='idle',phase:w.phase,freeGame:!!w.inFree})};
+ w.__SCARAB_SIGNAL_DATA={...real,sample:()=>({room:'3272',board:{symbol_09:5,symbol_04:2,symbol_01:w.__SC_GAME_CODE==='hades'?18:23}}),roundState:()=>({spinId:w.id,settled:w.phase==='idle',phase:w.phase,freeGame:!!w.inFree})};
  w.eval(fs.readFileSync(path.join(__dirname,'runtime/signal-runtime.js'),'utf8'));
  const wait=ms=>new Promise(r=>setTimeout(r,ms));
  await wait(140);assert.equal(w.document.querySelector('.mini').hidden,false);assert.equal(w.document.querySelector('.shell').hidden,true);assert.equal(w.document.querySelector('.scNav [data-signal]'),null);assert.equal(w.document.querySelector('#sc-signal').style.top,'533px');
@@ -36,9 +36,9 @@ const {JSDOM}=require('jsdom');
  w.innerWidth=1024;w.innerHeight=768;anchor.getBoundingClientRect=originalRect;w.dispatchEvent(new w.Event('resize'));
 
  assert.equal(w.document.querySelector('.toast').hidden,true,'spinning must not alert');w.dispatch('GameEvent:CREATE_EARLY_SPIN_FLOW');assert.equal(w.prefetches,1,'unmatched native pre-run must complete normally');
- w.dispatch('GameEvent:CREATE_CLOSE_SPIN_FLOW');assert.equal(w.document.querySelector('.toast').hidden,true,'entry board must never alert or stop autoplay');assert.equal(w.auto.active,true);
- w.inFree=true;w.id='free-spin';w.dispatch('GameEvent:CREATE_CLOSE_SPIN_FLOW');assert.equal(w.document.querySelector('.toast').hidden,true,'matching free board never alerts');assert.equal(w.auto.active,true,'free autoplay remains active');assert.equal(w.document.querySelector('.detect-text').textContent,'免遊暫停');w.inFree=false;
- w.queued=0;w.id='one';w.phase='spining';w.dispatch('GameEvent:CREATE_CLOSE_SPIN_FLOW');
+ w.dispatch(finalEvent);assert.equal(w.document.querySelector('.toast').hidden,true,'entry board must never alert or stop autoplay');assert.equal(w.auto.active,true);
+ w.inFree=true;w.id='free-spin';w.dispatch(finalEvent);assert.equal(w.document.querySelector('.toast').hidden,true,'matching free board never alerts');assert.equal(w.auto.active,true,'free autoplay remains active');assert.equal(w.document.querySelector('.detect-text').textContent,'免遊暫停');w.inFree=false;
+ w.queued=0;w.id='one';w.phase='spining';w.dispatch(finalEvent);
  assert.equal(w.document.querySelector('.toast').hidden,false,'alert shown in same idle-event turn');
  assert.equal(w.queued,0,'stop before idle handler queues next spin');assert.equal(w.directSpins,0,'no prefetched wager exists when native pre-run is disabled');assert.equal(w.auto.spinsRemaining,0);
  {const before=w.directSpins;w.dispatch('GameEvent:CREATE_SPIN_FLOW',{data:{earlySpin:true}});assert.equal(w.directSpins,before+1,'already accepted wager flow must complete even with alert open');}
@@ -51,19 +51,19 @@ const {JSDOM}=require('jsdom');
  const escape=new w.Event('cancel',{cancelable:true});modal.dispatchEvent(escape);assert.equal(escape.defaultPrevented,true);assert.ok(modal.hasAttribute('open'),'escape must not dismiss');
  assert.equal(w.document.querySelectorAll('.toast button').length,1,'close is the sole action');
 
- w.document.querySelector('.toast .row').lastChild.click();assert.equal(modal.hasAttribute('open'),false);behind.click();assert.equal(actions,1);assert.equal(w.auto.active,false,'closing must not resume auto spin');w.dispatch('GameEvent:CREATE_CLOSE_SPIN_FLOW');
+ w.document.querySelector('.toast .row').lastChild.click();assert.equal(modal.hasAttribute('open'),false);behind.click();assert.equal(actions,1);assert.equal(w.auto.active,false,'closing must not resume auto spin');w.dispatch(finalEvent);
  assert.equal(w.document.querySelector('.toast').hidden,true,'same round must not repeat');
  fail=true;await wait(3200);
  assert.equal(w.document.querySelector('.shell .score').textContent,'58%','temporary API failure preserves current recipe');
- w.id='two';w.auto.active=true;w.auto.spinsRemaining=20;w.phase='spining';w.dispatch('GameEvent:CREATE_CLOSE_SPIN_FLOW');
+ w.id='two';w.auto.active=true;w.auto.spinsRemaining=20;w.phase='spining';w.dispatch(finalEvent);
  {const before=w.directSpins;w.dispatch('GameEvent:CREATE_SPIN_FLOW',{data:{earlySpin:true}});assert.equal(w.directSpins,before+1,'already accepted wager flow must complete even with alert open');}
  await wait(0);assert.equal(w.document.querySelector('.stop-state').textContent,'自動轉已停止');assert.equal(w.queued,0);
  // Incomplete board samples must not trigger a new alert using stale counts.
- w.document.querySelector('.toast .row').lastChild.click();w.id='three';w.__SCARAB_SIGNAL_DATA.sample=()=>({room:'3272',board:{symbol_09:3}});w.dispatch('GameEvent:CREATE_CLOSE_SPIN_FLOW');
+ w.document.querySelector('.toast .row').lastChild.click();w.id='three';w.__SCARAB_SIGNAL_DATA.sample=()=>({room:'3272',board:{symbol_09:3}});w.dispatch(finalEvent);
  assert.equal(w.document.querySelector('.toast').hidden,true);
  w.id='native-auto';w.phase='spining';w.auto.active=true;w.auto.spinsRemaining=99;
- w.__SCARAB_SIGNAL_DATA.sample=()=>({room:'3272',board:{symbol_09:5,symbol_04:2,symbol_01:23}});
- let continuationRan=false;nativeView.showSymbolsIn(()=>{continuationRan=true;});landed();await wait(0);assert.equal(continuationRan,true,'intermediate symbol callback never held');assert.equal(w.document.querySelector('.toast').hidden,true,'matching intermediate cascade must not alert');assert.equal(w.auto.active,true);w.dispatch('GameEvent:CREATE_CLOSE_SPIN_FLOW');await wait(0);
+ w.__SCARAB_SIGNAL_DATA.sample=()=>({room:'3272',board:{symbol_09:5,symbol_04:2,symbol_01:w.__SC_GAME_CODE==='hades'?18:23}});
+ let continuationRan=false;nativeView.showSymbolsIn(()=>{continuationRan=true;});landed();await wait(0);assert.equal(continuationRan,true,'intermediate symbol callback never held');assert.equal(w.document.querySelector('.toast').hidden,true,'matching intermediate cascade must not alert');assert.equal(w.auto.active,true);w.dispatch(finalEvent);await wait(0);
  assert.equal(w.phase,'spining','no idle status event emitted');assert.equal(w.auto.active,false);assert.equal(w.queued,0);assert.equal(w.document.querySelector('.toast').hidden,false);assert.equal(w.__SCARAB_SIGNAL_AUTO_SOURCE.native,true);assert.equal(w.__SCARAB_SIGNAL_AUTO_SOURCE.assistant,false);
  w.document.querySelector('.alert-close').click();assert.equal(continuationRan,true);assert.equal(w.auto.active,false);fail=false;assert.equal(rotationPosts,0);freeView.finishFreeGame();await wait(20);assert.equal(rotationPosts,1);assert.equal(ruleVersion,'free-rotated');
  console.log('PASS: free finish rotates server recommendation; native autoplay without idle event stops only on final close flow; entry board suppressed until first new spin, immediate final-board alert, no next auto spin, cleared queue, deduplication, outage retention, incomplete-board rejection, three logos');

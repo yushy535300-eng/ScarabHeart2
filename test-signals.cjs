@@ -20,7 +20,7 @@ for(let i=1;i<=600;i++){
 assert.equal(sizes.size,4);assert(quantities.size>=3);
 console.log('Room synchronization, rollover, variable counts and live matching passed');
 // Recommendation strength exists before a board or spin and is shared by server time.
-for(const game of ['golden-seth','egyptian-mythology','tiger-princess','scarlet-three-kingdoms']){
+for(const game of ['golden-seth','egyptian-mythology','tiger-princess','scarlet-three-kingdoms','hades']){
  for(let room=1;room<=50;room++){
   const start=1800000000000;let previous=null;
   for(let t=0;t<40;t++){
@@ -42,3 +42,5 @@ console.log('PASS: shared server strength without spin, 35–89 initial range, h
 
 {for(let room=1;room<=500;room++){const start=1800000;const initial=recipe('golden-seth',String(room),start);if(initial.strength>=70)assert.ok([1,2,3].some(step=>recipe('golden-seth',String(room),start+step*15000).strength<70));}
  console.log('PASS: high initial strength falls below 70 within 45 seconds');}
+
+{for(let room=1;room<=1000;room++){const r=recipe('hades',String(room),1800000);assert.equal(r.gameName,'古神巴風特');assert.ok(r.symbols.every(s=>+s.id.slice(-2)>=2&&+s.id.slice(-2)<=8));assert.ok(r.symbols.some(s=>+s.id.slice(-2)<=5));for(const symbol of r.symbols){assert.equal(symbol.asset,'/signal-assets/hades'+Number(symbol.id.slice(-2)));assert.ok(require('fs').existsSync('public'+symbol.asset));}}console.log('PASS: Hades own symbol pool excludes Wild/Scatter/Jackpot and uses original assets');}

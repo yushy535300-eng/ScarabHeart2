@@ -221,7 +221,7 @@ app.get('/api/signals/:sid', async (req, res) => {
 app.get('/__runtime/signal-data.js', (_req, res) => res.sendFile(path.join(runtimeDir, 'signal-data.js')));
 app.get('/__runtime/signal-runtime.js', (_req, res) => res.sendFile(path.join(runtimeDir, 'signal-runtime.js')));
 app.get('/signal-assets/:asset', (req, res) => {
-  if (!/^(seth(?:[4-9]|1[0-2])|tiger[1-9]|red3k[1-9])$/.test(req.params.asset)) return res.sendStatus(404);
+  if (!/^(seth(?:[4-9]|1[0-2])|tiger[1-9]|red3k[1-9]|hades[2-8])$/.test(req.params.asset)) return res.sendStatus(404);
   res.type(req.params.asset.startsWith('tiger') ? 'image/webp' : 'image/png');
   res.sendFile(path.join(publicDir, 'signal-assets', req.params.asset));
 });
