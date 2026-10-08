@@ -27,9 +27,18 @@ for(const game of ['golden-seth','egyptian-mythology','tiger-princess']){
    const r=recipe(game,String(room),start+t*15000);
    assert.equal(r.strengthSource,'server-recommendation');assert.ok(r.strength>=15&&r.strength<=95);if(t===0)assert.ok(r.strength>=35&&r.strength<=89);
    assert.equal(r.strength,recipe(game,String(room).padStart(3,'0'),start+t*15000).strength);
-   if(previous!==null){const delta=r.strength-previous;assert.ok(Math.abs(delta)>=5&&Math.abs(delta)<=15);if(previous<80)assert.ok(Math.abs(delta)<=10);if(previous>=80&&delta<0)assert.ok(-delta>=8);}
+   if(previous!==null){const delta=r.strength-previous;assert.ok(Math.abs(delta)>=5&&Math.abs(delta)<=15);if(previous>=70){assert.ok(delta<0);assert.ok(-delta>=8);}}
    previous=r.strength;
   }
  }
 }
 console.log('PASS: shared server strength without spin, 35–89 initial range, high-strength decline and bounded updates');
+
+// Every recipe size can start low, medium or high, independently of symbol count.
+{const seen=new Map([2,3,4,5].map(n=>[n,new Set()]));
+ for(let room=1;room<=5000;room++){const r=recipe('golden-seth',String(room),1800000);seen.get(r.symbols.length).add(r.strength<50?'low':r.strength<70?'medium':'high');}
+ for(const [size,bands] of seen)assert.equal(bands.size,3,'all strength bands for '+size+' symbol types');
+ console.log('PASS: 2–5 symbol recipes each receive low/medium/high initial strength');}
+
+{for(let room=1;room<=500;room++){const start=1800000;const initial=recipe('golden-seth',String(room),start);if(initial.strength>=70)assert.ok([1,2,3].some(step=>recipe('golden-seth',String(room),start+step*15000).strength<70));}
+ console.log('PASS: high initial strength falls below 70 within 45 seconds');}

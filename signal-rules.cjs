@@ -31,12 +31,14 @@ function recipe(game, room, now=Date.now(), anchor=null) {
  const {selected,counts}=choose(digest);
  // Shared recommendation indicator; configured server-side, not a probability or board measurement.
  const step=Math.floor(((now-(anchor??0))%600000)/15000);
- let strength=35+digest[30]%55;
+ const initialBands=[[35,49],[50,69],[70,89]];
+ const [initialLow,initialHigh]=initialBands[digest[29]%initialBands.length];
+ let strength=initialLow+digest[30]%(initialHigh-initialLow+1);
  for(let t=1;t<=step;t++){
   const noise=crypto.createHmac('sha256',digest).update('strength:'+t).digest();
-  const high=strength>=80;
-  let direction=high?(noise[0]%4===0?1:-1):(noise[0]%2?1:-1);
-  let delta=high&&direction<0?8+noise[1]%8:5+noise[1]%6;
+  const high=strength>=70;
+  let direction=high?-1:(noise[0]%2?1:-1);
+  let delta=high&&direction<0?8+noise[1]%8:5+noise[1]%11;
   if(strength+direction*delta>95){direction=-1;delta=high?8+noise[1]%8:delta;}
   if(strength+direction*delta<15)direction=1;
   strength+=direction*delta;
