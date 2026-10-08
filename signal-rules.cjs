@@ -1,6 +1,6 @@
 'use strict';
 const crypto = require('crypto');
-const games = {'golden-seth':'賽特二代','egyptian-mythology':'賽特一代','tiger-princess':'虎小妹'};
+const games = {'golden-seth':'賽特二代','egyptian-mythology':'賽特一代','tiger-princess':'虎小妹','scarlet-three-kingdoms':'赤三國'};
 function recipe(game, room, now=Date.now(), anchor=null) {
  if (!games[game] || !/^\d{1,6}$/.test(String(room))) return null;
  room=String(Number(room));
@@ -43,8 +43,8 @@ function recipe(game, room, now=Date.now(), anchor=null) {
   if(strength+direction*delta<15)direction=1;
   strength+=direction*delta;
  }
- const names=game==='tiger-princess'?['斧頭','盾牌','啤酒','錢袋','黃寶石','紅寶石','紫寶石','藍寶石','綠寶石']:['眼睛','蛇','弓','彎刀','黃寶石','紅寶石','紫寶石','藍寶石','綠寶石'];
- return {id:`${game}:${room}:${epoch}:${anchor??'global'}:balanced-v4`,game,gameName:games[game],room,strength,strengthSource:'server-recommendation',symbols:selected.map((n,j)=>({id:`symbol_${String(n).padStart(2,'0')}`,name:names[n-1],count:counts[j],asset:`/signal-assets/${game==='tiger-princess'?'tiger'+n:'seth'+(n+3)}`}))};
+ const names=game==='scarlet-three-kingdoms'?['青獅','羽冠','羽扇','弩','黃玉','紅玉','紫玉','藍玉','綠玉']:game==='tiger-princess'?['斧頭','盾牌','啤酒','錢袋','黃寶石','紅寶石','紫寶石','藍寶石','綠寶石']:['眼睛','蛇','弓','彎刀','黃寶石','紅寶石','紫寶石','藍寶石','綠寶石'];
+ return {id:`${game}:${room}:${epoch}:${anchor??'global'}:balanced-v4`,game,gameName:games[game],room,strength,strengthSource:'server-recommendation',symbols:selected.map((n,j)=>({id:`symbol_${String(n).padStart(2,'0')}`,name:names[n-1],count:counts[j],asset:`/signal-assets/${game==='scarlet-three-kingdoms'?'red3k'+n:game==='tiger-princess'?'tiger'+n:'seth'+(n+3)}`}))};
 }
 function evaluate(rule,board){
  if(!rule||!board)return null;

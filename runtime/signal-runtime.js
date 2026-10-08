@@ -2,7 +2,7 @@
 'use strict';
 if(window.__SCARAB_SIGNALS)return;
 const game=window.__SC_GAME_CODE;
-if(!['golden-seth','egyptian-mythology','tiger-princess'].includes(game))return;
+if(!['golden-seth','egyptian-mythology','tiger-princess','scarlet-three-kingdoms'].includes(game))return;
 window.__SCARAB_SIGNALS=true;
 let room='',rule=null,enabled=true,board=null,signature='',stableAt=0,strength=null,spin=0,lastSpinAt=0,notified=-1,request=0,lastFetch=0,history=[],mode='mini',lastRoomAt=0,scoredSignature='',lastDragAt=0;
 let confirmedRoom=false,entrySpinId=null,entryCaptured=false,alertLocked=false,pendingRotation=null,rotating=false,lastRotateTry=0;

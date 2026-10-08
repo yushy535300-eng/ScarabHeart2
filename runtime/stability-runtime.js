@@ -8,6 +8,18 @@
   (document.head||document.documentElement).appendChild(style);
 
   function engine(){ return window.__sethEngine||null; }
+  // Cap Red Three Kingdoms at the engine boundary as well as its buttons.
+  function limitGameSpeed(){
+    if(window.__SC_GAME_CODE!=='scarlet-three-kingdoms')return;
+    var e=engine();if(!e||typeof e.setSpeed!=='function')return;
+    if(!e.setSpeed.__scarabRed3kLimit){
+      var original=e.setSpeed;
+      var limited=function(v){if([1,2,4].indexOf(Number(v))<0)return false;return original.apply(this,arguments);};
+      limited.__scarabRed3kLimit=true;e.setSpeed=limited;
+    }
+    if(Number(e.speed)>4)e.setSpeed(4);
+  }
+  limitGameSpeed();
   function keyForSpeed(v){
     v=Number(v);
     if(v===999||v===32) return 'max';
@@ -41,7 +53,7 @@
   }
 
   var timer=setInterval(function(){
-    try{ syncSpeedVisual(); keepInsideViewport(); }catch(_){}
+    try{ limitGameSpeed(); syncSpeedVisual(); keepInsideViewport(); }catch(_){}
   },900);
   addEventListener('resize',keepInsideViewport,{passive:true});
   addEventListener('orientationchange',function(){setTimeout(keepInsideViewport,180);},{passive:true});

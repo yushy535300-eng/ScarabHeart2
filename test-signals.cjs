@@ -20,7 +20,7 @@ for(let i=1;i<=600;i++){
 assert.equal(sizes.size,4);assert(quantities.size>=3);
 console.log('Room synchronization, rollover, variable counts and live matching passed');
 // Recommendation strength exists before a board or spin and is shared by server time.
-for(const game of ['golden-seth','egyptian-mythology','tiger-princess']){
+for(const game of ['golden-seth','egyptian-mythology','tiger-princess','scarlet-three-kingdoms']){
  for(let room=1;room<=50;room++){
   const start=1800000000000;let previous=null;
   for(let t=0;t<40;t++){
