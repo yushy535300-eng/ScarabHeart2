@@ -199,7 +199,8 @@ function hookDispatch(){if(wrappedDispatch&&window.dispatch===wrappedDispatch)re
  const next=gameEvents?.CREATE_SPIN_FLOW||'GameEvent:CREATE_SPIN_FLOW';
  // Native early-spin flow participates in the current spin completion.
  // Suppressing it before a match leaves the game waiting indefinitely.
- if(alertLocked&&(event===next||event===early))return;
+ // Never discard a game flow for a wager already accepted by the server.
+ // Native autoplay is stopped; normal settlement must continue.
  const idleEvent=window.System?.get?.('chunks:///_virtual/SlotFrameworkEvent.ts')?.SlotFrameworkEvent?.UPDATE_SPIN_STATUS;
  const finalEvent=gameEvents?.CREATE_CLOSE_SPIN_FLOW||'GameEvent:CREATE_CLOSE_SPIN_FLOW';
  if(event===finalEvent){try{tick(true);}catch(error){window.__SCARAB_SIGNAL_EVENT_ERROR=String(error);}}
@@ -208,5 +209,6 @@ function hookDispatch(){if(wrappedDispatch&&window.dispatch===wrappedDispatch)re
 const freeWatcher=window.__SCARAB_SIGNAL_DATA.watchFreeFinish?.(window,freeFinished);
 // Symbol landing and cascade callbacks are intermediate boards, never match here.
 const boardWatcher=null;
-show('mini');hookDispatch();const timer=setInterval(()=>{hookDispatch();boardWatcher?.refresh();freeWatcher?.refresh();reconcileLayout();if(pendingRotation&&Date.now()-lastRotateTry>3000)rotateAfterFree();tick();},100);tick();window.addEventListener('pagehide',()=>{clearInterval(timer);boardWatcher?.dispose();freeWatcher?.dispose();if(window.dispatch===wrappedDispatch)window.dispatch=originalDispatch;},{once:true});
+const earlyWatcher=window.__SCARAB_SIGNAL_DATA.watchEarlyDecision?.(window,()=>enabled);
+show('mini');hookDispatch();const timer=setInterval(()=>{hookDispatch();earlyWatcher?.refresh();boardWatcher?.refresh();freeWatcher?.refresh();reconcileLayout();if(pendingRotation&&Date.now()-lastRotateTry>3000)rotateAfterFree();tick();},100);tick();window.addEventListener('pagehide',()=>{clearInterval(timer);boardWatcher?.dispose();earlyWatcher?.dispose();freeWatcher?.dispose();if(window.dispatch===wrappedDispatch)window.dispatch=originalDispatch;},{once:true});
 })();

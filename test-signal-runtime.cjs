@@ -8,7 +8,7 @@ const {JSDOM}=require('jsdom');
  try{
  w.__SC_GAME_CODE='golden-seth';w.phase='idle';w.id='entry';w.auto={active:true,spinsRemaining:50};w.queued=0;
  w.System={get:name=>name.includes('AutoPlayModel')?{default:w.auto}:name.includes('SlotFrameworkEvent')?{SlotFrameworkEvent:{UPDATE_SPIN_STATUS:'phase',STOP_AUTO_SPIN:'stop'}}:null};
- w.prefetches=0;w.directSpins=0;w.dispatch=(event,payload)=>{if(event==='GameEvent:CREATE_EARLY_SPIN_FLOW')w.prefetches++;if(event==='GameEvent:CREATE_SPIN_FLOW')w.directSpins++;if(event==='stop')w.dispatch('GameEvent:CREATE_SPIN_FLOW',{data:{earlySpin:true}});if(event==='phase'){w.phase=payload.data;}if(event==='GameEvent:CREATE_CLOSE_SPIN_FLOW'&&w.auto.active)w.queued++;};
+ w.prefetches=0;w.directSpins=0;w.dispatch=(event,payload)=>{if(event==='GameEvent:CREATE_EARLY_SPIN_FLOW')w.prefetches++;if(event==='GameEvent:CREATE_SPIN_FLOW')w.directSpins++;if(event==='stop'&&w.preparedEarly)w.dispatch('GameEvent:CREATE_SPIN_FLOW',{data:{earlySpin:true}});if(event==='phase'){w.phase=payload.data;}if(event==='GameEvent:CREATE_CLOSE_SPIN_FLOW'&&w.auto.active)w.queued++;};
  w.fetch=async(url,options)=>{if(options?.method==='POST'){assert.equal(JSON.parse(options.body).sid,'abcdefabcdefabcdefabcdef');rotationPosts++;ruleVersion='free-rotated';}return ({ok:!fail,status:fail?503:200,json:async()=>({id:ruleVersion,gameName:'賽特二代',strength:58,symbols:[{id:'symbol_09',name:'綠寶石',count:3,asset:'/signal-assets/seth12'},{id:'symbol_04',name:'彎刀',count:1,asset:'/signal-assets/seth7'}]})});};
  const anchor=w.document.createElement('div');anchor.id='scPanel';anchor.getBoundingClientRect=()=>({left:30,bottom:120,top:20,right:230});w.document.body.append(anchor);w.AbortSignal=AbortSignal;let landed;const nativeView={symbolsMap:new Map(),showSymbolsIn(cb){landed=cb;}};const freeView={goToMainGame(){},finishFreeGame(){this.goToMainGame();}};w.__SCARAB_ROOM_SESSION_ID='test-session';w.cc={director:{getScene:()=>({_components:[nativeView,freeView],children:[]})}};
  w.eval(fs.readFileSync(path.join(__dirname,'runtime/signal-data.js'),'utf8'));
@@ -40,7 +40,8 @@ const {JSDOM}=require('jsdom');
  w.inFree=true;w.id='free-spin';w.dispatch('GameEvent:CREATE_CLOSE_SPIN_FLOW');assert.equal(w.document.querySelector('.toast').hidden,true,'matching free board never alerts');assert.equal(w.auto.active,true,'free autoplay remains active');assert.equal(w.document.querySelector('.detect-text').textContent,'免遊暫停');w.inFree=false;
  w.queued=0;w.id='one';w.phase='spining';w.dispatch('GameEvent:CREATE_CLOSE_SPIN_FLOW');
  assert.equal(w.document.querySelector('.toast').hidden,false,'alert shown in same idle-event turn');
- assert.equal(w.queued,0,'stop before idle handler queues next spin');assert.equal(w.directSpins,0,'stop handler cannot start prepared spin');assert.equal(w.auto.spinsRemaining,0);
+ assert.equal(w.queued,0,'stop before idle handler queues next spin');assert.equal(w.directSpins,0,'no prefetched wager exists when native pre-run is disabled');assert.equal(w.auto.spinsRemaining,0);
+ {const before=w.directSpins;w.dispatch('GameEvent:CREATE_SPIN_FLOW',{data:{earlySpin:true}});assert.equal(w.directSpins,before+1,'already accepted wager flow must complete even with alert open');}
  await wait(0);assert.equal(w.document.querySelector('.stop-state').textContent,'自動轉已停止');
  assert.equal(w.document.querySelectorAll('.brand-logo').length,3);
  const modal=w.document.querySelector('.signal-modal');assert.ok(modal.hasAttribute('open'));
@@ -55,6 +56,7 @@ const {JSDOM}=require('jsdom');
  fail=true;await wait(3200);
  assert.equal(w.document.querySelector('.shell .score').textContent,'58%','temporary API failure preserves current recipe');
  w.id='two';w.auto.active=true;w.auto.spinsRemaining=20;w.phase='spining';w.dispatch('GameEvent:CREATE_CLOSE_SPIN_FLOW');
+ {const before=w.directSpins;w.dispatch('GameEvent:CREATE_SPIN_FLOW',{data:{earlySpin:true}});assert.equal(w.directSpins,before+1,'already accepted wager flow must complete even with alert open');}
  await wait(0);assert.equal(w.document.querySelector('.stop-state').textContent,'自動轉已停止');assert.equal(w.queued,0);
  // Incomplete board samples must not trigger a new alert using stale counts.
  w.document.querySelector('.toast .row').lastChild.click();w.id='three';w.__SCARAB_SIGNAL_DATA.sample=()=>({room:'3272',board:{symbol_09:3}});w.dispatch('GameEvent:CREATE_CLOSE_SPIN_FLOW');

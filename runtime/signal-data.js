@@ -94,6 +94,22 @@ function watchBoard(w,onComplete){
  function dispose(){for(const [c,methods]of installed)for(const [name,entry]of methods)if(c[name]===entry.wrapped)c[name]=entry.original;installed.clear();}
  refresh();return {refresh,dispose};
 }
+// Use the game's own pre-run decision point, before any wager is sent.
+// Discarding CREATE_SPIN_FLOW after earlySpin has reached the server corrupts
+// settlement state and can make the subsequent buy-feature request fail.
+function watchEarlyDecision(w,isEnabled){
+ let installed=null;
+ function refresh(){const game=modelInstance(w,'GameData');if(!game||typeof game.judgeIsOpenEarlyFlag!=='function')return;
+  if(installed?.game===game&&game.judgeIsOpenEarlyFlag===installed.wrapped)return;
+  const original=game.judgeIsOpenEarlyFlag;
+  const wrapped=function(...args){const result=original.apply(this,args);
+   if(isEnabled()&&!this.isSendOutEarlyFlag){this.isOpenEarlyFlag=false;this.earlyData=null;}
+   return result;
+  };installed={game,original,wrapped};game.judgeIsOpenEarlyFlag=wrapped;
+ }
+ function dispose(){if(installed&&installed.game.judgeIsOpenEarlyFlag===installed.wrapped)installed.game.judgeIsOpenEarlyFlag=installed.original;}
+ refresh();return {refresh,dispose};
+}
 function watchFreeFinish(w,onFinish){
  const installed=new Map();
  function refresh(){for(const n of nodes(w))for(const c of n.components||n._components||[]){
@@ -119,5 +135,5 @@ function sample(w){const list=nodes(w),b=readBoard(w,list),r=readRoom(w,list,b.b
 function packetRoom(packet,tables){if(!packet||typeof packet!=='object'||(packet.status!=null&&packet.status!==200))return null;if(!['initial','spin','closeSpin'].includes(packet.eventName))return null;const contexts=[packet,packet.engine,packet.slotTable,packet.engine?.slotTable,packet.currentSlotTable,packet.engine?.currentSlotTable];const values=[];for(const c of contexts){if(!c||typeof c!=='object'||Array.isArray(c))continue;for(const key of ['roomId','slotTableId','currentRoomId','currentSlotTableId']){const n=mappedRoom(c[key],tables);if(n)values.push(n);}for(const key of ['slotTableNumber','machineNumber','tableNumber','roomNumber','roomNo']){const n=normalizeRoom(c[key]);if(n)values.push(n);}}
  const unique=[...new Set(values)];return unique.length===1?unique[0]:null;
 }
-return {normalizeRoom,symbolId,validBoard,sample,packetRoom,roundState,autoState,watchBoard,watchFreeFinish,stopAuto};
+return {normalizeRoom,symbolId,validBoard,sample,packetRoom,roundState,autoState,watchBoard,watchEarlyDecision,watchFreeFinish,stopAuto};
 });

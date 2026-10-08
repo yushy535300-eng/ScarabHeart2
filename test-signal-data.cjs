@@ -88,3 +88,15 @@ const freeNode=node('freeResult');freeNode._components=[freePanel];
 const freeWatch=data.watchFreeFinish(world(node('Canvas',{},[freeNode])),()=>{assert.equal(returnedMain,true);freeEnded++;});
 assert.equal(freeEnded,0);assert.equal(freePanel.finishFreeGame(),'finished');assert.equal(freeEnded,1);freeWatch.dispose();
 console.log('PASS: free-game rotation event only after return to main game');
+
+// Prevent early wagers at the native decision; preserve already accepted ones.
+{
+ let enabled=true;const game={isSendOutEarlyFlag:false,earlyData:null,judgeIsOpenEarlyFlag(value){this.isOpenEarlyFlag=true;this.earlyData=value;return 17;}};
+ const original=game.judgeIsOpenEarlyFlag;const win={System:{get:name=>name.includes('GameData')?{default:game}:null}};
+ const watcher=data.watchEarlyDecision(win,()=>enabled);
+ assert.equal(game.judgeIsOpenEarlyFlag('next'),17);assert.equal(game.isOpenEarlyFlag,false);assert.equal(game.earlyData,null);
+ game.isSendOutEarlyFlag=true;game.judgeIsOpenEarlyFlag('accepted');assert.equal(game.isOpenEarlyFlag,true);assert.equal(game.earlyData,'accepted');
+ enabled=false;game.isSendOutEarlyFlag=false;game.judgeIsOpenEarlyFlag('native');assert.equal(game.isOpenEarlyFlag,true);
+ watcher.dispose();assert.equal(game.judgeIsOpenEarlyFlag,original);
+ console.log('PASS: native pre-run disabled before wager; accepted wager preserved; disabled detector restores native behavior');
+}
