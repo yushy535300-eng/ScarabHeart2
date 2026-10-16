@@ -7,14 +7,32 @@ process.on('uncaughtException', (error) => {
 'use strict';
 
 const express = require('express');
+const http = require('http');
 const { WebSocket, WebSocketServer } = require('ws');
+const { Pool } = require('pg');
 const { HttpsProxyAgent } = require('https-proxy-agent');
 const path = require('path');
 const crypto = require('crypto');
 const { adminPage } = require('./admin-page');
 const { authorizeWhitelist, listWhitelist, upsertWhitelist, setWhitelistEnabled, extendWhitelist, deleteWhitelist } = require('./whitelist');
+const { resolveWhitelistPlatform, readCurrentAccessIdentity } = require('./access-auth');
+const { registerUserPresence } = require('./server/user-presence');
 
 const app = express();
+const server = http.createServer(app);
+let presencePool = null;
+function getPool() {
+  const url = String(process.env.DATABASE_URL || '').trim();
+  if (!url) return null;
+  if (!/^postgres(ql)?:\/\//i.test(url)) throw new Error('DATABASE_URL 必須使用 PostgreSQL 連線網址');
+  if (!presencePool) {
+    presencePool = new Pool({
+      connectionString: url,
+      ssl: /localhost|127\.0\.0\.1/i.test(url) ? false : { rejectUnauthorized: false }
+    });
+  }
+  return presencePool;
+}
 const sessions = new Map();
 const recommendationProxyCache = new Map();
 const publicDir = path.join(__dirname, 'public');
@@ -118,9 +136,12 @@ app.post('/api/admin/whitelist/:id/delete-form',adminForm,requireAdmin,async(req
     adminRedirect(res,'授權已刪除');
   }catch(e){adminRedirect(res,`操作失敗：${String(e&&e.message||e)}`);}
 });
-app.post('/api/access/login',accessJson,async(req,res)=>{try{const username=String(req.body&&req.body.username||'').trim(),platform=String(req.body&&req.body.platform||'TZ').trim().toUpperCase();if(!username||!['TZ','OFA'].includes(platform))return res.status(400).json({success:false,reason:'invalid_request'});const access=await authorizeWhitelist(username,platform);if(!access.allowed)return res.status(403).json({success:false,reason:access.reason});const sessionId=crypto.randomUUID();accessSessions.set(sessionId,{username,platform,createdAt:Date.now()});res.json({success:true,sessionId});}catch(e){res.status(503).json({success:false,reason:'database_unavailable'});}});
-app.get('/api/access/check',async(req,res)=>{const id=String(req.query.sessionId||''),current=accessSessions.get(id);if(!current)return res.status(401).json({valid:false,reason:'session_invalid'});try{const access=await authorizeWhitelist(current.username,current.platform);if(!access.allowed){accessSessions.delete(id);return res.status(403).json({valid:false,reason:access.reason});}res.json({valid:true,reason:'ok'});}catch(e){res.status(503).json({valid:false,reason:'database_unavailable',temporary:true});}});
+app.post('/api/access/resolve',accessJson,async(req,res)=>{try{const username=String(req.body&&req.body.username||'').trim();const resolved=await resolveWhitelistPlatform(getPool(),username);if(!resolved.allowed)return res.status(resolved.reason==='database_unavailable'?503:403).json({success:false,reason:resolved.reason});res.json({success:true,platform:resolved.platform});}catch(_){res.status(503).json({success:false,reason:'database_unavailable'});}});
+app.post('/api/access/login',accessJson,async(req,res)=>{try{const username=String(req.body&&req.body.username||'').trim(),claimedPlatform=String(req.body&&req.body.platform||'').trim().toUpperCase();if(!username||!['','TZ','OFA'].includes(claimedPlatform))return res.status(400).json({success:false,reason:'invalid_request'});const resolved=await resolveWhitelistPlatform(getPool(),username);if(!resolved.allowed)return res.status(resolved.reason==='database_unavailable'?503:403).json({success:false,reason:resolved.reason});if(claimedPlatform&&claimedPlatform!==resolved.platform)return res.status(403).json({success:false,reason:'platform_mismatch'});const platform=resolved.platform;const access=await authorizeWhitelist(username,platform);if(!access.allowed)return res.status(403).json({success:false,reason:access.reason});const sessionId=crypto.randomUUID();accessSessions.set(sessionId,{username,platform,createdAt:Date.now()});res.json({success:true,sessionId,platform});}catch(_){res.status(503).json({success:false,reason:'database_unavailable'});}});
+app.get('/api/access/check',async(req,res)=>{const id=String(req.query.sessionId||''),current=accessSessions.get(id);if(!current)return res.status(401).json({valid:false,reason:'session_invalid'});try{const access=await authorizeWhitelist(current.username,current.platform);if(!access.allowed){accessSessions.delete(id);return res.status(403).json({valid:false,reason:access.reason});}res.json({valid:true,reason:'ok'});}catch(_){res.status(503).json({valid:false,reason:'database_unavailable',temporary:true});}});
 app.post('/api/access/logout',accessJson,(req,res)=>{const id=String(req.body&&req.body.sessionId||'');if(id)accessSessions.delete(id);res.json({success:true});});
+
+registerUserPresence(app,server,requireAdmin,{appId:'scarab-heart',publicOrigin:process.env.PRESENCE_PUBLIC_ORIGIN||'https://scarabheart2.onrender.com',getPool,readRiskTrackerIdentity:(db,sessionId)=>readCurrentAccessIdentity(db,accessSessions,sessionId)});
 app.get('/healthz', (_req, res) => {
   res.status(200).json({ ok: true, version: '3.17-moon-rabbit-and-thor' });
 });
@@ -643,7 +664,7 @@ setInterval(() => {
   }
 }, 30 * 60 * 1000).unref();
 
-const server = app.listen(process.env.PORT || 3000, '0.0.0.0', () => {
+server.listen(process.env.PORT || 3000, '0.0.0.0', () => {
   console.log('ScarabHeart game service listening on ' + (process.env.PORT || 3000));
 });
 const socketServer = new WebSocketServer({
@@ -682,6 +703,7 @@ function bridgeSockets(client, upstream) {
 server.on('upgrade', (req, socket, head) => {
   try {
     const requestUrl = String(req.url || '');
+    if (new URL(requestUrl, 'http://local').pathname === '/api/presence/ws') return;
     const match = requestUrl.match(/^\/__socket\/([a-f0-9]{24})(?:\?|$)/);
     const lobby = /^\/__lobby-socket(?:\?|$)/.test(requestUrl);
     const session = match ? sessions.get(match[1]) : null;

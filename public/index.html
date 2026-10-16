@@ -808,6 +808,11 @@ body.scarab-portrait #gameCenterView .game-card {
     #moreGames .provider-card .game-arrow{right:14px;bottom:12px;text-shadow:0 2px 8px #000}
     @media(max-width:560px){#moreGames .provider-card{width:min(100%,460px)!important;aspect-ratio:16/9!important;min-height:0!important}}
   </style>
+
+<style id="presence-notice-style">
+.login-presence-note{margin:6px 1px 0;color:#536d80;font-size:9px;line-height:1.35;text-align:center}
+@media(max-width:700px){#loginView .login-presence-note{margin:4px 0 0;font-size:7.5px;line-height:1.2;flex:0 0 auto}}
+</style>
 </head>
 <body>
   <main id="loginView" class="login-page">
@@ -817,13 +822,13 @@ body.scarab-portrait #gameCenterView .game-card {
     <section class="login-side">
       <div class="login-card">
         <div class="mobile-login-brand"><img src="logo.png" alt="聖甲之心"><div><div class="mobile-brand-en">SCARAB HEART</div><div class="mobile-brand-zh">聖甲之心</div></div></div>
-        <div class="online-row"><div class="brand-mini">SECURE ACCESS</div><div class="platform-wrap"><button id="platformPicker" class="platform-picker" type="button" aria-haspopup="true" aria-expanded="false"><span class="dot"></span><span id="platformPickerText">TZ ONLINE</span><span>⌄</span></button><div id="platformMenu" class="platform-menu hide"><button type="button" data-platform="TZ"><span class="dot"></span>TZ ONLINE</button><button type="button" data-platform="OFA"><span class="dot"></span>OFA ONLINE</button></div></div></div>
-        <div class="login-eyebrow">MEMBER LOGIN</div><h2 class="login-title">登入助手</h2><p class="login-sub">使用 TZ 或 OFA 帳號登入，進入聖甲之心遊戲中心。</p>
+        <div class="online-row"><div class="brand-mini">SECURE ACCESS</div><div class="platform-wrap"><div id="platformPicker" class="platform-picker" aria-label="TZ ONLINE"><span class="dot"></span><span id="platformPickerText">TZ ONLINE</span></div></div></div>
+        <div class="login-eyebrow">MEMBER LOGIN</div><h2 class="login-title">登入助手</h2><p class="login-sub">使用會員帳號登入，進入聖甲之心遊戲中心。</p>
         <div id="announce" class="announce"><img id="announceImg" class="announce-img" src="media/scarab-heart-launch.png" alt="聖甲之心 全新推出"><div id="announceTitle" class="announce-title">🔥 聖甲之心 正式登場 🛡️</div><div id="announceText" class="announce-text">全新遊戲現已開放！點擊遊戲，立即進入《聖甲之心》!!</div><a id="announceBtn" class="announce-btn hide" target="_blank" rel="noopener noreferrer"></a></div>
-        <select id="base" class="hide" aria-hidden="true"><option value="https://www.tz6868.cc">TZ</option><option value="https://www.ofa1188.net">OFA</option></select><select id="game" class="hide" aria-hidden="true"></select>
+        <select id="game" class="hide" aria-hidden="true"></select>
         <div class="field"><label for="u">帳號</label><div class="input-wrap"><input id="u" type="text" autocomplete="username" placeholder="請輸入帳號"><span class="input-icon">●</span></div></div>
         <div class="field"><label for="p">密碼</label><div class="input-wrap"><input id="p" type="password" autocomplete="current-password" placeholder="請輸入密碼"><button id="rfEye" class="input-icon eye" type="button" aria-label="顯示密碼">◉</button></div></div>
-        <div class="login-options"><label class="remember"><input id="r" type="checkbox">記住此帳號</label><span>加密連線</span></div><button id="loginBtn" class="primary" type="button">登入聖甲之心</button><div id="err" class="err" role="alert"></div>
+        <div class="login-options"><label class="remember"><input id="r" type="checkbox">記住此帳號</label><span>加密連線</span></div><button id="loginBtn" class="primary" type="button">登入聖甲之心</button><div id="err" class="err" role="alert"></div><p class="login-presence-note" role="status">登入後僅同步匿名化的在線狀態；不記錄捲動、IP、密碼或遊戲網址。</p>
         <div class="quick-links"><button id="usageBtn" type="button">使用說明</button><button id="featureBtn" type="button">功能介紹</button><button id="statusBtn" type="button">系統狀態</button></div><div class="secure">SECURE CONNECTION · <span class="seth-ver">v2.53</span></div>
       </div>
     </section>
@@ -836,10 +841,10 @@ body.scarab-portrait #gameCenterView .game-card {
 
   <section id="gameView" class="hide" aria-label="遊戲畫面"><div id="roomPickToast" class="hide"><div class="pick-label">你挑選的是</div><div id="roomPickNumber" class="pick-number">#----</div><div id="roomPickState" class="pick-state">正在定位機台中…</div></div><iframe id="gameFrame" title="聖甲之心遊戲" allow="autoplay; fullscreen; clipboard-read; clipboard-write" referrerpolicy="strict-origin-when-cross-origin"></iframe><div id="gameLoading" class="game-loading"><div class="game-loading-inner"><img src="logo.png" alt=""><div class="loader-ring"></div><div id="gameLoadStatus">正在連線遊戲…</div></div></div><button id="gameExit" class="game-exit" type="button">返回</button></section>
 
-  <section id="usageView" class="info-view hide"><div class="info-shell"><div class="info-head"><button class="info-back" data-close-info type="button">‹</button><h2>使用說明</h2></div><div class="info-item"><b>1. 登入</b><p>選擇 TZ 或 OFA，輸入娛樂城帳號密碼。</p></div><div class="info-item"><b>2. 選擇遊戲</b><p>ATG 遊戲會先進入推薦機台頁，可選推薦機台、輸入機台號碼，或進入大廳自行選擇。月兔與雷神會直接開啟遊戲，不經過 ATG 選房頁。</p></div><div class="info-item"><b>3. 使用懸浮工具</b><p>遊戲載入後，依遊戲顯示的聖甲之心懸浮工具查看本場狀態及使用支援的控制功能。拖曳標頭可移動工具，點標頭的收合按鈕可縮小。</p></div><div class="info-item"><b>4. 返回遊戲中心</b><p>點遊戲畫面右上角「返回」，即可回到遊戲清單。</p></div></div></section>
+  <section id="usageView" class="info-view hide"><div class="info-shell"><div class="info-head"><button class="info-back" data-close-info type="button">‹</button><h2>使用說明</h2></div><div class="info-item"><b>1. 登入</b><p>輸入會員帳號與密碼登入。</p></div><div class="info-item"><b>2. 選擇遊戲</b><p>ATG 遊戲會先進入推薦機台頁，可選推薦機台、輸入機台號碼，或進入大廳自行選擇。月兔與雷神會直接開啟遊戲，不經過 ATG 選房頁。</p></div><div class="info-item"><b>3. 使用懸浮工具</b><p>遊戲載入後，依遊戲顯示的聖甲之心懸浮工具查看本場狀態及使用支援的控制功能。拖曳標頭可移動工具，點標頭的收合按鈕可縮小。</p></div><div class="info-item"><b>4. 返回遊戲中心</b><p>點遊戲畫面右上角「返回」，即可回到遊戲清單。</p></div></div></section>
   <section id="featureView" class="info-view hide"><div class="info-shell"><div class="info-head"><button class="info-back" data-close-info type="button">‹</button><h2>功能介紹</h2></div><div class="info-item"><b>ATG 遊戲</b><p>推薦機台、指定機台進入、遊戲內自動定位，以及遊戲支援的倍率、本場狀態和懸浮控制。</p></div><div class="info-item"><b>月兔</b><p>直接進入月兔遊戲；懸浮工具顯示本場輸贏、餘額、單轉結果欄位與特色計量，並提供遊戲支援的倍率。單轉提示會依遊戲實際回傳內容顯示。</p></div><div class="info-item"><b>雷神</b><p>從 TZ 的雷神入口直接載入遊戲；遊戲支援的狀態、倍率與懸浮操作會在遊戲頁提供。雷神與 ATG 使用不同遊戲入口，不會顯示 ATG 推薦房間。</p></div><div class="info-item"><b>你的聖甲之心介面</b><p>遊戲卡片、網站流程和程式標示使用聖甲之心設計。</p></div></div></section>
 
-  <script src="seth-eye-api.js"></script><script src="seth-errors.js"></script><script src="web-iab-bridge.js"></script><script src="app.js"></script>
+  <script src="seth-eye-api.js"></script><script src="seth-errors.js"></script><script src="web-iab-bridge.js"></script><script src="user-presence-client.js"></script><script src="app.js"></script>
   <script>
     (function(){var eye=document.getElementById('rfEye'),pass=document.getElementById('p');if(eye&&pass)eye.addEventListener('click',function(){pass.type=pass.type==='password'?'text':'password'});function info(id){document.getElementById('loginView').classList.add('hide');document.getElementById(id).classList.remove('hide')}document.getElementById('usageBtn').onclick=function(){info('usageView')};document.getElementById('featureBtn').onclick=function(){info('featureView')};document.querySelectorAll('[data-close-info]').forEach(function(b){b.onclick=function(){b.closest('.info-view').classList.add('hide');document.getElementById('loginView').classList.remove('hide')}});document.getElementById('statusBtn').onclick=async function(){var out=document.getElementById('err');out.textContent='連線檢查中…';try{var r=await fetch('/healthz',{cache:'no-store'}),j=await r.json();out.style.color='#70e7b0';out.textContent=r.ok&&j.ok?'系統連線正常 · '+j.version:'系統連線異常'}catch(_){out.style.color='#ff7e89';out.textContent='系統連線異常，請稍後重試'}}})();
   </script>

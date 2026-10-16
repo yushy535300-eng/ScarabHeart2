@@ -56,9 +56,11 @@
     return !!raw && !/^__machine__/i.test(raw) && /^\d+$/.test(roomIdSuffix(raw));
   }
 
+  const VISIBLE_PLATFORM = 'TZ';
   let session = null;
   let accessWatchTimer = null;
-  let loginPlatform = 'TZ';
+  let resolvedLoginPlatform = 'TZ';
+  let presenceConnection = null;
   let boards = null;
   let activeBoard = 'composite';
   let pendingPick = null;
@@ -141,7 +143,7 @@
         body: JSON.stringify(body)
       });
     } catch (error) {
-      const e = new Error('無法連線到 ' + loginPlatform + '，請確認網路後重試');
+      const e = new Error('無法連線到會員服務，請確認網路後重試');
       e.cause = error;
       throw e;
     }
@@ -158,7 +160,7 @@
   }
 
   function accessReasonText(reason) {
-    const map = { not_whitelisted:'此帳號目前無使用資格', disabled:'此帳號授權已停用', expired:'此帳號授權已到期', database_unavailable:'授權服務暫時無法使用', session_invalid:'授權工作階段已失效，請重新登入' };
+    const map = { not_whitelisted:'此帳號目前無使用資格', disabled:'此帳號授權已停用', expired:'此帳號授權已到期', database_unavailable:'授權服務暫時無法使用', session_invalid:'授權工作階段已失效，請重新登入', platform_ambiguous:'此帳號需要由管理員確認登入設定', platform_mismatch:'帳號登入設定已變更，請重新登入' };
     return map[String(reason||'')] || '白名單驗證失敗';
   }
   async function localAccess(path, body) {
@@ -167,6 +169,9 @@
   }
   function stopAccessWatch(){if(accessWatchTimer)clearInterval(accessWatchTimer);accessWatchTimer=null;}
   function startAccessWatch(){stopAccessWatch();accessWatchTimer=setInterval(async()=>{const current=session;if(!current||!current.accessSessionId)return;try{const r=await localAccess('/api/access/check?sessionId='+encodeURIComponent(current.accessSessionId));if(r.response.status>=500||r.data.temporary)return;if(!r.data.valid){const message=accessReasonText(r.data.reason);logout(true);$('err').textContent=message;}}catch(_){}},5000);}
+  function stopPresence(){if(presenceConnection&&presenceConnection.dispose)presenceConnection.dispose();presenceConnection=null;}
+  function startPresence(accessSessionId){stopPresence();if(!accessSessionId||!window.ScarabPresence||!window.ScarabPresence.connectUserPresence)return;presenceConnection=window.ScarabPresence.connectUserPresence(accessSessionId,()=>false);}
+  async function resolveLoginPlatform(account){const r=await localAccess('/api/access/resolve',{username:account});if(!r.response.ok||!r.data.success)throw new Error(accessReasonText(r.data.reason));const platform=String(r.data.platform||'').toUpperCase();if(platform!=='TZ'&&platform!=='OFA')throw new Error('帳號登入設定無效');return platform;}
 
   function directGameUrlOnce(lobbyToken, gameCode, timeoutMs) {
     return new Promise((resolve, reject) => {
@@ -256,13 +261,10 @@
     throw lastError || new Error('ATG 遊戲連線失敗');
   }
 
-  function setPlatform(value) {
-    loginPlatform = value === 'OFA' ? 'OFA' : 'TZ';
-    $('platformPickerText').textContent = loginPlatform + ' ONLINE';
-    $('base').value = loginPlatform === 'OFA' ? 'https://www.ofa1188.net' : 'https://www.tz6868.cc';
-    $('platformMenu').classList.add('hide');
-    $('platformPicker').setAttribute('aria-expanded', 'false');
-    $('err').textContent = '';
+  function setResolvedLoginPlatform(value) {
+    resolvedLoginPlatform = value === 'OFA' ? 'OFA' : 'TZ';
+    // The label is deliberately a fixed TZ product label, not a routing value.
+    $('platformPickerText').textContent = VISIBLE_PLATFORM + ' ONLINE';
   }
 
   function showOnly(id) {
@@ -310,7 +312,7 @@
     showOnly('gameCenterView');
     const helper = $('gcHelp');
     if (helper) helper.textContent = '選擇 ATG 遊戲後可查看推薦機台；其他平台請點「更多遊戲」。';
-    $('gcWho').textContent = '● ' + (session ? session.platform : loginPlatform) + ' ONLINE';
+    $('gcWho').textContent = '● ' + VISIBLE_PLATFORM + ' ONLINE';
     renderGames();
     resetShellLayout();
     requestAnimationFrame(resetShellLayout);
@@ -348,13 +350,17 @@
     $('err').style.color = '';
     $('err').textContent = '';
     if (!account || !password) {
-      $('err').textContent = '請輸入 ' + loginPlatform + ' 帳號與密碼';
+      $('err').textContent = '請輸入帳號與密碼';
       return;
     }
     button.disabled = true;
     button.textContent = '登入中…';
     try {
-      const base = loginPlatform === 'OFA' ? 'https://www.ofa1188.net' : 'https://www.tz6868.cc';
+      // Routing is resolved by the backend's active whitelist; it is never
+      // inferred from the fixed TZ display label.
+      const actualPlatform = await resolveLoginPlatform(account);
+      setResolvedLoginPlatform(actualPlatform);
+      const base = actualPlatform === 'OFA' ? 'https://www.ofa1188.net' : 'https://www.tz6868.cc';
       const result = await postJson(base + '/api/v1/login', {
         username: account,
         password,
@@ -362,11 +368,14 @@
       });
       const token = result && result.data && result.data.token;
       if (!token) throw new Error((result && result.message) || '帳號或密碼錯誤');
-      const access = await localAccess('/api/access/login', { username: account, platform: loginPlatform });
+      const access = await localAccess('/api/access/login', { username: account, platform: actualPlatform });
       if (!access.response.ok || !access.data.success || !access.data.sessionId) throw new Error(accessReasonText(access.data.reason));
-      session = { base, token, account, password, platform: loginPlatform, game: '', accessSessionId: access.data.sessionId };
+      const validatedPlatform = String(access.data.platform || actualPlatform).toUpperCase();
+      if (validatedPlatform !== actualPlatform) throw new Error(accessReasonText('platform_mismatch'));
+      session = { base, token, account, password, platform: validatedPlatform, game: '', accessSessionId: access.data.sessionId };
       startAccessWatch();
-      if ($('r').checked) localStorage.setItem('scarab_login', JSON.stringify({ platform: loginPlatform, account }));
+      startPresence(access.data.sessionId);
+      if ($('r').checked) localStorage.setItem('scarab_login', JSON.stringify({ account }));
       else localStorage.removeItem('scarab_login');
       showGameCenter();
       refreshMember();
@@ -374,6 +383,7 @@
         Promise.resolve(SethEyeAPI.bindLogin(account)).then(refreshMember).catch(error => log('會員資料暫時無法同步', error && error.message));
       }
     } catch (error) {
+      stopPresence();
       session = null;
       $('err').textContent = error && error.message ? error.message : '登入失敗，請稍後重試';
     } finally {
@@ -386,6 +396,7 @@
     gameOpenSerial++;
     if (window.ScarabWebLauncher) ScarabWebLauncher.close();
     stopAccessWatch();
+    stopPresence();
     const accessSessionId = session && session.accessSessionId;
     if (accessSessionId) localAccess('/api/access/logout', { sessionId: accessSessionId }).catch(() => null);
     session = null;
@@ -1400,13 +1411,6 @@
     box.classList.remove('hide');
   }
 
-  $('platformPicker').onclick = function () {
-    $('platformMenu').classList.toggle('hide');
-    this.setAttribute('aria-expanded', $('platformMenu').classList.contains('hide') ? 'false' : 'true');
-  };
-  document.querySelectorAll('#platformMenu [data-platform]').forEach(button => {
-    button.onclick = () => setPlatform(button.dataset.platform);
-  });
   document.querySelectorAll('.board-tab').forEach(button => {
     button.onclick = () => { activeBoard = button.dataset.k; renderBoard(); };
   });
@@ -1459,7 +1463,6 @@
   try {
     const saved = JSON.parse(localStorage.getItem('scarab_login') || 'null');
     if (saved && saved.account) {
-      setPlatform(saved.platform);
       $('u').value = saved.account;
       $('r').checked = true;
     }
