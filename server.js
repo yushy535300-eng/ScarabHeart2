@@ -17,6 +17,7 @@ const { adminPage } = require('./admin-page');
 const { authorizeWhitelist, listWhitelist, upsertWhitelist, setWhitelistEnabled, extendWhitelist, deleteWhitelist } = require('./whitelist');
 const { resolveWhitelistPlatform, readCurrentAccessIdentity } = require('./access-auth');
 const { registerUserPresence } = require('./server/user-presence');
+const { registerAdminAuditReader } = require('./server/admin-audit-reader');
 
 const app = express();
 const server = http.createServer(app);
@@ -101,6 +102,8 @@ const adminForm = express.urlencoded({ extended: true, limit: '1mb' });
 const accessJson = express.json({ limit: '256kb' });
 function adminToken(req){const h=String(req.headers['x-admin-token']||'');if(h)return h;const c=String(req.headers.cookie||'');const m=c.match(/(?:^|;\s*)scarab_admin_token=([^;]+)/);return m?decodeURIComponent(m[1]):'';}
 function requireAdmin(req,res,next){const t=adminToken(req);if(!t||!adminSessions.has(t))return res.status(401).json({error:'管理員登入已失效'});next();}
+// Read-only audit routes reuse this site's existing admin session; no cross-site session is accepted.
+registerAdminAuditReader(app,requireAdmin,{getPool});
 function adminRedirect(res,msg=''){res.redirect(303,'/admin'+(msg?'?msg='+encodeURIComponent(msg):''));}
 app.get('/admin',async(req,res)=>{res.set('Cache-Control','no-store, no-cache, must-revalidate');const t=adminToken(req),logged=!!t&&adminSessions.has(t);if(!logged)return res.type('html').send(adminPage(false));let items=[],dbError='';try{items=await listWhitelist();}catch(e){dbError=String(e&&e.message||'讀取失敗');}res.type('html').send(adminPage(true,'',items,String(req.query.msg||''),dbError));});
 app.post('/api/admin/login',adminForm,(req,res)=>{const expected=String(process.env.ADMIN_PASSWORD||'').trim(),supplied=String(req.body&&req.body.password||'').trim();if(!expected)return res.status(503).type('html').send(adminPage(false,'Render 尚未設定 ADMIN_PASSWORD'));if(supplied!==expected)return res.status(401).type('html').send(adminPage(false,'管理員密碼錯誤'));const token=crypto.randomUUID();adminSessions.add(token);res.set('Set-Cookie',`scarab_admin_token=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=28800${process.env.NODE_ENV==='production'?'; Secure':''}`);adminRedirect(res);});

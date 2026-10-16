@@ -27,7 +27,7 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
-// ../../mt_project_inspect/MT-Assistant-Web-V3-main/server/user-presence.ts
+// server/user-presence.ts
 var user_presence_exports = {};
 __export(user_presence_exports, {
   ensureUserPresence: () => ensureUserPresence,
@@ -158,11 +158,9 @@ function registerUserPresence(app, server, requireAdmin, deps = {}) {
           `DELETE FROM autobac_user_presence
            WHERE last_seen_at <= NOW() - INTERVAL '${LEASE_TTL_SECONDS} seconds'`
         );
-        const result = await db.query(`SELECT
-          COUNT(*)::int AS online_accounts,
-          COUNT(*) FILTER (WHERE account.running)::int AS running_accounts
-          FROM (
-            SELECT p.platform, p.username_key, BOOL_OR(p.running) AS running
+        const result = await db.query(`WITH eligible_presence AS (
+            SELECT p.app_id, p.platform, p.username_key,
+              BOOL_OR(p.running AND p.app_id='autobac') AS running
             FROM autobac_user_presence p
             WHERE p.last_seen_at > NOW() - INTERVAL '${LEASE_TTL_SECONDS} seconds'
               AND EXISTS (
@@ -172,15 +170,40 @@ function registerUserPresence(app, server, requireAdmin, deps = {}) {
                   AND w.enabled=TRUE
                   AND (w.expires_at IS NULL OR w.expires_at>NOW())
               )
-            GROUP BY p.platform, p.username_key
-          ) account`);
-        const row = result.rows?.[0] || {};
+            GROUP BY p.app_id, p.platform, p.username_key
+          )
+          SELECT NULL::text AS app_id,
+            COUNT(DISTINCT (platform, username_key))::int AS online_accounts,
+            COUNT(DISTINCT (platform, username_key)) FILTER (WHERE running)::int AS running_accounts
+          FROM eligible_presence
+          UNION ALL
+          SELECT app_id, COUNT(*)::int AS online_accounts,
+            COUNT(*) FILTER (WHERE running)::int AS running_accounts
+          FROM eligible_presence GROUP BY app_id`);
+        const rows = result.rows || [];
+        const row = rows.find((value) => value.app_id == null) || {};
+        const onlineAccounts = asCount(row.online_accounts);
+        const runningAccounts = asCount(row.running_accounts);
+        if (runningAccounts > onlineAccounts) throw new Error("invalid_count");
+        const applications = [
+          { appId: "autobac", name: "AutoBac" },
+          { appId: "baccarat-helper", name: "\u767E\u5BB6\u8F14\u52A9" },
+          { appId: "scarab-heart", name: "\u8056\u7532\u4E4B\u5FC3" }
+        ].map((application) => {
+          const site = rows.find((value) => value.app_id === application.appId);
+          const online = site ? asCount(site.online_accounts) : 0;
+          const running = site ? asCount(site.running_accounts) : 0;
+          if (running > online || online > onlineAccounts) throw new Error("invalid_count");
+          return { ...application, onlineAccounts: online, runningAccounts: running };
+        });
         return res.json({
           ok: true,
           scope: "shared-whitelist",
           appId,
-          onlineAccounts: asCount(row.online_accounts),
-          runningAccounts: asCount(row.running_accounts),
+          schemaVersion: 2,
+          onlineAccounts,
+          runningAccounts,
+          applications,
           updatedAt: new Date(now()).toISOString(),
           disconnectDetectionSeconds: 20
         });
