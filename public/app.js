@@ -3,7 +3,7 @@
 
   const $ = id => document.getElementById(id);
   const log = (...args) => { try { console.log('[ScarabHeart]', ...args); } catch (_) {} };
-  const APP_VERSION = 'v3.2.22-atg-loading-fix';
+  const APP_VERSION = 'v3.2.23-whitelist-logout';
   const GAMES = [
     ['golden-seth', '戰神賽特2 覺醒之力', 'media/game2.png'],
     ['egyptian-mythology', '戰神賽特', 'media/game8.png'],
@@ -59,6 +59,7 @@
   const VISIBLE_PLATFORM = 'TZ';
   let session = null;
   let accessWatchTimer = null;
+  let accessWatchCheck = null;
   let resolvedLoginPlatform = 'TZ';
   let presenceConnection = null;
   let boards = null;
@@ -167,8 +168,58 @@
     const response = await fetch(path,{method:body?'POST':'GET',credentials:'same-origin',cache:'no-store',headers:body?{'Accept':'application/json','Content-Type':'application/json'}:{'Accept':'application/json'},body:body?JSON.stringify(body):undefined});
     let data={}; try{data=await response.json()}catch(_){} return {response,data:data||{}};
   }
-  function stopAccessWatch(){if(accessWatchTimer)clearInterval(accessWatchTimer);accessWatchTimer=null;}
-  function startAccessWatch(){stopAccessWatch();accessWatchTimer=setInterval(async()=>{const current=session;if(!current||!current.accessSessionId)return;try{const r=await localAccess('/api/access/check?sessionId='+encodeURIComponent(current.accessSessionId));if(r.response.status>=500||r.data.temporary)return;if(!r.data.valid){const message=accessReasonText(r.data.reason);logout(true);$('err').textContent=message;}}catch(_){}},5000);}
+  function stopAccessWatch() {
+    if (accessWatchTimer) clearInterval(accessWatchTimer);
+    accessWatchTimer = null;
+    if (accessWatchCheck) {
+      window.removeEventListener('focus', accessWatchCheck);
+      window.removeEventListener('online', accessWatchCheck);
+      document.removeEventListener('visibilitychange', accessWatchCheck);
+    }
+    accessWatchCheck = null;
+  }
+
+  function showAccessRevoked(reason) {
+    const message = accessReasonText(reason) + '，已自動登出。請儲值後通知客服開通。';
+    logout(true);
+    $('p').value = '';
+    $('err').style.color = '#ff7e89';
+    $('err').textContent = message;
+    const old = $('accessRevokedDialog');
+    if (old) old.remove();
+    const backdrop = document.createElement('div');
+    backdrop.id = 'accessRevokedDialog';
+    backdrop.style.cssText = 'position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(0,0,0,.76)';
+    backdrop.innerHTML = '<section role="alertdialog" aria-modal="true" aria-labelledby="accessRevokedTitle" aria-describedby="accessRevokedMessage" style="width:100%;max-width:360px;padding:28px 24px;border:1px solid #c99b48;border-radius:20px;background:#111b20;color:#f6e5b4;text-align:center;box-shadow:0 16px 60px #0009"><h2 id="accessRevokedTitle" style="margin:0 0 14px;font-size:21px">使用權限已關閉</h2><p id="accessRevokedMessage" style="margin:0 0 24px;color:#ff9b9b;font-size:16px;line-height:1.8">已自動登出並返回登入畫面。<br>請儲值後通知客服開通。</p><button type="button" style="width:100%;min-height:46px;border:0;border-radius:12px;background:#c99b48;color:#171714;font-size:16px;font-weight:700;cursor:pointer">我知道了</button></section>';
+    const button = backdrop.querySelector('button');
+    button.onclick = () => { backdrop.remove(); $('p').focus(); };
+    document.body.appendChild(backdrop);
+    button.focus();
+  }
+
+  function startAccessWatch() {
+    stopAccessWatch();
+    const current = session;
+    let busy = false;
+    const check = async () => {
+      if (busy || !current || session !== current || !current.accessSessionId) return;
+      busy = true;
+      try {
+        const r = await localAccess('/api/access/check?sessionId=' + encodeURIComponent(current.accessSessionId));
+        if (session !== current || accessWatchCheck !== check) return;
+        if (r.response.status >= 500 || r.data.temporary || r.data.reason === 'database_unavailable') return;
+        if (r.data.valid === false) showAccessRevoked(r.data.reason);
+      } catch (_) {
+        // Temporary connection errors are not a confirmed whitelist revocation.
+      } finally { busy = false; }
+    };
+    accessWatchCheck = check;
+    window.addEventListener('focus', check);
+    window.addEventListener('online', check);
+    document.addEventListener('visibilitychange', check);
+    accessWatchTimer = setInterval(check, 2000);
+    check();
+  }
   function stopPresence(){if(presenceConnection&&presenceConnection.dispose)presenceConnection.dispose();presenceConnection=null;}
   function startPresence(accessSessionId){stopPresence();if(!accessSessionId||!window.ScarabPresence||!window.ScarabPresence.connectUserPresence)return;presenceConnection=window.ScarabPresence.connectUserPresence(accessSessionId,()=>false);}
   async function resolveLoginPlatform(account){const r=await localAccess('/api/access/resolve',{username:account});if(!r.response.ok||!r.data.success)throw new Error(accessReasonText(r.data.reason));const platform=String(r.data.platform||'').toUpperCase();if(platform!=='TZ'&&platform!=='OFA')throw new Error('帳號登入設定無效');return platform;}
@@ -412,6 +463,8 @@
 
   function logout(silent) {
     gameOpenSerial++;
+    boardLoadSerial++;
+    stopRecommendationProbe();
     if (window.ScarabWebLauncher) ScarabWebLauncher.close();
     stopAccessWatch();
     stopPresence();
