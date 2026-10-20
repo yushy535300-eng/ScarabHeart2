@@ -51,13 +51,13 @@ test('generated script actually routes assets, manifest and WebSocket', () => {
   context.window = context;
   vm.runInNewContext([...boot({kind: 'atg', cfg: {}}, false).matchAll(/<script>([\s\S]*?)<\/script>/g)][0][1], context);
   context.fetch('src/settings.json');
-  assert.equal(calls.pop()[1], new URL('src/settings.json', upstream).href);
+  assert.equal(calls.pop()[1], `${local}/__game/${sid}/egames/${golden.checksum}/game/src/settings.json`);
   context.fetch('/slotFramework/manifest.json?v=1');
-  assert.equal(calls.pop()[1], `${local}/slotFramework/manifest.json?v=1`);
+  assert.equal(calls.pop()[1], `${local}/__game/${sid}/slotFramework/manifest.json?v=1`);
   context.fetch('/slotFramework/hash/index.js');
-  assert.equal(calls.pop()[1], 'https://play.godeebxp.com/slotFramework/hash/index.js');
+  assert.equal(calls.pop()[1], `${local}/__game/${sid}/slotFramework/hash/index.js`);
   context.fetch('https://play.godeebxp.com/api/example');
-  assert.ok(calls.pop()[1].startsWith(`${local}/__game/${sid}/__remote?url=`));
+  assert.equal(calls.pop()[1], `${local}/__game/${sid}/api/example`);
   new context.WebSocket('wss://socket.godeebxp.com/socket.io/?EIO=3&transport=websocket');
   assert.ok(calls.pop()[1].startsWith(`wss://scarab.example/__socket/${sid}?url=`));
   assert.equal(context.WebSocket.OPEN, 1);
@@ -77,7 +77,7 @@ test('HAR lobby exchange updates stale metadata and preserves redirected game UR
     frames = [];
   }
   const ctx = vm.createContext({WebSocket: WS, GAME_META, URL, setTimeout, clearTimeout});
-  vm.runInContext(app.slice(app.indexOf('  function directGameUrlOnce('), app.indexOf('  async function directGameUrl(')), ctx);
+  vm.runInContext(app.slice(app.indexOf('  function directGameUrlOnce('), app.indexOf('  function directGameUrl(')), ctx);
   const promise = ctx.directGameUrlOnce('TEST_LOBBY_TOKEN', golden.code, 1000);
   socket.onmessage({data: '40'});
   assert.match(socket.frames[0], /^420\["lobbyInitial"/);
@@ -94,7 +94,7 @@ test('wrong-game redirect remains rejected', async () => {
   let socket;
   class WS { static OPEN = 1; readyState = 1; constructor() { socket = this; } send() {} close() {} }
   const ctx = vm.createContext({WebSocket: WS, GAME_META: {[golden.code]: {}}, URL, setTimeout, clearTimeout});
-  vm.runInContext(app.slice(app.indexOf('  function directGameUrlOnce('), app.indexOf('  async function directGameUrl(')), ctx);
+  vm.runInContext(app.slice(app.indexOf('  function directGameUrlOnce('), app.indexOf('  function directGameUrl(')), ctx);
   const promise = ctx.directGameUrlOnce('TEST', golden.code, 1000);
   socket.onmessage({data: '40'});
   socket.onmessage({data: '430' + JSON.stringify([{content: {games: catalogue}}])});

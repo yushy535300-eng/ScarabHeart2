@@ -3,7 +3,7 @@
 
   const $ = id => document.getElementById(id);
   const log = (...args) => { try { console.log('[ScarabHeart]', ...args); } catch (_) {} };
-  const APP_VERSION = 'v3.18.44-free-only-spoiler';
+  const APP_VERSION = 'v3.2.22-atg-loading-fix';
   const GAMES = [
     ['golden-seth', '戰神賽特2 覺醒之力', 'media/game2.png'],
     ['egyptian-mythology', '戰神賽特', 'media/game8.png'],
@@ -68,11 +68,10 @@
   let gameOpenSerial = 0;
   let roomSessionSerial = 0;
   let recommendationProbe = null;
+  let recommendationEntryAbort = null;
+  let atgEntryQueue = Promise.resolve();
   let recommendationProbeSerial = 0;
   let currentRoomSessionId = '';
-  let preparedGameEntry = null;
-  let preparedGameEntrySerial = 0;
-  const PREPARED_ENTRY_MS = 20000;
   const boardCache = Object.create(null);
   const BOARD_CACHE_MS = 15000;
   const REAL_BOARD_STORAGE_MS = 5 * 60 * 1000;
@@ -130,13 +129,14 @@
     return value;
   }
 
-  async function postJson(url, body, token) {
+  async function postJson(url, body, token, signal) {
     const headers = { Accept: 'application/json', 'Content-Type': 'application/json' };
     if (token) headers.Authorization = 'Bearer ' + token;
     let response;
     try {
       response = await fetch(url, {
         method: 'POST',
+        signal,
         mode: 'cors',
         credentials: 'omit',
         headers,
@@ -173,7 +173,7 @@
   function startPresence(accessSessionId){stopPresence();if(!accessSessionId||!window.ScarabPresence||!window.ScarabPresence.connectUserPresence)return;presenceConnection=window.ScarabPresence.connectUserPresence(accessSessionId,()=>false);}
   async function resolveLoginPlatform(account){const r=await localAccess('/api/access/resolve',{username:account});if(!r.response.ok||!r.data.success)throw new Error(accessReasonText(r.data.reason));const platform=String(r.data.platform||'').toUpperCase();if(platform!=='TZ'&&platform!=='OFA')throw new Error('帳號登入設定無效');return platform;}
 
-  function directGameUrlOnce(lobbyToken, gameCode, timeoutMs) {
+  function directGameUrlOnce(lobbyToken, gameCode, timeoutMs, signal) {
     return new Promise((resolve, reject) => {
       let ws;
       let settled = false;
@@ -186,10 +186,16 @@
         if (settled) return;
         settled = true;
         clearTimeout(timer);
+        if (signal) signal.removeEventListener('abort', onAbort);
         try { ws && ws.close(); } catch (_) {}
         fn(value);
       };
+      const onAbort = () => finish(reject, new Error('probe-cancelled'));
       const timer = setTimeout(() => finish(reject, new Error('ATG 遊戲連線逾時')), timeoutMs || 12000);
+      if (signal) {
+        signal.addEventListener('abort', onAbort, { once: true });
+        if (signal.aborted) { onAbort(); return; }
+      }
       try {
         ws = new WebSocket('wss://socket.godeebxp.com/socket.io/?EIO=3&transport=websocket');
       } catch (error) {
@@ -203,6 +209,7 @@
         return id;
       };
       ws.onmessage = event => {
+        if (settled) return;
         const message = String(event.data || '');
         if (message === '2') { try { ws.send('3'); } catch (_) {} return; }
         if (message === '40') {
@@ -215,6 +222,12 @@
         let result = null;
         try { result = JSON.parse(match[2]); } catch (_) {}
         const packet = result && result[0];
+        if ((id === initialAck || id === playAck) && packet && packet.status != null && Number(packet.status) !== 200) {
+          const error = new Error(String(packet.message || 'ATG 遊戲入口驗證失敗'));
+          error.atgStatus = Number(packet.status);
+          finish(reject, error);
+          return;
+        }
         if (packet && packet.token) token = packet.token;
         if (id === initialAck && playAck < 0) {
           // HAR shows the canonical game code in lobbyInitial. Resolve against it
@@ -261,17 +274,9 @@
     });
   }
 
-  async function directGameUrl(lobbyToken, gameCode) {
-    let lastError = null;
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        return await directGameUrlOnce(lobbyToken, gameCode, attempt === 0 ? 12000 : 9000);
-      } catch (error) {
-        lastError = error;
-        if (attempt === 0) await new Promise(resolve => setTimeout(resolve, 180));
-      }
-    }
-    throw lastError || new Error('ATG 遊戲連線失敗');
+  function directGameUrl(lobbyToken, gameCode, signal) {
+    // A consumed/expired lobby token must never be retried on another socket.
+    return directGameUrlOnce(lobbyToken, gameCode, 12000, signal);
   }
 
   function setResolvedLoginPlatform(value) {
@@ -427,8 +432,7 @@
       const openSerial = gameOpenSerial + 1;
       session.game = code;
       stopRecommendationProbe();
-      clearPreparedGameEntry();
-      gameOpenSerial++;
+        gameOpenSerial++;
       const helper = $('moreHelp');
       if (helper) helper.textContent = '正在連線' + providerGame[1] + '…';
       const buttons = Array.from(document.querySelectorAll('#moreGames .game-card'));
@@ -469,7 +473,6 @@
       return;
     }
     if (!GAME_META[code]) return;
-    clearPreparedGameEntry();
     stopRecommendationProbe();
     // Invalidate every async result belonging to the previous game first.
     boardLoadSerial++;
@@ -502,6 +505,8 @@
   }
 
   function stopRecommendationProbe() {
+    if (recommendationEntryAbort) recommendationEntryAbort.abort();
+    recommendationEntryAbort = null;
     const p = recommendationProbe;
     recommendationProbe = null;
     recommendationProbeSerial++;
@@ -512,80 +517,57 @@
     try { if (p.reject) p.reject(new Error('probe-cancelled')); } catch (_) {}
   }
 
-  async function requestAtgLobbyUrl() {
-    if (!session) throw new Error('尚未登入');
+  async function requestAtgLobbyUrl(signal, owner = session) {
+    if (!owner) throw new Error('尚未登入');
+    // Let an in-flight TZ request finish before starting the next one; aborting
+    // HTTP locally does not guarantee the platform stopped issuing its token.
     const request = async token => {
-      const body = session.platform === 'OFA'
+      const body = owner.platform === 'OFA'
         ? { game_return_url: 'https://www.ofa1188.net', game_kind: 'SLOT', game_device: 'Desktop', game_money: '' }
-        : { game_return_url: session.base, game_kind: '', game_type: '', game_device: 'Desktop' };
-      const result = await postJson(session.base + '/api/v2/game/ATG/login', body, token);
+        : { game_return_url: owner.base, game_kind: '', game_type: '', game_device: 'Desktop' };
+      const result = await postJson(owner.base + '/api/v2/game/ATG/login', body, token);
       return result && result.data && result.data.game_url;
     };
-    let url = await request(session.token);
+    let url = await request(owner.token);
     if (!url) {
-      const relogin = await postJson(session.base + '/api/v1/login', {
-        username: session.account,
-        password: session.password,
+      const relogin = await postJson(owner.base + '/api/v1/login', {
+        username: owner.account,
+        password: owner.password,
         device_id: deviceId()
       });
       const token = relogin && relogin.data && relogin.data.token;
       if (!token) throw new Error('登入已過期，請重新登入');
-      session.token = token;
+      owner.token = token;
       url = await request(token);
     }
     if (!url) throw new Error('ATG 沒有回傳遊戲網址');
     return url;
   }
 
-  async function resolveAtgGameUrl(gameCode) {
-    const lobbyUrl = await requestAtgLobbyUrl();
-    const tokenMatch = lobbyUrl.match(/[?&]t=([^&]+)/);
-    if (!tokenMatch) return lobbyUrl;
-    return directGameUrl(tokenMatch[1], gameCode);
-  }
-
-  function clearPreparedGameEntry() {
-    preparedGameEntry = null;
-    preparedGameEntrySerial++;
-  }
-
-  function prepareGameEntry(gameCode) {
-    const game = String(gameCode || '');
-    if (!session || !game || session.game !== game) return Promise.resolve(null);
-    const now = Date.now();
-
-    if (preparedGameEntry &&
-        preparedGameEntry.game === game &&
-        now - preparedGameEntry.at < PREPARED_ENTRY_MS) {
-      return preparedGameEntry.promise;
-    }
-
-    const serial = ++preparedGameEntrySerial;
-    const promise = resolveAtgGameUrl(game)
-      .then(url => {
-        if (!session || session.game !== game || serial !== preparedGameEntrySerial) return null;
-        return url;
-      })
-      .catch(error => {
-        if (preparedGameEntry && preparedGameEntry.serial === serial) preparedGameEntry = null;
-        throw error;
-      });
-
-    preparedGameEntry = { game, at: now, serial, promise };
-    return promise;
-  }
-
-  async function consumePreparedGameEntry(gameCode) {
-    const game = String(gameCode || '');
-    const item = preparedGameEntry;
-    if (item && item.game === game && Date.now() - item.at < PREPARED_ENTRY_MS) {
-      preparedGameEntry = null;
-      try {
-        const url = await item.promise;
-        if (url) return url;
-      } catch (_) {}
-    }
-    return resolveAtgGameUrl(game);
+  function resolveAtgGameUrl(gameCode, signal) {
+    const owner = session;
+    const cancelled = () => !owner || session !== owner || owner.game !== gameCode || (signal && signal.aborted);
+    const run = async () => {
+      let lastError;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        if (cancelled()) throw new Error('probe-cancelled');
+        try {
+          const lobbyUrl = await requestAtgLobbyUrl(signal, owner);
+          if (cancelled()) throw new Error('probe-cancelled');
+          const lobbyToken = new URL(lobbyUrl).searchParams.get('t');
+          if (!lobbyToken) throw new Error('ATG 未回傳有效的大廳連線');
+          return await directGameUrl(lobbyToken, gameCode, signal);
+        } catch (error) {
+          if (cancelled()) throw new Error('probe-cancelled');
+          lastError = error;
+        }
+      }
+      throw lastError;
+    };
+    // TZ issues one active launch token: don't let a background probe race an entry.
+    const task = atgEntryQueue.then(run);
+    atgEntryQueue = task.catch(() => null);
+    return task;
   }
 
   function rankPercent(rows, getter, descending) {
@@ -886,7 +868,11 @@
   async function probeAtgTables(gameCode) {
     stopRecommendationProbe();
     const serial = ++recommendationProbeSerial;
-    const finalUrl = await resolveAtgGameUrl(gameCode);
+    const controller = new AbortController();
+    recommendationEntryAbort = controller;
+    let finalUrl;
+    try { finalUrl = await resolveAtgGameUrl(gameCode, controller.signal); }
+    finally { if (recommendationEntryAbort === controller) recommendationEntryAbort = null; }
     if (!session || session.game !== gameCode || serial !== recommendationProbeSerial) throw new Error('probe-cancelled');
 
     const target = new URL(finalUrl);
@@ -915,7 +901,7 @@
           cleanup(); reject(new Error(data.error || 'ATG 即時機台資料讀取失敗'));
         }
       };
-      const timer = setTimeout(() => { cleanup(); reject(new Error('ATG 即時機台資料逾時')); }, 22000);
+      const timer = setTimeout(() => { cleanup(); reject(new Error('ATG 即時機台資料逾時')); }, 60000);
       recommendationProbe = {frame, listener, timer, reject};
       window.addEventListener('message', listener);
       document.body.appendChild(frame);
@@ -1158,7 +1144,6 @@
       return;
     }
     const machineNum = String(item.machineNum);
-    prepareGameEntry(session && session.game).catch(() => null);
     const accepted = await confirmRoom(machineNum);
     if (!accepted) return;
 
@@ -1306,12 +1291,7 @@
         targetKind = 'roomId';
       }
 
-      let finalUrl;
-      try { finalUrl = await consumePreparedGameEntry(requestedGame); }
-      catch (error) {
-        log('ATG 遊戲入口取得失敗', requestedGame, error && error.message);
-        finalUrl = await requestAtgLobbyUrl();
-      }
+      const finalUrl = await resolveAtgGameUrl(requestedGame);
       if (!session || session.game !== requestedGame || openSerial !== gameOpenSerial) return;
       try {
         const parsedFinal = new URL(finalUrl);
@@ -1334,7 +1314,6 @@
   }
 
   function closeGame(destination) {
-    clearPreparedGameEntry();
     hideRoomPickToast();
     // Invalidate async work from the game instance that is being closed.
     // This does NOT alter room selection/fallback logic; it only prevents
@@ -1443,13 +1422,6 @@
     this.disabled = false;
     this.textContent = '↻ 刷新';
   };
-  ['enterBtn','skipBtn'].forEach(id => {
-    const button = $(id);
-    if (!button) return;
-    const warm = () => { prepareGameEntry(session && session.game).catch(() => null); };
-    button.addEventListener('pointerdown', warm, { passive: true });
-    button.addEventListener('touchstart', warm, { passive: true });
-  });
   $('enterBtn').onclick = () => enterGame();
   $('skipBtn').onclick = () => enterGame('manual');
   $('gameExit').onclick = () => closeGame('rooms');

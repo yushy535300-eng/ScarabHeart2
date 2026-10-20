@@ -203,7 +203,7 @@
         });
       }
     } catch (_) {}
-    if (Date.now() - startedAt > 16000) {
+    if (Date.now() - startedAt > 55000) {
       clearInterval(scanTimer);
       if (!sent) {
         try { parent.postMessage({__scarabRecommendationProbe:true,ok:false,gameCode:gameCode,error:'ATG 即時機台資料逾時'}, location.origin); } catch (_) {}

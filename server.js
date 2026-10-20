@@ -13,6 +13,7 @@ const { Pool } = require('pg');
 const { HttpsProxyAgent } = require('https-proxy-agent');
 const path = require('path');
 const crypto = require('crypto');
+const { serveAtgAsset } = require('./server/atg-assets');
 const { adminPage } = require('./admin-page');
 const { authorizeWhitelist, listWhitelist, upsertWhitelist, setWhitelistEnabled, extendWhitelist, deleteWhitelist } = require('./whitelist');
 const { resolveWhitelistPlatform, readCurrentAccessIdentity } = require('./access-auth');
@@ -268,9 +269,9 @@ function gameBoot(sid, originalHref, session, withRuntime) {
     ';(function(){var O=window.__SCARAB_ORIGINAL_URL,P=' + scriptJson(prefix) +
     ';function A(x){var h=x.hostname.toLowerCase();return h==="godeebxp.com"||/\\.godeebxp\\.com$/.test(h)}' +
     'function S(x){var p=x.pathname;return /^\\/egames\\/[a-f0-9]{40}\\/game\\/(?:assets|src|public|images|cocos-js)\\//i.test(p)||/^\\/egames\\/[a-f0-9]{40}\\/game\\/(?:style\\.css|game\\.css|app\\.js|index\\.js|application\\.js)$/i.test(p)||/\\.(?:js|mjs|css|json|png|jpe?g|gif|webp|svg|ico|mp3|ogg|wav|m4a|mp4|webm|woff2?|ttf|otf|bin|wasm)(?:$|\\?)/i.test(p+x.search)}' +
-    'function U(raw){try{var str=String(raw),x=new URL(str,document.baseURI||O),here=location.origin;if(x.origin===here){var m=x.pathname.match(/^\\/__game\\/[a-f0-9]{24}(\\/.*)$/i);if(m)x=new URL(m[1]+x.search,O);else if(/^\\/(?:slotFramework|egames)\\//i.test(x.pathname))x=new URL(x.pathname+x.search,O)}return x}catch(e){return null}}' +
-    'function H(raw){try{var x=U(raw);if(x&&/^https?:$/.test(x.protocol)&&A(x)){if(/^\\/slotFramework\\//i.test(x.pathname)){if(/^\\/slotFramework\\/manifest\\.json$/i.test(x.pathname))return location.origin+x.pathname+x.search;return x.href}if(S(x))return x.href;return location.origin+P+"/__remote?url="+encodeURIComponent(x.href)}}catch(e){}return raw}' +
-    'function D(raw){try{var x=U(raw);if(x&&A(x)&&(/^\\/slotFramework\\//i.test(x.pathname)||S(x)))return x.href}catch(e){}return raw}' +
+    'function U(raw){try{var str=String(raw),x=new URL(str,document.baseURI||O),here=location.origin;if(x.origin===here){var m=x.pathname.match(/^\\/__game\\/[a-f0-9]{24}(\\/.*)$/i);if(m)x=new URL(m[1]+x.search,O);else if(/^\\/(?:slotFramework|egames|images|avatars)\\//i.test(x.pathname))x=new URL(x.pathname+x.search,O)}return x}catch(e){return null}}' +
+    'function H(raw){try{var x=U(raw);if(x&&/^https?:$/.test(x.protocol)&&A(x)){if(x.origin===new URL(O).origin)return location.origin+P+x.pathname+x.search;return location.origin+P+"/__remote?url="+encodeURIComponent(x.href)}}catch(e){}return raw}' +
+    'function D(raw){try{var x=U(raw);if(x&&A(x)&&S(x))return H(raw)}catch(e){}return raw}' +
     'var F=window.fetch;if(F)window.fetch=function(i,n){var raw=typeof i==="string"?i:(i&&i.url)||String(i),u=H(raw);try{if(i instanceof Request&&u!==raw)i=new Request(u,i);else if(u!==raw)i=u}catch(e){i=u}return F.call(this,i,n)};' +
     'var XO=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(m,u){arguments[1]=H(u);return XO.apply(this,arguments)};' +
     'var SA=Element.prototype.setAttribute;Element.prototype.setAttribute=function(k,v){try{if(/^(?:src|href)$/i.test(String(k)))v=D(v)}catch(e){}return SA.call(this,k,v)};' +
@@ -418,6 +419,7 @@ app.all('/__game/:sid/__remote', express.raw({ type: '*/*', limit: '16mb' }), as
     return res.status(403).send('Invalid upstream URL');
   }
   try {
+    if (session.provider === 'atg' && await serveAtgAsset(req, res, url, session.origin)) return;
     const init = {
       method: req.method,
       headers: upstreamHeaders(req, url, session.origin),
@@ -486,10 +488,11 @@ app.use('/__game/:sid/*', express.raw({ type: '*/*', limit: '16mb' }), async (re
     const directStatic =
       /^\/egames\/[a-f0-9]{40}\/game\/(?:assets|src|public|images|cocos-js)\//i.test(url.pathname) ||
       /^\/egames\/[a-f0-9]{40}\/game\/(?:style\.css|game\.css|app\.js|index\.js|application\.js)$/i.test(url.pathname);
-    if ((req.method === 'GET' || req.method === 'HEAD') &&
+    if (session.provider !== 'atg' && (req.method === 'GET' || req.method === 'HEAD') &&
         (directStatic || dest === 'image' || dest === 'audio' || dest === 'video' || dest === 'font' || mediaExt)) {
       return res.redirect(302, url.href);
     }
+    if (session.provider === 'atg' && await serveAtgAsset(req, res, url, session.origin)) return;
     const init = {
       method: req.method,
       headers: upstreamHeaders(req, url, session.origin),
@@ -553,8 +556,8 @@ app.use('/__game/:sid/*', express.raw({ type: '*/*', limit: '16mb' }), async (re
         ? gameBoot(sid, finalUrl.href, session, !isLobby)
         : providerBoot(sid, finalUrl.href, session, true);
       // Keep document navigation inside the session proxy.
-      // Static assets are already rewritten to the real ATG origin by D()/H()
-      // and server directStatic/slotFramework handling. A remote <base> caused
+      // Assets stay on the same-origin bridge because ATG does not supply CORS.
+      // A remote <base> caused
       // room-confirm/navigation actions to bypass the proxy and hit raw ATG nginx 500.
       const remoteDir = new URL('.', finalUrl).pathname;
       const proxyBase = '/__game/' + sid + remoteDir;
@@ -568,6 +571,10 @@ app.use('/__game/:sid/*', express.raw({ type: '*/*', limit: '16mb' }), async (re
     }
     res.status(upstream.status);
     res.type(type);
+    ['content-range', 'accept-ranges', 'etag', 'last-modified'].forEach(key => {
+      const value = upstream.headers.get(key);
+      if (value) res.set(key, value);
+    });
     res.set('Cache-Control', upstream.headers.get('cache-control') || 'no-store');
     sendCookies(res, upstream, sid);
     if (session.provider !== 'atg' && isDocumentRequest) {
@@ -587,11 +594,7 @@ app.all(['/__socket/:sid', '/__lobby-socket'], (_req, res) => {
   res.status(426).send('WebSocket upgrade required');
 });
 
-// ATG's manifest does not advertise cross-origin access, so keep only that
-// tiny bootstrap JSON on our same-origin bridge. All versioned slotFramework
-// assets (config/index/import/native/...) are CORS-enabled by ATG and must go
-// straight to play.godeebxp.com; proxying hundreds of them through Render
-// causes 502/503 bursts followed by 429 throttling.
+// Legacy root framework requests also stay on the same-origin asset bridge.
 app.all('/slotFramework/*', express.raw({ type: '*/*', limit: '256kb' }), async (req, res) => {
   let sid = '';
   try {
@@ -608,15 +611,8 @@ app.all('/slotFramework/*', express.raw({ type: '*/*', limit: '256kb' }), async 
 
   const isManifest = /^\/slotFramework\/manifest\.json$/i.test(url.pathname);
 
-  // Never make Render download versioned ATG framework/assets.
-  if (!isManifest && (req.method === 'GET' || req.method === 'HEAD')) {
-    const direct = 'https://play.godeebxp.com' + url.pathname + url.search;
-    res.set('Cache-Control', 'public, max-age=300');
-    return res.redirect(307, direct);
-  }
-
-  // Only the tiny manifest stays bridged.
   try {
+    if (await serveAtgAsset(req, res, url, session.origin)) return;
     const upstream = await fetch(url, {
       method: req.method,
       headers: upstreamHeaders(req, url, 'https://play.godeebxp.com'),
