@@ -31,13 +31,13 @@
   ]);
 
   const GAME_META = {
-    'golden-seth': { gameId: 123, mechanism: 'slot-erase-any-times-2', checksum: '3d2f2320da720b4a5c0da29079776e107daa3a79' },
-    'new-jinlian': { gameId: 134, mechanism: 'slot-expanding-wild-1', checksum: 'f8d1b0cae05078122191ba04093254c6b9efb09a' },
-    'new-vampire-hunter': { gameId: 133, mechanism: 'slot-pick-one-of-three-1', checksum: '05439f232a321501c3791d60b88a53420638e0df' },
+    'golden-seth': { gameId: 123, mechanism: 'slot-erase-any-times-2', checksum: '22020103b31b7390f07b1551e8538589b5e51967' },
+    'new-jinlian': { gameId: 134, mechanism: 'slot-expanding-wild-1', checksum: '17fd7da545824dbef77bb5d68f95730db19733af' },
+    'new-vampire-hunter': { gameId: 133, mechanism: 'slot-pick-one-of-three-1', checksum: '17523c4c64ef04747a9b1f44a021354e1c37ec20' },
     'hades': { gameId: 127, mechanism: 'slot-erase-cluster-times-1', checksum: '37ab205b0990c6a3643e0dbb8c9ee4adb698123c' },
     'tiger-princess': { gameId: 130, mechanism: 'slot-erase-any-times-2', checksum: 'a21ec50d4a0db8456e8814164723d753969947dc' },
     'egyptian-mythology': { gameId: 114, mechanism: 'slot-erase-any-times-1', checksum: 'fc0932025c774421a21fe1f2e7702c10e33a7487' },
-    'scarlet-three-kingdoms': { gameId: 122, mechanism: 'slot-erase-any-times-1', checksum: '7c2dbf0bb8988bcd674d026e0ff428fa9c0caa41' },
+    'scarlet-three-kingdoms': { gameId: 122, mechanism: 'slot-erase-any-times-1', checksum: '195b303541efbaa9529d42405a73f6bb1e653a44' },
     'wuxia-caishen': { gameId: 121, mechanism: 'slot-erase-link-times-1', checksum: '1b87ecd58a8dc56437f49e2d0e04f1870d01671a' },
     'son-go-ku': { gameId: 118, mechanism: 'slot-erase-link-times-2', checksum: '3935504edb3857524d7a3125c0cf284f07d0fb45' }
   };
@@ -222,7 +222,16 @@
           try {
             const games = packet && packet.content && packet.content.games;
             const wanted = Array.isArray(games) && games.find(g => String(g && g.code || '') === String(gameCode));
-            if (wanted && wanted.code) canonicalCode = String(wanted.code);
+            if (wanted && wanted.code) {
+              canonicalCode = String(wanted.code);
+              // Use the authenticated lobby catalogue, not a previous build's hash.
+              const meta = GAME_META[gameCode];
+              if (meta) {
+                if (/^[a-f0-9]{40}$/i.test(String(wanted.checksum || ''))) meta.checksum = String(wanted.checksum);
+                if (Number.isInteger(Number(wanted.gameId)) && Number(wanted.gameId) > 0) meta.gameId = Number(wanted.gameId);
+                if (typeof wanted.mechanism === 'string' && wanted.mechanism) meta.mechanism = wanted.mechanism;
+              }
+            }
           } catch (_) {}
           playAck = send('lobbyPlay', { token, clientType: 'web', code: canonicalCode });
           return;
@@ -232,6 +241,10 @@
             try {
               const parsed = new URL(packet.redirectUrl);
               const returnedCode = parsed.searchParams.get('gn');
+              const version = parsed.pathname.match(/^\/egames\/([a-f0-9]{40})\/game\//i);
+              if ((!returnedCode || returnedCode === canonicalCode) && version && GAME_META[gameCode]) {
+                GAME_META[gameCode].checksum = version[1];
+              }
               if (returnedCode && returnedCode !== canonicalCode) {
                 finish(reject, new Error('ATG 回傳了錯誤的遊戲入口'));
                 return;
