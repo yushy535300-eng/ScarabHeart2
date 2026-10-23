@@ -4,8 +4,8 @@ for(const [a,b] of [['function gameAllowed(','function apiAllowed('],['function 
 const sid='a'.repeat(24);
 function scripts(path){return [...ctx.providerBoot(sid,'https://gameweb.rsgaming888.com'+path,{provider:'rsg',payload:{cfg:{}}},true).matchAll(/<script>([\s\S]*?)<\/script>/g)].map(x=>x[1]);}
 test('recorded and legacy hosts accepted, unrelated hosts rejected',()=>{
- for(const z of ['666','888','955','977'])for(const r of ['gameweb','gameresource','gameresource3','gameserver'])assert.equal(ctx.gameAllowed(new URL(`https://${r}.rsgaming${z}.com/`),'rsg'),true);
- for(const h of ['gameweb.rsgaming888.com.evil.test','evil.rsgaming888.com','evil.rsgaming955.com','localhost'])assert.equal(ctx.gameAllowed(new URL('https://'+h),'rsg'),false);
+ for(const z of ['666','888','955','977','999'])for(const r of ['gameweb','gameresource','gameresource3','gameserver'])assert.equal(ctx.gameAllowed(new URL(`https://${r}.rsgaming${z}.com/`),'rsg'),true);
+ for(const h of ['gameweb.rsgaming888.com.evil.test','evil.rsgaming888.com','evil.rsgaming955.com','evil.rsgaming999.com','localhost'])assert.equal(ctx.gameAllowed(new URL('https://'+h),'rsg'),false);
 });
 test('generated proxy routes new resource and socket hosts',()=>{
  const calls=[];class Element{setAttribute(){}}class XHR{open(){}}class WS{constructor(u){calls.push(u)}}
@@ -33,6 +33,13 @@ test('Thor engine only starts for SlotGame5 and not in the native lobby',()=>{
  c.window=c;
  vm.runInNewContext(scriptsOnGame[1],c);c.tick();
  assert.equal(c.started,1);
+});
+test('RSG game return only navigates to its recorded native lobby',()=>{
+ const backend=fs.readFileSync(__dirname+'/server.js','utf8');
+ assert.ok(backend.includes("app.get('/__game/:sid/__rsg-return'"));
+ assert.ok(backend.includes('session.rsgLobbyUrl = finalUrl.href'));
+ assert.ok(backend.includes('session.rsgLobbyUrl = returnedUrl.href'));
+ assert.ok(!backend.includes("provider-rsg-lobby-rescue.js"));
 });
 test('only public RSG CDN resources bypass proxies',()=>{
  const c=vm.createContext({});vm.runInContext(s.slice(s.indexOf('function rsgPublicAsset('),s.indexOf('function apiAllowed(')),c);
