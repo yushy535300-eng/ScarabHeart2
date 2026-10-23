@@ -355,7 +355,7 @@ function providerBoot(sid, originalHref, session, withRuntime) {
   const gameCode = provider === 'qt' ? 'qt-lunar-rabbit' : 'thor';
   const engine = '<script src="/provider/hud-ui-bundle.js"></script>' + (provider === 'qt'
     ? '<script src="/provider/lunar-engine.js"></script>'
-    : '<script src="/provider/thor-engine-code.js"></script>') + '<script src="/provider/scarab-floating-theme.js"></script>';
+    : '<script src="/provider/rsg-start-repair.js"></script><script src="/provider/thor-engine-code.js"></script>') + '<script src="/provider/scarab-floating-theme.js"></script>';
   const start = '<script>(function(){var cfg=' + scriptJson({
     UI: 'overlay', DEBUG: false, SPEED: 2, GAME_CODE: gameCode,
     SETH_ACCOUNT: String(config.SETH_ACCOUNT || ''), APP_VER: String(config.APP_VER || '')
@@ -672,7 +672,7 @@ app.all('/slotFramework/*', express.raw({ type: '*/*', limit: '256kb' }), async 
 
 app.use((req, res, next) => {
   if (req.method !== 'GET' && req.method !== 'HEAD') return next();
-  const reserved = /^\/(?:__|api\/|admin(?:\/|$)|provider\/|media\/|logo\.png$|manifest\.webmanifest$|admin-|icon|healthz$)/i;
+  const reserved = /^\/(?:__|api\/|admin(?:\/|$)|provider\/|provider-rsg-nav\.js$|media\/|logo\.png$|manifest\.webmanifest$|admin-|icon|healthz$)/i;
   if (reserved.test(req.path)) return next();
   const match = String(req.headers.cookie || '').match(/(?:^|;\s*)scarab_provider_sid=([a-f0-9]{24})(?:;|$)/i);
   const session = match && sessions.get(match[1]);
