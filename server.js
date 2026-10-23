@@ -50,7 +50,7 @@ function gameAllowed(url, provider) {
   const host = url.hostname.toLowerCase();
   if (!provider || provider === 'atg') return host === 'godeebxp.com' || host.endsWith('.godeebxp.com');
   const exactHosts = {
-    rsg: ['gameweb.rsgaming666.com', 'gameresource3.rsgaming666.com', 'gameserver.rsgaming666.com', 'gameresource.rsgaming666.com', 'gameweb.rsgaming888.com', 'gameresource.rsgaming888.com', 'gameresource3.rsgaming888.com', 'gameserver.rsgaming888.com'],
+    rsg: ['666','888','955','977'].flatMap(suffix => ['gameweb','gameresource','gameresource3','gameserver'].map(prefix => `${prefix}.rsgaming${suffix}.com`)),
     qt: ['lobby.qtlauncher.com', 'client.qtlauncher.com', 'ga8.gahypergaming.com', 'dt589qboipkze.cloudfront.net']
   }[provider];
   if (provider === 'qt' && (host === 'qtlauncher.com' || host.endsWith('.qtlauncher.com'))) return true;
@@ -62,7 +62,7 @@ function gameAllowed(url, provider) {
 function rsgPublicAsset(url, provider, method = 'GET') {
   return provider === 'rsg' && ['GET', 'HEAD'].includes(method) &&
     url.protocol === 'https:' &&
-    /^gameresource3?\.rsgaming(?:666|888)\.com$/i.test(url.hostname) &&
+    /^gameresource3?\.rsgaming(?:666|888|955|977)\.com$/i.test(url.hostname) &&
     /^\/(?:WebUI3|Lobby)\//i.test(url.pathname);
 }
 
@@ -340,10 +340,10 @@ function providerBoot(sid, originalHref, session, withRuntime) {
     ';window.__SCARAB_PROXY_PREFIX=' + scriptJson(prefix) +
     ';(function(){var O=window.__SCARAB_ORIGINAL_URL,P=' + scriptJson(prefix) +
     ';function allowed(x){var h=x.hostname.toLowerCase();return ' + (provider === 'rsg'
-      ? '/^(?:gameweb|gameresource3?|gameserver)\\.rsgaming(?:666|888)\\.com$/.test(h)'
+      ? '/^(?:gameweb|gameresource3?|gameserver)\\.rsgaming(?:666|888|955|977)\\.com$/.test(h)'
       : 'h==="qtlauncher.com"||h.endsWith(".qtlauncher.com")||h==="ga8.gahypergaming.com"||h==="dt589qboipkze.cloudfront.net"') + '}' +
     'function U(raw){try{var x=new URL(String(raw),document.baseURI||O);if(x.origin===location.origin){var m=x.pathname.match(/^\\/__game\\/[a-f0-9]{24}(\\/.*)$/i);if(m)x=new URL(m[1]+x.search,O);else if(!/^\\/(?:provider|media)\\//i.test(x.pathname)&&x.pathname!=="/logo.png"&&x.pathname!=="/provider-rsg-nav.js")x=new URL(x.pathname+x.search,O)}return x}catch(e){return null}}' +
-    'function H(raw){try{var x=U(raw);if(x&&/^https?:$/.test(x.protocol)&&allowed(x)&&/^gameresource3?\\.rsgaming(?:666|888)\\.com$/i.test(x.hostname)&&/^\\/(?:WebUI3|Lobby)\\//i.test(x.pathname))return x.href;if(x&&/^https?:$/.test(x.protocol)&&allowed(x))return location.origin+P+"/__remote?url="+encodeURIComponent(x.href)}catch(e){}return raw}' +
+    'function H(raw){try{var x=U(raw);if(x&&/^https?:$/.test(x.protocol)&&allowed(x)&&/^gameresource3?\\.rsgaming(?:666|888|955|977)\\.com$/i.test(x.hostname)&&/^\\/(?:WebUI3|Lobby)\\//i.test(x.pathname))return x.href;if(x&&/^https?:$/.test(x.protocol)&&allowed(x))return location.origin+P+"/__remote?url="+encodeURIComponent(x.href)}catch(e){}return raw}' +
     'var F=window.fetch;if(F)window.fetch=function(i,n){var raw=typeof i==="string"?i:(i&&i.url)||String(i),u=H(raw);try{if(i instanceof Request&&u!==raw)i=new Request(u,i);else if(u!==raw)i=u}catch(e){i=u}return F.call(this,i,n)};' +
     'var XO=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(m,u){arguments[1]=H(u);return XO.apply(this,arguments)};' +
     'var SA=Element.prototype.setAttribute;Element.prototype.setAttribute=function(k,v){if(/^(src|href|action|poster)$/i.test(k))arguments[1]=H(v);return SA.apply(this,arguments)};' +
