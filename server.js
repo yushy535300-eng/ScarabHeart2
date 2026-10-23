@@ -365,8 +365,10 @@ function providerBoot(sid, originalHref, session, withRuntime) {
     ? '<script>(function(){try{parent.postMessage({__scarabProviderPage:true,provider:"rsg",page:"' + rsgPage + '"},"*")}catch(_){}})();<\/script>'
     : '';
   if (provider === 'rsg' && !/^\/Web\/SlotGame5(?:\/|$)/i.test(rsgPath)) {
+    // Keep every original game document intact. The old Thor start repair
+    // is NOT injected into other RSG games; only the verified engine adapter.
     return boot + rsgNotice + (/^\/Web\/SlotGame\d+(?:\/|$)/i.test(rsgPath)
-      ? '<script src="/provider/rsg-start-repair.js"></script>' : '');
+      ? '<script src="/provider/rsg-universal-adapter.js"></script>' : '');
   }
   const gameCode = provider === 'qt' ? 'qt-lunar-rabbit' : 'thor';
   const engine = '<script src="/provider/hud-ui-bundle.js"></script>' + (provider === 'qt'
