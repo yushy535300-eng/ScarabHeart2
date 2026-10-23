@@ -11,11 +11,18 @@ test('generated proxy routes new resource and socket hosts',()=>{
  const calls=[];class Element{setAttribute(){}}class XHR{open(){}}class WS{constructor(u){calls.push(u)}}
  const c={URL,Request,Element,HTMLIFrameElement:class extends Element{},XMLHttpRequest:XHR,WebSocket:WS,location:{origin:'https://scarab.test',host:'scarab.test',protocol:'https:'},document:{baseURI:`https://scarab.test/__game/${sid}/Web/`},fetch:u=>{calls.push(u);return Promise.resolve()}};c.window=c;
  vm.runInNewContext(scripts('/Web/SlotGame5')[0],c);
- c.fetch('https://gameresource3.rsgaming888.com/WebUI3/content/PowerOfThor2/settings.json');assert.equal(new URL(calls.pop()).searchParams.get('url'),'https://gameresource3.rsgaming888.com/WebUI3/content/PowerOfThor2/settings.json');
+ c.fetch('https://gameresource3.rsgaming888.com/WebUI3/content/PowerOfThor2/settings.json');assert.equal(calls.pop(),'https://gameresource3.rsgaming888.com/WebUI3/content/PowerOfThor2/settings.json');
  new c.WebSocket('wss://gameserver.rsgaming888.com/ws');assert.ok(calls.pop().startsWith(`wss://scarab.test/__socket/${sid}?url=`));
+ c.fetch('/provider-rsg-nav.js');assert.equal(calls.pop(),'/provider-rsg-nav.js');
  c.fetch('https://evil.test/x');assert.equal(calls.pop(),'https://evil.test/x');
 });
 test('engine starts on remote proxy SlotGame5 and stays idle on lobby',()=>{
  for(const path of ['/Web/SlotGame5','/Lobby2/Index']){const parts=scripts(path);parts.forEach(x=>new vm.Script(x));let tick,started=0;
  const c={URL,console,location:{pathname:`/__game/${sid}/__remote`,href:'https://scarab.test/ignored'},__SCARAB_ORIGINAL_URL:'https://gameweb.rsgaming888.com'+path,setInterval:f=>{tick=f;return 1},clearInterval(){},thorEngine:()=>started++};c.window=c;vm.runInNewContext(parts[1],c);tick();assert.equal(started,path.startsWith('/Web/')?1:0);}
+});
+
+test('only public RSG CDN resources bypass proxies',()=>{
+ const c=vm.createContext({});vm.runInContext(s.slice(s.indexOf('function rsgPublicAsset('),s.indexOf('function apiAllowed(')),c);
+ for(const ext of ['webp','bin','ttf','mp3','css','js'])assert.equal(c.rsgPublicAsset(new URL('https://gameresource3.rsgaming888.com/WebUI3/content/PowerOfThor2/a.'+ext),'rsg','GET'),true);
+ for(const [url,kind,method] of [['https://gameweb.rsgaming888.com/Web/SessionInfo','rsg','GET'],['https://gameresource3.rsgaming888.com/WebUI3/a.bin','qt','GET'],['https://gameresource3.rsgaming888.com/WebUI3/a.bin','rsg','POST'],['https://gameresource3.rsgaming888.com.evil.test/WebUI3/a.bin','rsg','GET']])assert.equal(c.rsgPublicAsset(new URL(url),kind,method),false);
 });

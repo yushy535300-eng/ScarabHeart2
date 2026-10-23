@@ -57,6 +57,15 @@ function gameAllowed(url, provider) {
   return !!exactHosts && exactHosts.includes(host);
 }
 
+// Public RSG CDN resources have Access-Control-Allow-Origin: *.
+// Preserve their original bytes, including assets served as text/plain.
+function rsgPublicAsset(url, provider, method = 'GET') {
+  return provider === 'rsg' && ['GET', 'HEAD'].includes(method) &&
+    url.protocol === 'https:' &&
+    /^gameresource3?\.rsgaming(?:666|888)\.com$/i.test(url.hostname) &&
+    /^\/(?:WebUI3|Lobby)\//i.test(url.pathname);
+}
+
 function apiAllowed(url) {
   if (!url || url.protocol !== 'https:') return false;
   const host = url.hostname.toLowerCase();
@@ -333,8 +342,8 @@ function providerBoot(sid, originalHref, session, withRuntime) {
     ';function allowed(x){var h=x.hostname.toLowerCase();return ' + (provider === 'rsg'
       ? '/^(?:gameweb|gameresource3?|gameserver)\\.rsgaming(?:666|888)\\.com$/.test(h)'
       : 'h==="qtlauncher.com"||h.endsWith(".qtlauncher.com")||h==="ga8.gahypergaming.com"||h==="dt589qboipkze.cloudfront.net"') + '}' +
-    'function U(raw){try{var x=new URL(String(raw),document.baseURI||O);if(x.origin===location.origin){var m=x.pathname.match(/^\\/__game\\/[a-f0-9]{24}(\\/.*)$/i);if(m)x=new URL(m[1]+x.search,O);else if(!/^\\/(?:provider|media)\\//i.test(x.pathname)&&x.pathname!=="/logo.png")x=new URL(x.pathname+x.search,O)}return x}catch(e){return null}}' +
-    'function H(raw){try{var x=U(raw);if(x&&/^https?:$/.test(x.protocol)&&allowed(x))return location.origin+P+"/__remote?url="+encodeURIComponent(x.href)}catch(e){}return raw}' +
+    'function U(raw){try{var x=new URL(String(raw),document.baseURI||O);if(x.origin===location.origin){var m=x.pathname.match(/^\\/__game\\/[a-f0-9]{24}(\\/.*)$/i);if(m)x=new URL(m[1]+x.search,O);else if(!/^\\/(?:provider|media)\\//i.test(x.pathname)&&x.pathname!=="/logo.png"&&x.pathname!=="/provider-rsg-nav.js")x=new URL(x.pathname+x.search,O)}return x}catch(e){return null}}' +
+    'function H(raw){try{var x=U(raw);if(x&&/^https?:$/.test(x.protocol)&&allowed(x)&&/^gameresource3?\\.rsgaming(?:666|888)\\.com$/i.test(x.hostname)&&/^\\/(?:WebUI3|Lobby)\\//i.test(x.pathname))return x.href;if(x&&/^https?:$/.test(x.protocol)&&allowed(x))return location.origin+P+"/__remote?url="+encodeURIComponent(x.href)}catch(e){}return raw}' +
     'var F=window.fetch;if(F)window.fetch=function(i,n){var raw=typeof i==="string"?i:(i&&i.url)||String(i),u=H(raw);try{if(i instanceof Request&&u!==raw)i=new Request(u,i);else if(u!==raw)i=u}catch(e){i=u}return F.call(this,i,n)};' +
     'var XO=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(m,u){arguments[1]=H(u);return XO.apply(this,arguments)};' +
     'var SA=Element.prototype.setAttribute;Element.prototype.setAttribute=function(k,v){if(/^(src|href|action|poster)$/i.test(k))arguments[1]=H(v);return SA.apply(this,arguments)};' +
@@ -437,6 +446,7 @@ app.all('/__game/:sid/__remote', express.raw({ type: '*/*', limit: '16mb' }), as
     return res.status(403).send('Invalid upstream URL');
   }
   try {
+    if (rsgPublicAsset(url, session.provider, req.method)) return res.redirect(302, url.href);
     if (session.provider === 'atg' && await serveAtgAsset(req, res, url, session.origin)) return;
     const init = {
       method: req.method,
@@ -510,6 +520,7 @@ app.use('/__game/:sid/*', express.raw({ type: '*/*', limit: '16mb' }), async (re
         (directStatic || dest === 'image' || dest === 'audio' || dest === 'video' || dest === 'font' || mediaExt)) {
       return res.redirect(302, url.href);
     }
+    if (rsgPublicAsset(url, session.provider, req.method)) return res.redirect(302, url.href);
     if (session.provider === 'atg' && await serveAtgAsset(req, res, url, session.origin)) return;
     const init = {
       method: req.method,
