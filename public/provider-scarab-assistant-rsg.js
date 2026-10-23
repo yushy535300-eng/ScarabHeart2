@@ -5,7 +5,7 @@
   'use strict';
   var root=null, active=false, currentPage='closed', drag=null, minimized=false;
   var lastData=null, maxAge=4000;
-  var engineState={canSpeed:false,lastSeen:0,name:'',speed:1},commandSeq=0;
+  var engineState={canSpeed:false,lastSeen:0,name:'',speed:1,hint:'未識別'},commandSeq=0;
   function $(id){return root&&root.querySelector('#'+id)}
   function put(id,value){var el=$(id);if(el)el.textContent=value;}
   function fmt(value,kind){
@@ -172,7 +172,7 @@
   function toggleInfo(){var info=root.querySelector('.sh-hint');info.classList.toggle('open');}
   function state(page){
     currentPage=page;active=page==='game';
-    if(page!=='game'){engineState.canSpeed=false;engineState.lastSeen=0;lastData=null;}
+    if(page!=='game'){engineState.canSpeed=false;engineState.lastSeen=0;engineState.hint='未識別';lastData=null;}
     render();
   }
   function render(){
@@ -186,8 +186,8 @@
     put('shRsgUnopened',d&&Number.isInteger(d.unopened)?d.unopened+' 轉':'—');
     put('shRsgRtp',d&&Number.isFinite(d.rtp)?fmt(d.rtp,'rtp'):'—');
     speedButtons();
-    if(!canUseSpeed())put('shRsgStatus',d?'遊戲資料已同步 · 倍率不可用':'未取得此遊戲的真實資料或加速控制');
-    else if(!d)put('shRsgStatus','加速引擎已連線 · 輸贏等資料尚未接通');
+    if(!canUseSpeed())put('shRsgStatus', '引擎：'+engineState.hint+' · 尚未取得可控制的時間接口');
+    else if(!d)put('shRsgStatus',engineState.name+' 已接通 · 輸贏等資料仍待遊戲回傳');
   }
   window.addEventListener('scarab:rsg-page',function(e){state(e.detail&&e.detail.page)});
   // Verified same-iframe telemetry only. Never guess values from artwork.
@@ -198,6 +198,7 @@
       if(event.type==='capabilities'){
         engineState.canSpeed=event.canSpeed===true;
         engineState.name=String(event.adapter||'').slice(0,42);
+        engineState.hint=String(event.engineHint||'未識別').slice(0,50);
         engineState.lastSeen=Date.now();
         if(engineState.canSpeed&&[1,2,4,8].includes(Number(event.speed)))engineState.speed=Number(event.speed);
         speedButtons();
