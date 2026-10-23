@@ -353,7 +353,7 @@
     syncShellOrientation();
     // ATG itself may have just been landscape/full-screen. Never let any stale
     // inline dimensions/transforms leak into the app shell after closing it.
-    ['gameCenterView','roomView','gcGames'].forEach(id => {
+    ['gameCenterView','moreGamesView','roomView','gcGames','moreGames'].forEach(id => {
       const el = $(id);
       if (!el) return;
       ['width','height','minWidth','minHeight','maxWidth','maxHeight','transform','zoom','position','left','right','top','bottom','overflow'].forEach(k => {
@@ -367,13 +367,15 @@
     });
     // Recreate the grid formatting context after iOS rotates back from an ATG
     // landscape document. This avoids the stacked/overlapping card state.
-    const grid = $('gcGames');
-    if (grid && !$('gameCenterView').classList.contains('hide')) {
+    ['gcGames', 'moreGames'].forEach(id => {
+      const grid = $(id);
+      const parent = id === 'gcGames' ? $('gameCenterView') : $('moreGamesView');
+      if (!grid || !parent || parent.classList.contains('hide')) return;
       const prior = grid.style.display;
       grid.style.display = 'none';
       void grid.offsetHeight;
       grid.style.display = prior || '';
-    }
+    });
   }
 
   function showGameCenter() {
@@ -395,6 +397,10 @@
     showOnly('moreGamesView');
     $('moreHelp').textContent = '不同平台的遊戲都在這裡，選擇遊戲即可進入。';
     renderGames(true);
+    resetShellLayout();
+    requestAnimationFrame(resetShellLayout);
+    setTimeout(resetShellLayout, 220);
+    setTimeout(resetShellLayout, 520);
     window.scrollTo(0,0);
   }
 
@@ -1483,7 +1489,7 @@
   syncShellOrientation();
   window.addEventListener('resize', () => {
     syncShellOrientation();
-    if (!$('gameCenterView').classList.contains('hide')) {
+    if (!$('gameCenterView').classList.contains('hide') || !$('moreGamesView').classList.contains('hide')) {
       requestAnimationFrame(resetShellLayout);
     }
   }, { passive: true });
@@ -1494,7 +1500,7 @@
   }, { passive: true });
   if (window.visualViewport) {
     window.visualViewport.addEventListener('resize', () => {
-      if (!$('gameCenterView').classList.contains('hide')) requestAnimationFrame(resetShellLayout);
+      if (!$('gameCenterView').classList.contains('hide') || !$('moreGamesView').classList.contains('hide')) requestAnimationFrame(resetShellLayout);
     }, { passive: true });
   }
 
