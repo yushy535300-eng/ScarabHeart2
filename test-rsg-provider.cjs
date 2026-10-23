@@ -1,0 +1,21 @@
+const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
+const s=fs.readFileSync(__dirname+'/server.js','utf8'),ctx=vm.createContext({URL});
+for(const [a,b] of [['function gameAllowed(','function apiAllowed('],['function scriptJson(',"app.disable('x-powered-by')"],['function providerBoot(','function upstreamHeaders(']])vm.runInContext(s.slice(s.indexOf(a),s.indexOf(b)),ctx);
+const sid='a'.repeat(24);
+function scripts(path){return [...ctx.providerBoot(sid,'https://gameweb.rsgaming888.com'+path,{provider:'rsg',payload:{cfg:{}}},true).matchAll(/<script>([\s\S]*?)<\/script>/g)].map(x=>x[1]);}
+test('recorded and legacy hosts accepted, unrelated hosts rejected',()=>{
+ for(const z of ['666','888'])for(const r of ['gameweb','gameresource','gameresource3','gameserver'])assert.equal(ctx.gameAllowed(new URL(`https://${r}.rsgaming${z}.com/`),'rsg'),true);
+ for(const h of ['gameweb.rsgaming888.com.evil.test','evil.rsgaming888.com','localhost'])assert.equal(ctx.gameAllowed(new URL('https://'+h),'rsg'),false);
+});
+test('generated proxy routes new resource and socket hosts',()=>{
+ const calls=[];class Element{setAttribute(){}}class XHR{open(){}}class WS{constructor(u){calls.push(u)}}
+ const c={URL,Request,Element,HTMLIFrameElement:class extends Element{},XMLHttpRequest:XHR,WebSocket:WS,location:{origin:'https://scarab.test',host:'scarab.test',protocol:'https:'},document:{baseURI:`https://scarab.test/__game/${sid}/Web/`},fetch:u=>{calls.push(u);return Promise.resolve()}};c.window=c;
+ vm.runInNewContext(scripts('/Web/SlotGame5')[0],c);
+ c.fetch('https://gameresource3.rsgaming888.com/WebUI3/content/PowerOfThor2/settings.json');assert.equal(new URL(calls.pop()).searchParams.get('url'),'https://gameresource3.rsgaming888.com/WebUI3/content/PowerOfThor2/settings.json');
+ new c.WebSocket('wss://gameserver.rsgaming888.com/ws');assert.ok(calls.pop().startsWith(`wss://scarab.test/__socket/${sid}?url=`));
+ c.fetch('https://evil.test/x');assert.equal(calls.pop(),'https://evil.test/x');
+});
+test('engine starts on remote proxy SlotGame5 and stays idle on lobby',()=>{
+ for(const path of ['/Web/SlotGame5','/Lobby2/Index']){const parts=scripts(path);parts.forEach(x=>new vm.Script(x));let tick,started=0;
+ const c={URL,console,location:{pathname:`/__game/${sid}/__remote`,href:'https://scarab.test/ignored'},__SCARAB_ORIGINAL_URL:'https://gameweb.rsgaming888.com'+path,setInterval:f=>{tick=f;return 1},clearInterval(){},thorEngine:()=>started++};c.window=c;vm.runInNewContext(parts[1],c);tick();assert.equal(started,path.startsWith('/Web/')?1:0);}
+});

@@ -50,7 +50,7 @@ function gameAllowed(url, provider) {
   const host = url.hostname.toLowerCase();
   if (!provider || provider === 'atg') return host === 'godeebxp.com' || host.endsWith('.godeebxp.com');
   const exactHosts = {
-    rsg: ['gameweb.rsgaming666.com', 'gameresource3.rsgaming666.com', 'gameserver.rsgaming666.com'],
+    rsg: ['gameweb.rsgaming666.com', 'gameresource3.rsgaming666.com', 'gameserver.rsgaming666.com', 'gameresource.rsgaming666.com', 'gameweb.rsgaming888.com', 'gameresource.rsgaming888.com', 'gameresource3.rsgaming888.com', 'gameserver.rsgaming888.com'],
     qt: ['lobby.qtlauncher.com', 'client.qtlauncher.com', 'ga8.gahypergaming.com', 'dt589qboipkze.cloudfront.net']
   }[provider];
   if (provider === 'qt' && (host === 'qtlauncher.com' || host.endsWith('.qtlauncher.com'))) return true;
@@ -331,7 +331,7 @@ function providerBoot(sid, originalHref, session, withRuntime) {
     ';window.__SCARAB_PROXY_PREFIX=' + scriptJson(prefix) +
     ';(function(){var O=window.__SCARAB_ORIGINAL_URL,P=' + scriptJson(prefix) +
     ';function allowed(x){var h=x.hostname.toLowerCase();return ' + (provider === 'rsg'
-      ? 'h==="gameweb.rsgaming666.com"||h==="gameresource3.rsgaming666.com"||h==="gameserver.rsgaming666.com"'
+      ? '/^(?:gameweb|gameresource3?|gameserver)\\.rsgaming(?:666|888)\\.com$/.test(h)'
       : 'h==="qtlauncher.com"||h.endsWith(".qtlauncher.com")||h==="ga8.gahypergaming.com"||h==="dt589qboipkze.cloudfront.net"') + '}' +
     'function U(raw){try{var x=new URL(String(raw),document.baseURI||O);if(x.origin===location.origin){var m=x.pathname.match(/^\\/__game\\/[a-f0-9]{24}(\\/.*)$/i);if(m)x=new URL(m[1]+x.search,O);else if(!/^\\/(?:provider|media)\\//i.test(x.pathname)&&x.pathname!=="/logo.png")x=new URL(x.pathname+x.search,O)}return x}catch(e){return null}}' +
     'function H(raw){try{var x=U(raw);if(x&&/^https?:$/.test(x.protocol)&&allowed(x))return location.origin+P+"/__remote?url="+encodeURIComponent(x.href)}catch(e){}return raw}' +
@@ -353,7 +353,7 @@ function providerBoot(sid, originalHref, session, withRuntime) {
   }) + ';var n=0;var t=setInterval(function(){n++;try{' +
     (provider === 'qt'
       ? 'if(window.SETH_UI_ADAPTER_SRC&&!window.__scarabHudAdapterLoaded){try{(0,eval)(window.SETH_UI_ADAPTER_SRC);window.__scarabHudAdapterLoaded=true}catch(e){console.warn("[ScarabHeart HUD]",e&&e.message)}}if(typeof window.lunarEngine==="function"&&(window.PIXI||/LunarRabbit|gameart/i.test(location.href))){window.lunarEngine(cfg);clearInterval(t);}'
-      : 'if(window.SETH_UI_ADAPTER_SRC&&!window.__scarabHudAdapterLoaded){try{(0,eval)(window.SETH_UI_ADAPTER_SRC);window.__scarabHudAdapterLoaded=true}catch(e){console.warn("[ScarabHeart HUD]",e&&e.message)}}if(window.THOR_ENGINE_SRC&&!window.__thorEngineLoaded){try{(0,eval)(window.THOR_ENGINE_SRC);window.__thorEngineLoaded=true}catch(e){console.warn("[ScarabHeart Thor]",e&&e.message)}}if(typeof window.thorEngine==="function"&&/SlotGame/i.test(location.pathname)){window.thorEngine(cfg);clearInterval(t);}') +
+      : 'if(window.SETH_UI_ADAPTER_SRC&&!window.__scarabHudAdapterLoaded){try{(0,eval)(window.SETH_UI_ADAPTER_SRC);window.__scarabHudAdapterLoaded=true}catch(e){console.warn("[ScarabHeart HUD]",e&&e.message)}}if(window.THOR_ENGINE_SRC&&!window.__thorEngineLoaded){try{(0,eval)(window.THOR_ENGINE_SRC);window.__thorEngineLoaded=true}catch(e){console.warn("[ScarabHeart Thor]",e&&e.message)}}if(typeof window.thorEngine==="function"&&/\\/Web\\/SlotGame\\d/i.test(new URL(window.__SCARAB_ORIGINAL_URL||location.href).pathname)){window.thorEngine(cfg);clearInterval(t);}') +
     '}catch(e){console.warn("[ScarabHeart provider]",e&&e.message)}if(n>240)clearInterval(t)},500)})();<\/script>';
   const nav = provider === 'rsg' && /\/Lobby2?\//i.test(new URL(originalHref).pathname) ? '<script src="/provider-rsg-nav.js"></script>' : '';
   return boot + engine + start + nav;
