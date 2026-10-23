@@ -18,14 +18,17 @@ test('generated proxy routes new resource and socket hosts',()=>{
 });
 test('original RSG lobby is preserved, with no forced game entry or replacement menu',()=>{
  const lobby=ctx.providerBoot(sid,'https://gameweb.rsgaming955.com/Lobby2/Index',{provider:'rsg',payload:{cfg:{}}},true);
- assert.equal((lobby.match(/<script>/g) || []).length, 1);
+ assert.equal((lobby.match(/<script>/g) || []).length, 2);
+ assert.ok(lobby.includes('__scarabProviderPage:true'));
+ assert.ok(lobby.includes('page:"lobby"'));
  assert.ok(!lobby.includes('provider-rsg-lobby-rescue.js'));
  assert.ok(!lobby.includes('<script src="/provider-rsg-nav.js"></script>'));
  assert.ok(!lobby.includes('<script src="/provider/thor-engine-code.js"></script>'));
 });
 test('Thor engine only starts for SlotGame5 and not in the native lobby',()=>{
  const scriptsOnGame=scripts('/Web/SlotGame5');
- assert.equal(scriptsOnGame.length,2);
+ assert.equal(scriptsOnGame.length,3);
+ assert.ok(scriptsOnGame[2].includes('page:"game"'));
  scriptsOnGame.forEach(x=>new vm.Script(x));
  const c={URL,console,location:{pathname:`/__game/${sid}/__remote`,href:'https://scarab.test/ignored'},
    __SCARAB_ORIGINAL_URL:'https://gameweb.rsgaming888.com/Web/SlotGame5',
@@ -40,6 +43,13 @@ test('RSG game return only navigates to its recorded native lobby',()=>{
  assert.ok(backend.includes('session.rsgLobbyUrl = finalUrl.href'));
  assert.ok(backend.includes('session.rsgLobbyUrl = returnedUrl.href'));
  assert.ok(!backend.includes("provider-rsg-lobby-rescue.js"));
+});
+test('shared RSG overlay is separate from the native game and only loaded locally',()=>{
+ const local=fs.readFileSync(__dirname+'/public/provider-rsg-floating.js','utf8');
+ new vm.Script(local);
+ assert.ok(local.includes('scarab:rsg-page'));
+ assert.ok(local.includes('returnToRsgLobby'));
+ assert.ok(s.includes('provider-rsg-floating'));
 });
 test('only public RSG CDN resources bypass proxies',()=>{
  const c=vm.createContext({});vm.runInContext(s.slice(s.indexOf('function rsgPublicAsset('),s.indexOf('function apiAllowed(')),c);
