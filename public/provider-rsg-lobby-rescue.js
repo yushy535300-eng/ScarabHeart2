@@ -9,7 +9,7 @@
   if (!/^\/Lobby2?\/Index/i.test(source.pathname)) return;
   var prefix = String(window.__SCARAB_PROXY_PREFIX || '');
   if (!/^\/__game\/[a-f0-9]{24}$/i.test(prefix)) return;
-  var root = null, dataReady = false, key = '', timer = 0, pollCount = 0;
+  var root = null, dataReady = false, loadingData = false, key = '', timer = 0, pollCount = 0;
   var state = { games: [], order: [], query: '', busy: false };
   var safeName = function (v) { return String(v == null ? '' : v).slice(0, 90); };
   function getKey() {
@@ -159,10 +159,12 @@
   }
   function load() {
     var k = key || getKey();
-    if (!k || dataReady) return;
+    if (!k || dataReady || loadingData) return;
     key = k;
+    loadingData = true;
     api('/Lobby2/GameData', { k: k, _: String(Date.now()) }).then(pickData)
-      .catch(function () { /* native network listener is a second source */ });
+      .catch(function () { /* native network listener is a second source */ })
+      .finally(function () { loadingData = false; });
   }
   timer = setInterval(function () {
     if (dataReady) return clearInterval(timer);
