@@ -712,7 +712,7 @@ app.all('/slotFramework/*', express.raw({ type: '*/*', limit: '256kb' }), async 
 
 app.use((req, res, next) => {
   if (req.method !== 'GET' && req.method !== 'HEAD') return next();
-  const reserved = /^\/(?:__|api\/|admin(?:\/|$)|provider\/|provider-rsg-nav\.js$|media\/|logo\.png$|manifest\.webmanifest$|admin-|icon|healthz$)/i;
+  const reserved = /^\/(?:__|api\/|admin(?:\/|$)|provider\/|provider-rsg-nav\.js$|provider-rsg-lobby-rescue\.js$|media\/|logo\.png$|manifest\.webmanifest$|admin-|icon|healthz$)/i;
   if (reserved.test(req.path)) return next();
   const match = String(req.headers.cookie || '').match(/(?:^|;\s*)scarab_provider_sid=([a-f0-9]{24})(?:;|$)/i);
   const session = match && sessions.get(match[1]);
