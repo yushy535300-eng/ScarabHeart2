@@ -400,6 +400,20 @@ function sendCookies(res, upstream, sid) {
     .replace(/;\s*Path=[^;]*/ig, '; Path=/__game/' + sid + '/')));
 }
 
+app.get('/__game/:sid/__navigate', (req, res) => {
+  const session = sessions.get(req.params.sid);
+  if (!session || session.provider !== 'rsg') return res.sendStatus(403);
+  let next;
+  try { next = new URL(String(req.query.url || '')); }
+  catch (_) { return res.sendStatus(400); }
+  const host = next.hostname.toLowerCase();
+  const allow = ['666', '888', '955', '977'].some(n => host === 'gameweb.rsgaming' + n + '.com');
+  if (!allow || next.protocol !== 'https:' || !/^\/Web\/SlotGame\d+/i.test(next.pathname)) return res.sendStatus(403);
+  session.origin = next.origin;
+  session.documentReady = false;
+  return res.redirect('/__game/' + req.params.sid + next.pathname + next.search);
+});
+
 app.get('/__game/open', async (req, res) => {
   const payload = decodePayload(req.query.cfg);
   if (!payload) return res.status(400).send('Invalid game configuration');
