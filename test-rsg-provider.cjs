@@ -44,16 +44,15 @@ test('RSG game return only navigates to its recorded native lobby',()=>{
  assert.ok(backend.includes('session.rsgLobbyUrl = returnedUrl.href'));
  assert.ok(!backend.includes("provider-rsg-lobby-rescue.js"));
 });
-test('shared RSG overlay is separate from the native game and only loaded locally',()=>{
+test('RSG unsupported games receive the screenshot-one Scarab Heart panel with no fake statistics',()=>{
  const local=fs.readFileSync(__dirname+'/public/provider-scarab-assistant-rsg.js','utf8');
  new vm.Script(local);
- assert.ok(local.includes('scarab:rsg-page'));
- assert.ok(local.includes('returnToRsgLobby'));
- assert.ok(local.includes('data:image/png;base64'));
- assert.ok(local.includes('id=\\"scPanel\\"'));
- assert.ok(local.includes('scSpeedGrid'));
- assert.ok(!local.includes('RSG 遊戲輔助'));
- assert.ok(local.includes('目前尚無此遊戲的推薦資料'));
+ for (const text of ['聖甲之心助手','本場輸贏','本場RTP','未開免遊','免遊自動跳過','止盈 / 止損','加速器','returnToRsgLobby','scarab:rsg-page'])
+   assert.ok(local.includes(text), 'Missing original panel feature: '+text);
+ assert.ok(local.includes('knownNative()'), 'Original Thor HUD must take precedence');
+ assert.ok(local.includes('Number.isFinite'), 'No fabricated results');
+ assert.ok(!local.includes('scPanel'), 'Old ATG grid must not be shown');
+ assert.ok(!local.includes('RSG 遊戲輔助'), 'Custom RSG panel must be gone');
  assert.ok(s.includes('provider-scarab-assistant-rsg'));
 });
 test('only public RSG CDN resources bypass proxies',()=>{
