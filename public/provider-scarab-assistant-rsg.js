@@ -92,13 +92,34 @@ function place(pane){
  pane.style.left=(space>=width+8?r.width+7: r.left>=width+8?-width-7: -r.left+5)+'px';
  pane.style.top=(Math.max(3,Math.min(r.top,innerHeight-Math.min(380,pane.scrollHeight)-4))-r.top)+'px';
 }
+function nativeAssistantVisible(){
+  // On supported games the existing provider-specific 聖甲之心 HUD is
+  // functional. Prefer it over a second copy of the same assistant.
+  var frame=document.getElementById('gameFrame');
+  try{
+    var d=frame&&frame.contentDocument;
+    if(!d)return false;
+    var panels=d.querySelectorAll('#__thorHud,#__lunarHud,#scarab-heart-ui');
+    for(var i=0;i<panels.length;i++){
+      var el=panels[i],cs=d.defaultView.getComputedStyle(el);
+      if(cs.display!=='none'&&cs.visibility!=='hidden'&&Number(cs.opacity)!==0&&
+         el.getBoundingClientRect().width>0)return true;
+    }
+  }catch(_){}
+  return false;
+}
+function updateVisibility(){
+  if(!root)return;
+  root.style.display=gameActive&&!nativeAssistantVisible()?'block':'none';
+}
 function show(page){
  gameActive=page==='game';
  var n=mount();if(!n)return;
- n.style.display=gameActive?'block':'none';
+ updateVisibility();
  if(!gameActive){n.querySelectorAll('.scNav button').forEach(function(b){b.classList.remove('on')});n.querySelectorAll('.scPane').forEach(function(p){p.classList.remove('on')});}
 }
 window.addEventListener('scarab:rsg-page',function(e){show(e.detail&&e.detail.page)});
+window.setInterval(function(){if(gameActive)updateVisibility()},800);
 window.addEventListener('resize',function(){
  if(!root||!gameActive)return;
  var r=root.getBoundingClientRect();
