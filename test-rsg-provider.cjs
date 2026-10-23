@@ -34,8 +34,8 @@ test('Thor runtime is limited to SlotGame5; lobby uses the data-backed selector'
 test('RSG lobby replacement uses live GameData and dynamic game selection',()=>{
  const selector=fs.readFileSync(__dirname+'/public/provider-rsg-lobby-rescue.js','utf8');
  new vm.Script(selector);
- assert.match(selector,/Lobby2\\/GameData/);
- assert.match(selector,/Lobby2\\/GetGameURL/);
+ assert.ok(selector.includes('/Lobby2/GameData'));
+ assert.ok(selector.includes('/Lobby2/GetGameURL'));
  assert.match(selector,/__navigate/);
  assert.ok(!selector.includes('id=129'));
 });
