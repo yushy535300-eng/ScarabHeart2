@@ -4,8 +4,8 @@ for(const [a,b] of [['function gameAllowed(','function apiAllowed('],['function 
 const sid='a'.repeat(24);
 function scripts(path){return [...ctx.providerBoot(sid,'https://gameweb.rsgaming888.com'+path,{provider:'rsg',payload:{cfg:{}}},true).matchAll(/<script>([\s\S]*?)<\/script>/g)].map(x=>x[1]);}
 test('recorded and legacy hosts accepted, unrelated hosts rejected',()=>{
- for(const z of ['666','888'])for(const r of ['gameweb','gameresource','gameresource3','gameserver'])assert.equal(ctx.gameAllowed(new URL(`https://${r}.rsgaming${z}.com/`),'rsg'),true);
- for(const h of ['gameweb.rsgaming888.com.evil.test','evil.rsgaming888.com','localhost'])assert.equal(ctx.gameAllowed(new URL('https://'+h),'rsg'),false);
+ for(const z of ['666','888','955','977'])for(const r of ['gameweb','gameresource','gameresource3','gameserver'])assert.equal(ctx.gameAllowed(new URL(`https://${r}.rsgaming${z}.com/`),'rsg'),true);
+ for(const h of ['gameweb.rsgaming888.com.evil.test','evil.rsgaming888.com','evil.rsgaming955.com','localhost'])assert.equal(ctx.gameAllowed(new URL('https://'+h),'rsg'),false);
 });
 test('generated proxy routes new resource and socket hosts',()=>{
  const calls=[];class Element{setAttribute(){}}class XHR{open(){}}class WS{constructor(u){calls.push(u)}}
