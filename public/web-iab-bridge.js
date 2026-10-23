@@ -6,6 +6,9 @@
   var nativeFetch = window.fetch.bind(window);
   var NativeWebSocket = window.WebSocket;
   var loadTimer = null;
+  // Serialize provider cleanup before a new iframe opens, to prevent an old
+  // /__game/close response from clearing the next RSG session cookie.
+  var pendingProviderClose = Promise.resolve();
   // Remove the v2.60 root worker. It is no longer needed and an old worker
   // should never affect a fresh deploy/recovery.
   try {
@@ -196,14 +199,20 @@
       if (currentSrc && currentSrc !== 'about:blank') ui.frame.src = 'about:blank';
     } catch (_) {}
 
-    ui.frame.src = '/__game/open?url=' + encodeURIComponent(source.href) +
-      '&cfg=' + encodeURIComponent(encoded);
-    return true;
+    // A quick Back -> RSG re-entry must not race the previous session cleanup.
+    return pendingProviderClose.catch(function () {}).then(function () {
+      if (openId !== currentOpenId || currentKind !== kind) return false;
+      ui.frame.src = '/__game/open?url=' + encodeURIComponent(source.href) +
+        '&cfg=' + encodeURIComponent(encoded);
+      return true;
+    });
   }
 
   function closeInApp() {
     var ui = elements();
-    try { nativeFetch('/__game/close', { method: 'POST', credentials: 'same-origin' }).catch(function(){}); } catch (_) {}
+    pendingProviderClose = pendingProviderClose.catch(function () {}).then(function () {
+      return nativeFetch('/__game/close', { method: 'POST', credentials: 'same-origin' });
+    }).catch(function () { /* Allow re-entry even if cleanup request fails. */ });
     clearTimeout(loadTimer);
     frameLoaded = false;
     currentOpenId++;
