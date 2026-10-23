@@ -448,8 +448,8 @@ app.get('/__game/:sid/__rsg-return', (req, res) => {
   try { lobby = new URL(session.rsgLobbyUrl); }
   catch (_) { return res.sendStatus(409); }
   if (!gameAllowed(lobby, 'rsg') ||
-      !/^gameweb\\.rsgaming(?:666|888|955|977|999)\\.com$/i.test(lobby.hostname) ||
-      !/^\\/Lobby2?\\/Index(?:\\/|$)/i.test(lobby.pathname) ||
+      !/^gameweb\.rsgaming(?:666|888|955|977|999)\.com$/i.test(lobby.hostname) ||
+      !/^\/Lobby2?\/Index(?:\/|$)/i.test(lobby.pathname) ||
       lobby.protocol !== 'https:') return res.sendStatus(403);
   session.origin = lobby.origin;
   session.documentReady = false;
