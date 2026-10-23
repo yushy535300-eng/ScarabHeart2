@@ -15,7 +15,7 @@
     ['new-vampire-hunter', '惡魔血域', 'media/game6.png'],
     ['new-jinlian', '金蓮三缺一', 'media/game9.png'],
     ['qt-lunar-rabbit', '月兔', 'media/moon-rabbit-cover.webp', 'QT'],
-    ['thor', '雷神', 'media/thor-cover.webp', 'RSG']
+    ['thor', 'RSG平台', 'media/rsg-platform.svg', 'RSG']
   ];
   // 2026-09-25: verified from the user's ATG HAR captures.
   // Keeping the real ATG identity beside each game prevents stale/foreign
