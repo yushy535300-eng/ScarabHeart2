@@ -479,10 +479,19 @@ app.post('/api/provider-status/:sid', accessJson, (req, res) => {
 
 app.post('/__game/close', (req, res) => {
   const match = String(req.headers.cookie || '').match(/(?:^|;\s*)scarab_provider_sid=([a-f0-9]{24})(?:;|$)/i);
-  if (match) sessions.delete(match[1]);
-  const secure = String(req.headers['x-forwarded-proto'] || req.protocol).split(',')[0].trim() === 'https:' ||
-    String(req.headers['x-forwarded-proto'] || req.protocol).split(',')[0].trim() === 'https';
-  res.set('Set-Cookie', 'scarab_provider_sid=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0' + (secure ? '; Secure' : ''));
+  const wanted = String(req.headers['x-scarab-game-session'] || '').toLowerCase();
+  const cookieSid = match && match[1];
+  // Cleanup by the iframe's exact session id when known. A previous close
+  // must never invalidate a newer provider session after rapid reentry.
+  const knownWanted = /^[a-f0-9]{24}$/.test(wanted) && sessions.has(wanted);
+  if (knownWanted) sessions.delete(wanted);
+  else if (!wanted && cookieSid) sessions.delete(cookieSid);
+  // Do not clear a newer session's cookie while closing an older iframe.
+  if (!wanted || (knownWanted && cookieSid === wanted)) {
+    const secure = String(req.headers['x-forwarded-proto'] || req.protocol).split(',')[0].trim() === 'https:' ||
+      String(req.headers['x-forwarded-proto'] || req.protocol).split(',')[0].trim() === 'https';
+    res.set('Set-Cookie', 'scarab_provider_sid=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0' + (secure ? '; Secure' : ''));
+  }
   res.status(204).end();
 });
 
@@ -736,7 +745,11 @@ app.all('/slotFramework/*', express.raw({ type: '*/*', limit: '256kb' }), async 
 app.use((req, res, next) => {
   if (req.method !== 'GET' && req.method !== 'HEAD') return next();
   const reserved = /^\/(?:__|api\/|admin(?:\/|$)|provider\/|provider-rsg-nav\.js$|media\/|logo\.png$|manifest\.webmanifest$|admin-|icon|healthz$)/i;
-  if (reserved.test(req.path)) return next();
+  // Our own entry scripts must never be proxied through the prior RSG
+  // cookie. Otherwise a quick RSG exit/re-entry (or refresh) loads RSG's 404
+  // page instead of the app/launcher JavaScript.
+  const appScript = /^\/(?:app|web-iab-bridge|user-presence-client|seth-eye-api|seth-errors|provider-rsg-floating)\.js$/i;
+  if (reserved.test(req.path) || appScript.test(req.path)) return next();
   const match = String(req.headers.cookie || '').match(/(?:^|;\s*)scarab_provider_sid=([a-f0-9]{24})(?:;|$)/i);
   const session = match && sessions.get(match[1]);
   if (!session || !['qt', 'rsg'].includes(session.provider)) return next();
