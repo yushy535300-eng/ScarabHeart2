@@ -54,7 +54,7 @@ test('shared RSG overlay is separate from the native game and only loaded locall
  assert.ok(local.includes('scSpeedGrid'));
  assert.ok(!local.includes('RSG 遊戲輔助'));
  assert.ok(local.includes('目前尚無此遊戲的推薦資料'));
- assert.ok(s.includes('provider-rsg-floating'));
+ assert.ok(s.includes('provider-scarab-assistant-rsg'));
 });
 test('only public RSG CDN resources bypass proxies',()=>{
  const c=vm.createContext({});vm.runInContext(s.slice(s.indexOf('function rsgPublicAsset('),s.indexOf('function apiAllowed(')),c);
