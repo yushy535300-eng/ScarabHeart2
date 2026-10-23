@@ -520,8 +520,13 @@
           throw new Error((result && result.message) || '目前無法取得' + providerGame[1] + '入口，請稍後再試。');
         }
         const parsed = new URL(launchUrl);
-        const expectedHosts = providerGame[3] === 'QT' ? ['lobby.qtlauncher.com'] : ['gameweb.rsgaming666.com', 'gameweb.rsgaming888.com'];
-        if (parsed.protocol !== 'https:' || !expectedHosts.includes(parsed.hostname.toLowerCase())) throw new Error('遊戲入口網址不符合預期，請返回遊戲中心。');
+        const validHost = providerGame[3] === 'QT'
+          ? parsed.hostname.toLowerCase() === 'lobby.qtlauncher.com'
+          : /^gameweb\.rsgaming(?:666|888|955|977)\.com$/i.test(parsed.hostname);
+        // Accept only known gameweb launch hosts observed in RSG captures.
+        // Never allow arbitrary external URLs, query tokens or credentials here.
+        if (parsed.protocol !== 'https:' || !validHost || parsed.username || parsed.password)
+          throw new Error('遊戲入口網址不符合預期（' + parsed.hostname + '），請返回遊戲中心。');
         if (!window.ScarabWebLauncher) throw new Error('程式內遊戲載入器未就緒');
         await ScarabWebLauncher.open(parsed.href, {
           kind: providerGame[3] === 'QT' ? 'qt' : 'rsg',
