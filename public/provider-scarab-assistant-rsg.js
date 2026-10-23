@@ -5,6 +5,7 @@
   'use strict';
   var root=null, active=false, currentPage='closed', drag=null, minimized=false;
   var lastData=null, maxAge=4000;
+  var engineState={canSpeed:false,lastSeen:0,name:'',speed:1},commandSeq=0;
   function $(id){return root&&root.querySelector('#'+id)}
   function put(id,value){var el=$(id);if(el)el.textContent=value;}
   function fmt(value,kind){
@@ -13,6 +14,34 @@
     if(kind==='pnl')return (n>=0?'+':'')+n.toLocaleString('zh-TW',{maximumFractionDigits:2});
     if(kind==='rtp')return n.toFixed(1)+'%';
     return n.toLocaleString('zh-TW',{maximumFractionDigits:2});
+  }
+  function verifiedFrame(src){
+    var frame=document.getElementById('gameFrame');
+    if(!frame||!src)return false;
+    try{for(var i=0;i<8;i++){
+      if(src===frame.contentWindow)return true;
+      if(src===src.parent)break;
+      src=src.parent;
+    }}catch(_){}
+    return false;
+  }
+  function canUseSpeed(){return engineState.canSpeed&&Date.now()-engineState.lastSeen<6500;}
+  function speedButtons(){
+    if(!root)return;
+    var ready=canUseSpeed();
+    root.querySelectorAll('.sh-speeds button').forEach(function(b){
+      b.disabled=!ready;
+      b.classList.toggle('speed-verified',ready&&Number(b.dataset.sp)===engineState.speed);
+      b.setAttribute('aria-pressed',String(ready&&Number(b.dataset.sp)===engineState.speed));
+      b.title=ready?'透過已驗證的'+engineState.name+'調整遊戲引擎時間倍率':'遊戲尚未提供可驗證的加速引擎';
+    });
+  }
+  function changeSpeed(n){
+    if(!canUseSpeed()){put('shRsgStatus','尚未偵測到可用的遊戲引擎');return;}
+    var frame=document.getElementById('gameFrame'),requestId=String(++commandSeq);
+    if(!frame||!frame.contentWindow)return;
+    put('shRsgStatus','正在套用 '+n+'x，等待引擎確認…');
+    frame.contentWindow.postMessage({__scarabRsgControl:true,action:'speed',value:n,requestId:requestId},location.origin);
   }
   function knownNative(){
     var frame=document.getElementById('gameFrame');
@@ -62,6 +91,7 @@
 #scarab-rsg-correct .sh-speeds button{height:36px;border-radius:10px;border:1px solid #bbaa715e;
   background:#19342b;color:#ebcf88;font-weight:850;font-size:13px}
 #scarab-rsg-correct button:disabled{opacity:.45!important;cursor:not-allowed!important}
+#scarab-rsg-correct .sh-speeds button.speed-verified{background:linear-gradient(#f5d584,#b8862e);color:#10211b;border-color:#f7e6aa;box-shadow:0 0 12px #e8b34866}
 #scarab-rsg-correct .sh-row{display:flex;align-items:center;justify-content:space-between;gap:5px;
   min-height:37px;color:#f2d499}
 #scarab-rsg-correct .sh-row button{background:transparent;border:0;color:#ebd7a2}
@@ -134,13 +164,16 @@
     });
     bar.addEventListener('pointermove',function(e){if(!drag||drag.id!==e.pointerId)return;var x=Math.max(0,Math.min(innerWidth-root.offsetWidth,e.clientX-drag.x)),y=Math.max(0,Math.min(innerHeight-root.offsetHeight,e.clientY-drag.y));root.style.left=x+'px';root.style.top=y+'px';});
     ['pointerup','pointercancel','lostpointercapture'].forEach(function(n){bar.addEventListener(n,function(){drag=null;});});
+    root.querySelectorAll('.sh-speeds button').forEach(function(btn){btn.addEventListener('click',function(){changeSpeed(Number(btn.dataset.sp))});});
     root.querySelector('.sh-signal').addEventListener('click',toggleInfo);
     root.querySelector('.sh-info').addEventListener('click',toggleInfo);
     root.querySelector('.sh-exit').addEventListener('click',function(){var p=window.ScarabWebLauncher;if(p&&p.returnToRsgLobby&&p.returnToRsgLobby())return;put('shRsgStatus','請點右上角返回 RSG 大廳');});
   }
   function toggleInfo(){var info=root.querySelector('.sh-hint');info.classList.toggle('open');}
   function state(page){
-    currentPage=page;active=page==='game';render();
+    currentPage=page;active=page==='game';
+    if(page!=='game'){engineState.canSpeed=false;engineState.lastSeen=0;lastData=null;}
+    render();
   }
   function render(){
     mount();if(!root)return;
@@ -152,15 +185,35 @@
     put('shRsgBal',d&&Number.isFinite(d.balance)?'餘額 '+fmt(d.balance):'餘額 —');
     put('shRsgUnopened',d&&Number.isInteger(d.unopened)?d.unopened+' 轉':'—');
     put('shRsgRtp',d&&Number.isFinite(d.rtp)?fmt(d.rtp,'rtp'):'—');
-    put('shRsgStatus',d?'遊戲真實資料已同步':'此遊戲資料尚未接通');
+    speedButtons();
+    if(!canUseSpeed())put('shRsgStatus',d?'遊戲資料已同步 · 倍率不可用':'未取得此遊戲的真實資料或加速控制');
+    else if(!d)put('shRsgStatus','加速引擎已連線 · 輸贏等資料尚未接通');
   }
   window.addEventListener('scarab:rsg-page',function(e){state(e.detail&&e.detail.page)});
   // Verified same-iframe telemetry only. Never guess values from artwork.
   window.addEventListener('message',function(e){
-    if(!active||!e.data||e.data.__scarabProviderTelemetry!==true||e.data.provider!=='rsg')return;
-    var frame=document.getElementById('gameFrame'),src=e.source;var valid=false;
-    try{for(var i=0;i<8;i++){if(src===frame.contentWindow){valid=true;break;}if(src.parent===src)break;src=src.parent;}}catch(_){}
-    if(!valid)return;
+    if(e.origin!==location.origin||!active||!e.data||e.data.provider!=='rsg'||!verifiedFrame(e.source))return;
+    if(e.data.__scarabRsgEngine===true){
+      var event=e.data;
+      if(event.type==='capabilities'){
+        engineState.canSpeed=event.canSpeed===true;
+        engineState.name=String(event.adapter||'').slice(0,42);
+        engineState.lastSeen=Date.now();
+        if(engineState.canSpeed&&[1,2,4,8].includes(Number(event.speed)))engineState.speed=Number(event.speed);
+        speedButtons();
+        return;
+      }
+      if(event.type==='speedAck'){
+        if(event.success===true&&[1,2,4,8].includes(Number(event.speed))){
+          engineState.speed=Number(event.speed);
+          engineState.canSpeed=true;engineState.lastSeen=Date.now();
+          speedButtons();
+          put('shRsgStatus','已確認 '+engineState.speed+'x 引擎倍率');
+        }else put('shRsgStatus',String(event.reason||'倍率未套用').slice(0,80));
+        return;
+      }
+    }
+    if(e.data.__scarabProviderTelemetry!==true)return;
     var d=e.data.value||{},v={};
     ['pnl','balance','rtp','unopened'].forEach(function(k){if(d[k]!==null&&d[k]!==''&&Number.isFinite(Number(d[k])))v[k]=Number(d[k]);});
     lastData={at:Date.now(),value:v};render();
