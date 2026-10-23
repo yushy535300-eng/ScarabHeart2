@@ -522,7 +522,7 @@
         const parsed = new URL(launchUrl);
         const validHost = providerGame[3] === 'QT'
           ? parsed.hostname.toLowerCase() === 'lobby.qtlauncher.com'
-          : /^gameweb\.rsgaming(?:666|888|955|977)\.com$/i.test(parsed.hostname);
+          : /^gameweb\.rsgaming(?:666|888|955|977|999)\.com$/i.test(parsed.hostname);
         // Accept only known gameweb launch hosts observed in RSG captures.
         // Never allow arbitrary external URLs, query tokens or credentials here.
         if (parsed.protocol !== 'https:' || !validHost || parsed.username || parsed.password)
@@ -1384,6 +1384,14 @@
     }
   }
 
+  // RSG uses its own original game-selection lobby. Return there first when
+  // leaving an RSG game; only exit to More Games when already at the lobby.
+  function returnToRsgLobby() {
+    if (!session || session.game !== 'thor' || !window.ScarabWebLauncher ||
+        typeof window.ScarabWebLauncher.returnToRsgLobby !== 'function') return false;
+    return window.ScarabWebLauncher.returnToRsgLobby();
+  }
+
   function closeGame(destination) {
     hideRoomPickToast();
     // Invalidate async work from the game instance that is being closed.
@@ -1445,7 +1453,7 @@
       return;
     }
     if (/__sethcmd__\/rooms/.test(command)) { closeGame('rooms'); return; }
-    if (/__(?:seth|thor|lunar)cmd__\/home/.test(command)) { closeGame('rooms'); return; }
+    if (/__(?:seth|thor|lunar)cmd__\/home/.test(command)) { if (!returnToRsgLobby()) closeGame('rooms'); return; }
     if (/__sethcmd__\/deposit/.test(command)) {
       closeGame('rooms');
       $('err2').textContent = '請回娛樂城完成儲值後再重新進入遊戲。';
@@ -1482,7 +1490,7 @@
   $('gcLogout').onclick = logout;
   $('moreGamesBtn').onclick = showMoreGames;
   $('moreBack').onclick = () => { gameOpenSerial++; if (window.ScarabWebLauncher) ScarabWebLauncher.close(); showGameCenter(); };
-  window.addEventListener('scarab:provider-exit', () => closeGame('home')); 
+  window.addEventListener('scarab:provider-exit', () => { if (!returnToRsgLobby()) closeGame('home'); }); 
   $('logoutBtn').onclick = logout;
   $('roomBack').onclick = showGameCenter;
   $('refreshBtn').onclick = async function () {
@@ -1495,7 +1503,7 @@
   };
   $('enterBtn').onclick = () => enterGame();
   $('skipBtn').onclick = () => enterGame('manual');
-  $('gameExit').onclick = () => closeGame('rooms');
+  $('gameExit').onclick = () => { if (!returnToRsgLobby()) closeGame('rooms'); };
   window.addEventListener('scarab:web-command', event => handleGameCommand(event && event.detail && event.detail.url));
 
   syncShellOrientation();
