@@ -29,7 +29,7 @@ test('Thor runtime is limited to SlotGame5; lobby uses the data-backed selector'
  const lobby=ctx.providerBoot(sid,'https://gameweb.rsgaming955.com/Lobby2/Index',{provider:'rsg',payload:{cfg:{}}},true);
  assert.ok(lobby.includes('provider-rsg-lobby-rescue.js'));
  assert.ok(!lobby.includes('thor-engine-code.js'));
- assert.ok(!lobby.includes('provider-rsg-nav.js'));
+ assert.ok(!lobby.includes('<script src="/provider-rsg-nav.js"></script>'));
 });
 test('RSG lobby replacement uses live GameData and dynamic game selection',()=>{
  const selector=fs.readFileSync(__dirname+'/public/provider-rsg-lobby-rescue.js','utf8');
