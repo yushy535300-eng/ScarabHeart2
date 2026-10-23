@@ -15,7 +15,7 @@
     ['new-vampire-hunter', '惡魔血域', 'media/game6.png'],
     ['new-jinlian', '金蓮三缺一', 'media/game9.png'],
     ['qt-lunar-rabbit', '月兔', 'media/moon-rabbit-cover.webp', 'QT'],
-    ['thor', 'RSG平台', 'media/rsg-platform.svg', 'RSG']
+    ['thor', 'RSG平台', 'media/rsg-platform-original-centered.jpg', 'RSG']
   ];
   // 2026-09-25: verified from the user's ATG HAR captures.
   // Keeping the real ATG identity beside each game prevents stale/foreign
@@ -410,9 +410,16 @@
     GAMES.filter(game => !!game[3] === !!more).forEach(game => {
       const button = document.createElement('button');
       button.type = 'button';
-      button.className = 'game-card' + (game[3] ? ' provider-card' : '');
+      button.className = 'game-card' + (game[3] ? ' provider-card' : '') + (game[0] === 'thor' ? ' rsg-platform-card' : '');
       button.style.setProperty('--game-bg', 'url("' + game[2] + '")');
       button.innerHTML = '<img src="' + game[2] + '" alt=""><span class="game-shade"></span><span class="game-meta"><small>' + (game[3] || 'ATG') + ' · GAME</small><b>' + game[1] + '</b></span><span class="game-arrow">›</span>';
+      if (game[0] === 'thor') {
+        const image = button.querySelector('img');
+        if (image) image.addEventListener('error', function () {
+          // Preserve a working tile while the new cropped artwork is deploying.
+          if (!this.src.endsWith('/media/rsg-platform.svg')) this.src = 'media/rsg-platform.svg';
+        }, { once: true });
+      }
       button.onclick = () => chooseGame(game[0]);
       box.appendChild(button);
     });
