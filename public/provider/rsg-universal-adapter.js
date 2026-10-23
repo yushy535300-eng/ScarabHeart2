@@ -31,6 +31,17 @@
          return {name:'Laya Timer',read:function(){return Number(timer.scale)},
            write:function(n){timer.scale=n;return Number(timer.scale)}};
        }
+       // A PIXI shared ticker can drive only decorations; do not claim it
+       // controls the game. Require an actual exposed Application ticker.
+       var pixi=context.PIXI,app=context.pixiApp||context.pixiApplication||context.__PIXI_APP__;
+       if(pixi&&pixi.Application&&app instanceof pixi.Application){
+         var ticker=app.ticker;
+         if(ticker&&ticker.started===true&&Number.isFinite(Number(ticker.speed))&&
+            Number(ticker.speed)>0){
+           return {name:'PIXI Application',read:function(){return Number(ticker.speed)},
+             write:function(n){ticker.speed=n;return Number(ticker.speed)}};
+         }
+       }
      }catch(_){}
      try {
        for(var i=0;i<context.frames.length&&frames.length<12;i++){
@@ -41,11 +52,33 @@
    }
    return null;
  }
+ function identifyEngineHints(){
+   // Only engine families are exposed, never resource URLs, game tokens or WS data.
+   var hints=[];
+   try{
+     if(window.cc)hints.push('Cocos');
+     if(window.Laya)hints.push('Laya');
+     if(window.PIXI)hints.push('PIXI');
+     if(window.Phaser)hints.push('Phaser');
+     if(window.egret)hints.push('Egret');
+     var resources=performance.getEntriesByType('resource');
+     for(var i=Math.max(0,resources.length-120);i<resources.length;i++){
+       var path='';
+       try {path=new URL(resources[i].name).pathname.toLowerCase()}catch(_){continue}
+       if(/cocos-js|cc\.js$/.test(path))hints.push('Cocos');
+       if(/pixi(?:\.min)?\.js/.test(path))hints.push('PIXI');
+       if(/laya(?:\.core)?(?:\.min)?\.js/.test(path))hints.push('Laya');
+       if(/phaser(?:\.min)?\.js/.test(path))hints.push('Phaser');
+       if(/unityloader|\.wasm$/.test(path))hints.push('Wasm');
+     }
+   }catch(_){}
+   return Array.from(new Set(hints)).slice(0,4).join(' / ')||'未識別';
+ }
  function report(force){
    var a=adapter(),key=a?a.name:'unavailable';
    if(!force&&key===lastSig&&Date.now()-lastReportedAt<2800)return;
    lastSig=key;lastReportedAt=Date.now();
-   send({type:'capabilities',canSpeed:!!a,adapter:a&&a.name||'',speed:a?a.read():null});
+   send({type:'capabilities',canSpeed:!!a,adapter:a&&a.name||'',speed:a?a.read():null,engineHint:identifyEngineHints()});
  }
  window.addEventListener('message',function(event){
    if(event.source!==parent||event.origin!==origin())return;
