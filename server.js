@@ -355,8 +355,17 @@ function providerBoot(sid, originalHref, session, withRuntime) {
   // The lobby and every non-Thor RSG game must load their own native UI,
   // not the Thor-specific runtime or its global input hooks.
   const rsgPath = new URL(originalHref).pathname;
+  // Small same-origin state notice only; never replaces RSG's native game/lobby.
+  // The parent uses it to show a shared floating panel on every SlotGame.
+  const rsgPage = provider === 'rsg'
+    ? /^\/Web\/SlotGame\d+(?:\/|$)/i.test(rsgPath) ? 'game'
+      : /^\/Lobby2?\/Index(?:\/|$)/i.test(rsgPath) ? 'lobby' : ''
+    : '';
+  const rsgNotice = rsgPage
+    ? '<script>(function(){try{parent.postMessage({__scarabProviderPage:true,provider:"rsg",page:"' + rsgPage + '"},"*")}catch(_){}})();<\/script>'
+    : '';
   if (provider === 'rsg' && !/^\/Web\/SlotGame5(?:\/|$)/i.test(rsgPath)) {
-    return boot + (/^\/Web\/SlotGame\d+(?:\/|$)/i.test(rsgPath)
+    return boot + rsgNotice + (/^\/Web\/SlotGame\d+(?:\/|$)/i.test(rsgPath)
       ? '<script src="/provider/rsg-start-repair.js"></script>' : '');
   }
   const gameCode = provider === 'qt' ? 'qt-lunar-rabbit' : 'thor';
@@ -374,7 +383,7 @@ function providerBoot(sid, originalHref, session, withRuntime) {
   // RSG lobby must remain interactive: the player selects the game.
   // Never auto-launch hard-coded game id 129 from lobby navigation.
   const nav = '';
-  return boot + engine + start + nav;
+  return boot + engine + start + nav + rsgNotice;
 }
 
 function upstreamHeaders(req, url, sessionOrigin) {
