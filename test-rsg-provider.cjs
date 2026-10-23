@@ -16,11 +16,29 @@ test('generated proxy routes new resource and socket hosts',()=>{
  c.fetch('/provider-rsg-nav.js');assert.equal(calls.pop(),'/provider-rsg-nav.js');
  c.fetch('https://evil.test/x');assert.equal(calls.pop(),'https://evil.test/x');
 });
-test('engine starts on remote proxy SlotGame5 and stays idle on lobby',()=>{
- for(const path of ['/Web/SlotGame5','/Lobby2/Index']){const parts=scripts(path);parts.forEach(x=>new vm.Script(x));let tick,started=0;
- const c={URL,console,location:{pathname:`/__game/${sid}/__remote`,href:'https://scarab.test/ignored'},__SCARAB_ORIGINAL_URL:'https://gameweb.rsgaming888.com'+path,setInterval:f=>{tick=f;return 1},clearInterval(){},thorEngine:()=>started++};c.window=c;vm.runInNewContext(parts[1],c);tick();assert.equal(started,path.startsWith('/Web/')?1:0);}
+test('Thor runtime is limited to SlotGame5; lobby uses the data-backed selector',()=>{
+ const gameScripts=scripts('/Web/SlotGame5');
+ assert.equal(gameScripts.length,2);
+ gameScripts.forEach(x=>new vm.Script(x));
+ let tick,started=0;
+ const c={URL,console,location:{pathname:`/__game/${sid}/__remote`,href:'https://scarab.test/ignored'},__SCARAB_ORIGINAL_URL:'https://gameweb.rsgaming888.com/Web/SlotGame5',setInterval:f=>{tick=f;return 1},clearInterval(){},thorEngine:()=>started++};
+ c.window=c;
+ vm.runInNewContext(gameScripts[1],c);
+ tick();
+ assert.equal(started,1);
+ const lobby=ctx.providerBoot(sid,'https://gameweb.rsgaming955.com/Lobby2/Index',{provider:'rsg',payload:{cfg:{}}},true);
+ assert.ok(lobby.includes('provider-rsg-lobby-rescue.js'));
+ assert.ok(!lobby.includes('thor-engine-code.js'));
+ assert.ok(!lobby.includes('provider-rsg-nav.js'));
 });
-
+test('RSG lobby replacement uses live GameData and dynamic game selection',()=>{
+ const selector=fs.readFileSync(__dirname+'/public/provider-rsg-lobby-rescue.js','utf8');
+ new vm.Script(selector);
+ assert.match(selector,/Lobby2\\/GameData/);
+ assert.match(selector,/Lobby2\\/GetGameURL/);
+ assert.match(selector,/__navigate/);
+ assert.ok(!selector.includes('id=129'));
+});
 test('only public RSG CDN resources bypass proxies',()=>{
  const c=vm.createContext({});vm.runInContext(s.slice(s.indexOf('function rsgPublicAsset('),s.indexOf('function apiAllowed(')),c);
  for(const ext of ['webp','bin','ttf','mp3','css','js'])assert.equal(c.rsgPublicAsset(new URL('https://gameresource3.rsgaming888.com/WebUI3/content/PowerOfThor2/a.'+ext),'rsg','GET'),true);
