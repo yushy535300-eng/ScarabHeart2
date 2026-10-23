@@ -95,3 +95,34 @@ test('unsupported RSG engine never reports fake speed success',()=>{
    data:{__scarabRsgControl:true,action:'speed',value:8,requestId:'test'}});
  assert.equal(events.at(-1).success,false);
 });
+
+test('PIXI Application ticker is only enabled for an exposed active app',()=>{
+ const code=fs.readFileSync(__dirname+'/public/provider/rsg-universal-adapter.js','utf8');
+ class PixiApp{constructor(){this.ticker={started:true,speed:1}}}
+ let listener,events=[];
+ const parent={postMessage:x=>events.push(x)};
+ const w={__SCARAB_ORIGINAL_URL:'https://gameweb.rsgaming955.com/Web/SlotGame3?dir=72Changes',
+   PIXI:{Application:PixiApp},pixiApp:new PixiApp(),frames:[],
+   addEventListener:(k,fn)=>{if(k==='message')listener=fn}};
+ vm.runInNewContext(code,{window:w,parent,document:{visibilityState:'visible'},
+   location:{origin:'https://scarabheart2.onrender.com'},performance:{getEntriesByType:()=>[]},
+   setInterval:()=>1,clearInterval:()=>{},URL,Number,Date,Array,Math});
+ assert.equal(events[0].canSpeed,true);
+ assert.equal(events[0].adapter,'PIXI Application');
+ listener({source:parent,origin:'https://scarabheart2.onrender.com',
+   data:{__scarabRsgControl:true,action:'speed',value:4,requestId:'t'}});
+ assert.equal(w.pixiApp.ticker.speed,4);
+ assert.equal(events.at(-1).success,true);
+});
+test('PIXI global without a game-owned application does not enable speed',()=>{
+ const code=fs.readFileSync(__dirname+'/public/provider/rsg-universal-adapter.js','utf8');
+ class PixiApp{}
+ let events=[];
+ const w={__SCARAB_ORIGINAL_URL:'https://gameweb.rsgaming955.com/Web/SlotGame3',
+   PIXI:{Application:PixiApp},frames:[],addEventListener:()=>{}};
+ vm.runInNewContext(code,{window:w,parent:{postMessage:e=>events.push(e)},document:{visibilityState:'visible'},
+   location:{origin:'https://scarabheart2.onrender.com'},performance:{getEntriesByType:()=>[]},
+   setInterval:()=>1,clearInterval:()=>{},URL,Number,Date,Array,Math});
+ assert.equal(events[0].canSpeed,false);
+ assert.equal(events[0].engineHint,'PIXI');
+});
