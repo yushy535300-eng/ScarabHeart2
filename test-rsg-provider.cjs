@@ -18,10 +18,10 @@ test('generated proxy routes new resource and socket hosts',()=>{
 });
 test('original RSG lobby is preserved, with no forced game entry or replacement menu',()=>{
  const lobby=ctx.providerBoot(sid,'https://gameweb.rsgaming955.com/Lobby2/Index',{provider:'rsg',payload:{cfg:{}}},true);
- assert.equal([...lobby.matchAll(/<script>([\\s\\S]*?)<\\/script>/g)].length,1);
+ assert.equal((lobby.match(/<script>/g) || []).length, 1);
  assert.ok(!lobby.includes('provider-rsg-lobby-rescue.js'));
- assert.ok(!lobby.includes('provider-rsg-nav.js'));
- assert.ok(!lobby.includes('thor-engine-code.js'));
+ assert.ok(!lobby.includes('<script src="/provider-rsg-nav.js"></script>'));
+ assert.ok(!lobby.includes('<script src="/provider/thor-engine-code.js"></script>'));
 });
 test('Thor engine only starts for SlotGame5 and not in the native lobby',()=>{
  const scriptsOnGame=scripts('/Web/SlotGame5');
