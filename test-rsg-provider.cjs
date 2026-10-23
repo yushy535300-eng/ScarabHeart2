@@ -45,10 +45,15 @@ test('RSG game return only navigates to its recorded native lobby',()=>{
  assert.ok(!backend.includes("provider-rsg-lobby-rescue.js"));
 });
 test('shared RSG overlay is separate from the native game and only loaded locally',()=>{
- const local=fs.readFileSync(__dirname+'/public/provider-rsg-floating.js','utf8');
+ const local=fs.readFileSync(__dirname+'/public/provider-scarab-assistant-rsg.js','utf8');
  new vm.Script(local);
  assert.ok(local.includes('scarab:rsg-page'));
  assert.ok(local.includes('returnToRsgLobby'));
+ assert.ok(local.includes('data:image/png;base64'));
+ assert.ok(local.includes('id=\\"scPanel\\"'));
+ assert.ok(local.includes('scSpeedGrid'));
+ assert.ok(!local.includes('RSG 遊戲輔助'));
+ assert.ok(local.includes('目前尚無此遊戲的推薦資料'));
  assert.ok(s.includes('provider-rsg-floating'));
 });
 test('only public RSG CDN resources bypass proxies',()=>{
