@@ -748,7 +748,7 @@ app.use((req, res, next) => {
   // Our own entry scripts must never be proxied through the prior RSG
   // cookie. Otherwise a quick RSG exit/re-entry (or refresh) loads RSG's 404
   // page instead of the app/launcher JavaScript.
-  const appScript = /^\/(?:app|web-iab-bridge|user-presence-client|seth-eye-api|seth-errors|provider-rsg-floating)\.js$/i;
+  const appScript = /^\/(?:app|web-iab-bridge|user-presence-client|seth-eye-api|seth-errors|provider-rsg-floating|provider-scarab-assistant-rsg)\.js$/i;
   if (reserved.test(req.path) || appScript.test(req.path)) return next();
   const match = String(req.headers.cookie || '').match(/(?:^|;\s*)scarab_provider_sid=([a-f0-9]{24})(?:;|$)/i);
   const session = match && sessions.get(match[1]);
