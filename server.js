@@ -356,7 +356,6 @@ function providerBoot(sid, originalHref, session, withRuntime) {
   // not the Thor-specific runtime or its global input hooks.
   const rsgPath = new URL(originalHref).pathname;
   if (provider === 'rsg' && !/^\/Web\/SlotGame5(?:\/|$)/i.test(rsgPath)) {
-    if (/^\/Lobby2?\/Index(?:\/|$)/i.test(rsgPath)) return boot + '<script src="/provider-rsg-lobby-rescue.js"></script>';
     return boot + (/^\/Web\/SlotGame\d+(?:\/|$)/i.test(rsgPath)
       ? '<script src="/provider/rsg-start-repair.js"></script>' : '');
   }
@@ -399,20 +398,6 @@ function sendCookies(res, upstream, sid) {
     .replace(/;\s*Domain=[^;]+/ig, '')
     .replace(/;\s*Path=[^;]*/ig, '; Path=/__game/' + sid + '/')));
 }
-
-app.get('/__game/:sid/__navigate', (req, res) => {
-  const session = sessions.get(req.params.sid);
-  if (!session || session.provider !== 'rsg') return res.sendStatus(403);
-  let next;
-  try { next = new URL(String(req.query.url || '')); }
-  catch (_) { return res.sendStatus(400); }
-  const host = next.hostname.toLowerCase();
-  const allow = ['666', '888', '955', '977'].some(n => host === 'gameweb.rsgaming' + n + '.com');
-  if (!allow || next.protocol !== 'https:' || !/^\/Web\/SlotGame\d+/i.test(next.pathname)) return res.sendStatus(403);
-  session.origin = next.origin;
-  session.documentReady = false;
-  return res.redirect('/__game/' + req.params.sid + next.pathname + next.search);
-});
 
 app.get('/__game/open', async (req, res) => {
   const payload = decodePayload(req.query.cfg);
@@ -630,7 +615,7 @@ app.use('/__game/:sid/*', express.raw({ type: '*/*', limit: '16mb' }), async (re
         '<meta name="viewport" content="width=device-width,height=device-height,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">' +
         '<style>html,body{margin:0!important;width:100%!important;' +
         (session.provider === 'rsg' && /\/Lobby2?\//i.test(finalUrl.pathname)
-          ? 'min-height:100%!important;height:auto!important;overflow-y:auto!important;overflow-x:hidden!important;-webkit-overflow-scrolling:touch!important;overscroll-behavior-y:contain!important;touch-action:pan-y!important'
+          ? 'height:100%!important;overflow-y:auto!important;overflow-x:hidden!important;-webkit-overflow-scrolling:touch!important;touch-action:pan-y!important'
           : 'height:100%!important;overflow:hidden!important;overscroll-behavior:none!important') +
         '}</style>' +
         boot;
@@ -712,7 +697,7 @@ app.all('/slotFramework/*', express.raw({ type: '*/*', limit: '256kb' }), async 
 
 app.use((req, res, next) => {
   if (req.method !== 'GET' && req.method !== 'HEAD') return next();
-  const reserved = /^\/(?:__|api\/|admin(?:\/|$)|provider\/|provider-rsg-nav\.js$|provider-rsg-lobby-rescue\.js$|media\/|logo\.png$|manifest\.webmanifest$|admin-|icon|healthz$)/i;
+  const reserved = /^\/(?:__|api\/|admin(?:\/|$)|provider\/|provider-rsg-nav\.js$|media\/|logo\.png$|manifest\.webmanifest$|admin-|icon|healthz$)/i;
   if (reserved.test(req.path)) return next();
   const match = String(req.headers.cookie || '').match(/(?:^|;\s*)scarab_provider_sid=([a-f0-9]{24})(?:;|$)/i);
   const session = match && sessions.get(match[1]);
