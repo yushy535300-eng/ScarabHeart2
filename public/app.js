@@ -491,7 +491,7 @@
       const buttons = Array.from(document.querySelectorAll('#moreGames .game-card'));
       buttons.forEach(button => { button.disabled = true; });
       try {
-        if (session.platform !== 'TZ') throw new Error(providerGame[1] + '目前請使用 TZ 會員帳號登入。');
+        if (session.platform !== 'TZ' && !(session.platform === 'OFA' && providerGame[3] === 'RSG')) throw new Error(providerGame[1] + '目前不支援此會員平台。');
         const result = await postJson(session.base + '/api/v2/game/' + providerGame[3] + '/login', {
           game_return_url: session.base,
           game_kind: '',
