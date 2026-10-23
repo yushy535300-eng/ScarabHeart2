@@ -105,7 +105,7 @@
 
   function openInApp(raw, payload) {
     var kind = String(payload && payload.kind || 'atg');
-    var label = kind === 'qt' ? '月兔' : kind === 'rsg' ? '雷神' : 'ATG';
+    var label = kind === 'qt' ? '月兔' : kind === 'rsg' ? 'RSG平台' : 'ATG';
     currentRoomSessionId = String(payload && payload.cfg && payload.cfg.ROOM_SESSION_ID || '');
     try {
       sessionStorage.removeItem('SCARAB_FORCE_MANUAL_ROOM');
