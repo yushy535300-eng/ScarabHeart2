@@ -19,6 +19,45 @@
   var frameLoaded = false;
   var currentOpenId = 0;
   var currentRoomSessionId = '';
+  var currentKind = '';
+  var rsgSessionId = '';
+  var rsgSeenLobby = false;
+  var rsgAtLobby = false;
+
+  function syncRsgFramePage() {
+    if (currentKind !== 'rsg') return;
+    var ui = elements(), href = '';
+    try { href = String(ui.frame && ui.frame.contentWindow && ui.frame.contentWindow.location.href || ''); }
+    catch (_) { return; }
+    if (!href) return;
+    try {
+      var local = new URL(href, location.origin);
+      if (local.origin !== location.origin) return;
+      var match = local.pathname.match(/^\/__game\/([a-f0-9]{24})(?:\/|$)/i);
+      if (!match) return;
+      rsgSessionId = match[1];
+      var effectivePath = local.pathname.slice(('/__game/' + match[1]).length);
+      if (effectivePath === '/__remote') {
+        var remote = local.searchParams.get('url');
+        if (remote) effectivePath = new URL(remote).pathname;
+      }
+      rsgAtLobby = /^\/Lobby2?\/Index(?:\/|$)/i.test(effectivePath);
+      if (rsgAtLobby) rsgSeenLobby = true;
+    } catch (_) {}
+  }
+
+  function returnToRsgLobby() {
+    if (currentKind !== 'rsg') return false;
+    syncRsgFramePage();
+    // Pressing Return while already at the original RSG lobby exits the platform.
+    if (rsgAtLobby || !rsgSeenLobby || !rsgSessionId) return false;
+    var ui = elements();
+    if (!ui.frame) return false;
+    frameLoaded = false;
+    setLoading('正在返回 RSG 選遊戲畫面…', false);
+    ui.frame.src = '/__game/' + rsgSessionId + '/__rsg-return';
+    return true;
+  }
 
   function needsBackendProxy(raw) {
     try {
@@ -105,6 +144,10 @@
 
   function openInApp(raw, payload) {
     var kind = String(payload && payload.kind || 'atg');
+    currentKind = kind;
+    rsgSessionId = '';
+    rsgSeenLobby = false;
+    rsgAtLobby = false;
     var label = kind === 'qt' ? '月兔' : kind === 'rsg' ? 'RSG平台' : 'ATG';
     currentRoomSessionId = String(payload && payload.cfg && payload.cfg.ROOM_SESSION_ID || '');
     try {
@@ -143,6 +186,7 @@
     ui.frame.onload = function () {
       if (openId !== currentOpenId) return;
       frameLoaded = true;
+      syncRsgFramePage();
       setLoading('遊戲已載入，懸浮工具背景連線中…', true);
       clearTimeout(loadTimer);
     };
@@ -164,6 +208,10 @@
     frameLoaded = false;
     currentOpenId++;
     currentRoomSessionId = '';
+    currentKind = '';
+    rsgSessionId = '';
+    rsgSeenLobby = false;
+    rsgAtLobby = false;
     if (ui.frame) {
       ui.frame.onload = null;
       ui.frame.src = 'about:blank';
@@ -226,7 +274,8 @@
     reserve: function () { return true; },
     cancelReserve: function () {},
     open: openInApp,
-    close: closeInApp
+    close: closeInApp,
+    returnToRsgLobby: returnToRsgLobby
   };
   window.Capacitor = window.Capacitor || {
     getPlatform: function () { return 'web'; },
