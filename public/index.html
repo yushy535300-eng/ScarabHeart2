@@ -804,6 +804,8 @@ body.scarab-portrait #gameCenterView .game-card {
     #moreGames .provider-card::before{background-size:cover!important;filter:blur(20px) saturate(1.2) brightness(.78)!important;transform:scale(1.13)!important;opacity:.94!important}
     #moreGames .provider-card::after{background:linear-gradient(180deg,rgba(2,7,14,.02) 5%,rgba(2,7,14,.03) 42%,rgba(2,7,14,.82) 100%)!important}
     #moreGames .provider-card img{object-fit:cover!important;object-position:center 42%!important;filter:saturate(1.06);}
+    /* Lunar Rabbit: keep the entire cover in frame rather than blowing up and cropping the rabbit. */
+    #moreGames .provider-card:not(.rsg-platform-card) img{left:8%!important;top:5%!important;right:auto!important;bottom:auto!important;width:84%!important;height:88%!important;object-fit:contain!important;object-position:center center!important;filter:saturate(1.02)!important}
     #moreGames .provider-card .game-meta{left:15px;bottom:13px;text-shadow:0 2px 8px #000}
     #moreGames .provider-card .game-arrow{right:14px;bottom:12px;text-shadow:0 2px 8px #000}
     @media(max-width:560px){#moreGames .provider-card{width:min(100%,460px)!important;aspect-ratio:16/9!important;min-height:0!important}}
