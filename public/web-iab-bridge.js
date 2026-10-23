@@ -221,8 +221,13 @@
 
   function closeInApp() {
     var ui = elements();
+    if (currentKind === 'rsg') syncRsgFramePage();
+    var closingSid = rsgSessionId;
     pendingProviderClose = pendingProviderClose.catch(function () {}).then(function () {
-      return nativeFetch('/__game/close', { method: 'POST', credentials: 'same-origin' });
+      return nativeFetch('/__game/close', {
+        method: 'POST', credentials: 'same-origin',
+        headers: closingSid ? { 'X-Scarab-Game-Session': closingSid } : {}
+      });
     }).catch(function () { /* Allow re-entry even if cleanup request fails. */ });
     clearTimeout(loadTimer);
     frameLoaded = false;
