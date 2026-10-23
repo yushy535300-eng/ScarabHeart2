@@ -50,7 +50,7 @@ function gameAllowed(url, provider) {
   const host = url.hostname.toLowerCase();
   if (!provider || provider === 'atg') return host === 'godeebxp.com' || host.endsWith('.godeebxp.com');
   const exactHosts = {
-    rsg: ['666','888','955','977'].flatMap(suffix => ['gameweb','gameresource','gameresource3','gameserver'].map(prefix => `${prefix}.rsgaming${suffix}.com`)),
+    rsg: ['666','888','955','977','999'].flatMap(suffix => ['gameweb','gameresource','gameresource3','gameserver'].map(prefix => `${prefix}.rsgaming${suffix}.com`)),
     qt: ['lobby.qtlauncher.com', 'client.qtlauncher.com', 'ga8.gahypergaming.com', 'dt589qboipkze.cloudfront.net']
   }[provider];
   if (provider === 'qt' && (host === 'qtlauncher.com' || host.endsWith('.qtlauncher.com'))) return true;
@@ -62,7 +62,7 @@ function gameAllowed(url, provider) {
 function rsgPublicAsset(url, provider, method = 'GET') {
   return provider === 'rsg' && ['GET', 'HEAD'].includes(method) &&
     url.protocol === 'https:' &&
-    /^gameresource3?\.rsgaming(?:666|888|955|977)\.com$/i.test(url.hostname) &&
+    /^gameresource3?\.rsgaming(?:666|888|955|977|999)\.com$/i.test(url.hostname) &&
     /^\/(?:WebUI3|Lobby)\//i.test(url.pathname);
 }
 
@@ -340,10 +340,10 @@ function providerBoot(sid, originalHref, session, withRuntime) {
     ';window.__SCARAB_PROXY_PREFIX=' + scriptJson(prefix) +
     ';(function(){var O=window.__SCARAB_ORIGINAL_URL,P=' + scriptJson(prefix) +
     ';function allowed(x){var h=x.hostname.toLowerCase();return ' + (provider === 'rsg'
-      ? '/^(?:gameweb|gameresource3?|gameserver)\\.rsgaming(?:666|888|955|977)\\.com$/.test(h)'
+      ? '/^(?:gameweb|gameresource3?|gameserver)\\.rsgaming(?:666|888|955|977|999)\\.com$/.test(h)'
       : 'h==="qtlauncher.com"||h.endsWith(".qtlauncher.com")||h==="ga8.gahypergaming.com"||h==="dt589qboipkze.cloudfront.net"') + '}' +
     'function U(raw){try{var x=new URL(String(raw),document.baseURI||O);if(x.origin===location.origin){var m=x.pathname.match(/^\\/__game\\/[a-f0-9]{24}(\\/.*)$/i);if(m)x=new URL(m[1]+x.search,O);else if(!/^\\/(?:provider|media)\\//i.test(x.pathname)&&x.pathname!=="/logo.png"&&x.pathname!=="/provider-rsg-nav.js")x=new URL(x.pathname+x.search,O)}return x}catch(e){return null}}' +
-    'function H(raw){try{var x=U(raw);if(x&&/^https?:$/.test(x.protocol)&&allowed(x)&&/^gameresource3?\\.rsgaming(?:666|888|955|977)\\.com$/i.test(x.hostname)&&/^\\/(?:WebUI3|Lobby)\\//i.test(x.pathname))return x.href;if(x&&/^https?:$/.test(x.protocol)&&allowed(x))return location.origin+P+"/__remote?url="+encodeURIComponent(x.href)}catch(e){}return raw}' +
+    'function H(raw){try{var x=U(raw);if(x&&/^https?:$/.test(x.protocol)&&allowed(x)&&/^gameresource3?\\.rsgaming(?:666|888|955|977|999)\\.com$/i.test(x.hostname)&&/^\\/(?:WebUI3|Lobby)\\//i.test(x.pathname))return x.href;if(x&&/^https?:$/.test(x.protocol)&&allowed(x))return location.origin+P+"/__remote?url="+encodeURIComponent(x.href)}catch(e){}return raw}' +
     'var F=window.fetch;if(F)window.fetch=function(i,n){var raw=typeof i==="string"?i:(i&&i.url)||String(i),u=H(raw);try{if(i instanceof Request&&u!==raw)i=new Request(u,i);else if(u!==raw)i=u}catch(e){i=u}return F.call(this,i,n)};' +
     'var XO=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(m,u){arguments[1]=H(u);return XO.apply(this,arguments)};' +
     'var SA=Element.prototype.setAttribute;Element.prototype.setAttribute=function(k,v){if(/^(src|href|action|poster)$/i.test(k))arguments[1]=H(v);return SA.apply(this,arguments)};' +
@@ -430,12 +430,33 @@ app.get('/__game/open', async (req, res) => {
     createdAt: Date.now(),
     payload,
     documentReady: false,
-    lastGoodDocumentUrl: ''
+    lastGoodDocumentUrl: '',
+    rsgLobbyUrl: ''
   });
   res.redirect(302, '/__game/' + sid + url.pathname + url.search);
 });
 
 // Start-screen diagnostics contain no account, token, URL or game packet data.
+// Keep the user's original, authenticated RSG lobby URL in the same game
+// session. This is not a recreated lobby and never chooses a game for the user.
+app.get('/__game/:sid/__rsg-return', (req, res) => {
+  const sid = String(req.params.sid || '');
+  const session = sessions.get(sid);
+  if (!session || session.provider !== 'rsg' || !session.rsgLobbyUrl)
+    return res.status(409).send('RSG lobby session is not ready');
+  let lobby;
+  try { lobby = new URL(session.rsgLobbyUrl); }
+  catch (_) { return res.sendStatus(409); }
+  if (!gameAllowed(lobby, 'rsg') ||
+      !/^gameweb\\.rsgaming(?:666|888|955|977|999)\\.com$/i.test(lobby.hostname) ||
+      !/^\\/Lobby2?\\/Index(?:\\/|$)/i.test(lobby.pathname) ||
+      lobby.protocol !== 'https:') return res.sendStatus(403);
+  session.origin = lobby.origin;
+  session.documentReady = false;
+  res.set('Cache-Control', 'no-store');
+  return res.redirect(302, '/__game/' + sid + lobby.pathname + lobby.search);
+});
+
 app.post('/api/provider-status/:sid', accessJson, (req, res) => {
   const session = sessions.get(req.params.sid);
   if (!session || session.provider !== 'rsg') return res.sendStatus(404);
@@ -498,6 +519,12 @@ app.all('/__game/:sid/__remote', express.raw({ type: '*/*', limit: '16mb' }), as
         .end();
     }
     let bytes = Buffer.from(await upstream.arrayBuffer());
+    if (session.provider === 'rsg' && remoteIsDocument && upstream.ok &&
+        /text\/html/i.test(upstream.headers.get('content-type') || '')) {
+      const returnedUrl = new URL(upstream.url || url.href);
+      if (/^\/Lobby2?\/Index(?:\/|$)/i.test(returnedUrl.pathname) && gameAllowed(returnedUrl, 'rsg'))
+        session.rsgLobbyUrl = returnedUrl.href;
+    }
     if (session.provider !== 'atg' && /text\/html/i.test(upstream.headers.get('content-type') || '')) {
       let html = bytes.toString('utf8').replace(/<base\b[^>]*>/gi, '').replace(/<meta\b[^>]*http-equiv=(['"])Content-Security-Policy\1[^>]*>/gi, '').replace(/\s+integrity=(['"])[^'"]*\1/gi, '');
       const base = new URL('.', url).href.replace(/"/g, '&quot;');
@@ -593,6 +620,8 @@ app.use('/__game/:sid/*', express.raw({ type: '*/*', limit: '16mb' }), async (re
         /text\/html/i.test(type)) {
       session.documentReady = true;
       session.lastGoodDocumentUrl = finalUrl.href;
+      if (session.provider === 'rsg' && /^\/Lobby2?\/Index(?:\/|$)/i.test(finalUrl.pathname) &&
+          gameAllowed(finalUrl, 'rsg')) session.rsgLobbyUrl = finalUrl.href;
     }
     if (!isSlotFramework && /text\/html/i.test(type)) {
       let body = bytes.toString('utf8');
