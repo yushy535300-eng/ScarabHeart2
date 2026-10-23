@@ -60,3 +60,38 @@ test('only public RSG CDN resources bypass proxies',()=>{
  for(const ext of ['webp','bin','ttf','mp3','css','js'])assert.equal(c.rsgPublicAsset(new URL('https://gameresource3.rsgaming888.com/WebUI3/content/PowerOfThor2/a.'+ext),'rsg','GET'),true);
  for(const [url,kind,method] of [['https://gameweb.rsgaming888.com/Web/SessionInfo','rsg','GET'],['https://gameresource3.rsgaming888.com/WebUI3/a.bin','qt','GET'],['https://gameresource3.rsgaming888.com/WebUI3/a.bin','rsg','POST'],['https://gameresource3.rsgaming888.com.evil.test/WebUI3/a.bin','rsg','GET']])assert.equal(c.rsgPublicAsset(new URL(url),kind,method),false);
 });
+
+test('universal RSG adapter changes verified Cocos scheduler and acknowledges actual speed',()=>{
+ const code=fs.readFileSync(__dirname+'/public/provider/rsg-universal-adapter.js','utf8');
+ new vm.Script(code);
+ let speed=1,listener,events=[];
+ const parent={postMessage:(x)=>events.push(x)};
+ const w={__SCARAB_ORIGINAL_URL:'https://gameweb.rsgaming955.com/Web/SlotGame8',
+   frames:[],cc:{director:{getScheduler:()=>({getTimeScale:()=>speed,setTimeScale:n=>{speed=n}})}},
+   addEventListener:(k,fn)=>{if(k==='message')listener=fn}};
+ const doc={visibilityState:'visible'},loc={origin:'https://scarabheart2.onrender.com'};
+ w.window=w;
+ vm.runInNewContext(code,{window:w,parent,document:doc,location:loc,setInterval:()=>1,clearInterval:()=>{},
+   URL,Number,Date,Array,Math});
+ assert.equal(events[0].type,'capabilities');
+ assert.equal(events[0].canSpeed,true);
+ listener({source:parent,origin:loc.origin,data:{__scarabRsgControl:true,action:'speed',value:4,requestId:'test'}});
+ assert.equal(speed,4);
+ assert.equal(events.at(-1).success,true);
+ assert.equal(events.at(-1).speed,4);
+ listener({source:parent,origin:'https://other.example',data:{__scarabRsgControl:true,action:'speed',value:8}});
+ assert.equal(speed,4);
+});
+test('unsupported RSG engine never reports fake speed success',()=>{
+ const code=fs.readFileSync(__dirname+'/public/provider/rsg-universal-adapter.js','utf8');
+ let listener,events=[];
+ const parent={postMessage:x=>events.push(x)};
+ const w={__SCARAB_ORIGINAL_URL:'https://gameweb.rsgaming955.com/Web/SlotGame88',frames:[],
+   addEventListener:(k,fn)=>{if(k==='message')listener=fn}};
+ vm.runInNewContext(code,{window:w,parent,document:{visibilityState:'visible'},location:{origin:'https://scarabheart2.onrender.com'},
+   setInterval:()=>1,clearInterval:()=>{},URL,Number,Date,Array,Math});
+ assert.equal(events[0].canSpeed,false);
+ listener({source:parent,origin:'https://scarabheart2.onrender.com',
+   data:{__scarabRsgControl:true,action:'speed',value:8,requestId:'test'}});
+ assert.equal(events.at(-1).success,false);
+});
