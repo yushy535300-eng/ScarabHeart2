@@ -426,6 +426,18 @@ app.get('/__game/open', async (req, res) => {
   res.redirect(302, '/__game/' + sid + url.pathname + url.search);
 });
 
+// Start-screen diagnostics contain no account, token, URL or game packet data.
+app.post('/api/provider-status/:sid', accessJson, (req, res) => {
+  const session = sessions.get(req.params.sid);
+  if (!session || session.provider !== 'rsg') return res.sendStatus(404);
+  const body = req.body || {};
+  const stages = ['ready','layout-unavailable','native-start','callback-error','entered','still-loading','scan-error'];
+  if (!stages.includes(body.stage)) return res.sendStatus(400);
+  const scene = /^[a-z_]{0,50}$/i.test(String(body.scene || '')) ? String(body.scene || '') : 'unknown';
+  console.log('[RSG_START]', JSON.stringify({stage:body.stage,scene,version:2,bound:body.bound===1?1:0}));
+  res.sendStatus(204);
+});
+
 app.post('/__game/close', (req, res) => {
   const match = String(req.headers.cookie || '').match(/(?:^|;\s*)scarab_provider_sid=([a-f0-9]{24})(?:;|$)/i);
   if (match) sessions.delete(match[1]);
