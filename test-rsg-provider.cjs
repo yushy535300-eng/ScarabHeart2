@@ -16,28 +16,23 @@ test('generated proxy routes new resource and socket hosts',()=>{
  c.fetch('/provider-rsg-nav.js');assert.equal(calls.pop(),'/provider-rsg-nav.js');
  c.fetch('https://evil.test/x');assert.equal(calls.pop(),'https://evil.test/x');
 });
-test('Thor runtime is limited to SlotGame5; lobby uses the data-backed selector',()=>{
- const gameScripts=scripts('/Web/SlotGame5');
- assert.equal(gameScripts.length,2);
- gameScripts.forEach(x=>new vm.Script(x));
- let tick,started=0;
- const c={URL,console,location:{pathname:`/__game/${sid}/__remote`,href:'https://scarab.test/ignored'},__SCARAB_ORIGINAL_URL:'https://gameweb.rsgaming888.com/Web/SlotGame5',setInterval:f=>{tick=f;return 1},clearInterval(){},thorEngine:()=>started++};
- c.window=c;
- vm.runInNewContext(gameScripts[1],c);
- tick();
- assert.equal(started,1);
+test('original RSG lobby is preserved, with no forced game entry or replacement menu',()=>{
  const lobby=ctx.providerBoot(sid,'https://gameweb.rsgaming955.com/Lobby2/Index',{provider:'rsg',payload:{cfg:{}}},true);
- assert.ok(lobby.includes('provider-rsg-lobby-rescue.js'));
+ assert.equal([...lobby.matchAll(/<script>([\\s\\S]*?)<\\/script>/g)].length,1);
+ assert.ok(!lobby.includes('provider-rsg-lobby-rescue.js'));
+ assert.ok(!lobby.includes('provider-rsg-nav.js'));
  assert.ok(!lobby.includes('thor-engine-code.js'));
- assert.ok(!lobby.includes('<script src="/provider-rsg-nav.js"></script>'));
 });
-test('RSG lobby replacement uses live GameData and dynamic game selection',()=>{
- const selector=fs.readFileSync(__dirname+'/public/provider-rsg-lobby-rescue.js','utf8');
- new vm.Script(selector);
- assert.ok(selector.includes('/Lobby2/GameData'));
- assert.ok(selector.includes('/Lobby2/GetGameURL'));
- assert.match(selector,/__navigate/);
- assert.ok(!selector.includes('id=129'));
+test('Thor engine only starts for SlotGame5 and not in the native lobby',()=>{
+ const scriptsOnGame=scripts('/Web/SlotGame5');
+ assert.equal(scriptsOnGame.length,2);
+ scriptsOnGame.forEach(x=>new vm.Script(x));
+ const c={URL,console,location:{pathname:`/__game/${sid}/__remote`,href:'https://scarab.test/ignored'},
+   __SCARAB_ORIGINAL_URL:'https://gameweb.rsgaming888.com/Web/SlotGame5',
+   setInterval:f=>{c.tick=f;return 1},clearInterval(){},thorEngine:()=>{c.started=(c.started||0)+1}};
+ c.window=c;
+ vm.runInNewContext(scriptsOnGame[1],c);c.tick();
+ assert.equal(c.started,1);
 });
 test('only public RSG CDN resources bypass proxies',()=>{
  const c=vm.createContext({});vm.runInContext(s.slice(s.indexOf('function rsgPublicAsset('),s.indexOf('function apiAllowed(')),c);
