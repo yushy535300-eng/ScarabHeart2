@@ -613,7 +613,11 @@ app.use('/__game/:sid/*', express.raw({ type: '*/*', limit: '16mb' }), async (re
       const proxyBase = '/__game/' + sid + remoteDir;
       const head = '<head><base href="' + proxyBase.replace(/"/g, '&quot;') + '">' +
         '<meta name="viewport" content="width=device-width,height=device-height,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">' +
-        '<style>html,body{margin:0!important;width:100%!important;height:100%!important;overflow:hidden!important;overscroll-behavior:none!important}</style>' +
+        '<style>html,body{margin:0!important;width:100%!important;' +
+        (session.provider === 'rsg' && /\/Lobby2?\//i.test(finalUrl.pathname)
+          ? 'min-height:100%!important;height:auto!important;overflow-y:auto!important;overflow-x:hidden!important;-webkit-overflow-scrolling:touch!important;overscroll-behavior-y:contain!important;touch-action:pan-y!important'
+          : 'height:100%!important;overflow:hidden!important;overscroll-behavior:none!important') +
+        '}</style>' +
         boot;
       if (/<head(?:\s[^>]*)?>/i.test(body)) body = body.replace(/<head(?:\s[^>]*)?>/i, head);
       else body = head + body;
