@@ -368,7 +368,7 @@ function providerBoot(sid, originalHref, session, withRuntime) {
     // Keep every original game document intact. The old Thor start repair
     // is NOT injected into other RSG games; only the verified engine adapter.
     return boot + rsgNotice + (/^\/Web\/SlotGame\d+(?:\/|$)/i.test(rsgPath)
-      ? '<script src="/provider/rsg-universal-adapter.js"></script>' : '');
+      ? '<script src="/provider/rsg-universal-adapter.js?v=72changes-v2"></script>' : '');
   }
   const gameCode = provider === 'qt' ? 'qt-lunar-rabbit' : 'thor';
   const engine = '<script src="/provider/hud-ui-bundle.js"></script>' + (provider === 'qt'
