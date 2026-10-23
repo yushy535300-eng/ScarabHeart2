@@ -352,6 +352,13 @@ function providerBoot(sid, originalHref, session, withRuntime) {
     '})();<\/script>';
   if (!withRuntime) return boot;
   const config = session.payload && session.payload.cfg || {};
+  // The lobby and every non-Thor RSG game must load their own native UI,
+  // not the Thor-specific runtime or its global input hooks.
+  const rsgPath = new URL(originalHref).pathname;
+  if (provider === 'rsg' && !/^\/Web\/SlotGame5(?:\/|$)/i.test(rsgPath)) {
+    return boot + (/^\/Web\/SlotGame\d+(?:\/|$)/i.test(rsgPath)
+      ? '<script src="/provider/rsg-start-repair.js"></script>' : '');
+  }
   const gameCode = provider === 'qt' ? 'qt-lunar-rabbit' : 'thor';
   const engine = '<script src="/provider/hud-ui-bundle.js"></script>' + (provider === 'qt'
     ? '<script src="/provider/lunar-engine.js"></script>'
