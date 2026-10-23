@@ -356,6 +356,7 @@ function providerBoot(sid, originalHref, session, withRuntime) {
   // not the Thor-specific runtime or its global input hooks.
   const rsgPath = new URL(originalHref).pathname;
   if (provider === 'rsg' && !/^\/Web\/SlotGame5(?:\/|$)/i.test(rsgPath)) {
+    if (/^\/Lobby2?\/Index(?:\/|$)/i.test(rsgPath)) return boot + '<script src="/provider-rsg-lobby-rescue.js"></script>';
     return boot + (/^\/Web\/SlotGame\d+(?:\/|$)/i.test(rsgPath)
       ? '<script src="/provider/rsg-start-repair.js"></script>' : '');
   }
