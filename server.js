@@ -364,7 +364,9 @@ function providerBoot(sid, originalHref, session, withRuntime) {
       ? 'if(window.SETH_UI_ADAPTER_SRC&&!window.__scarabHudAdapterLoaded){try{(0,eval)(window.SETH_UI_ADAPTER_SRC);window.__scarabHudAdapterLoaded=true}catch(e){console.warn("[ScarabHeart HUD]",e&&e.message)}}if(typeof window.lunarEngine==="function"&&(window.PIXI||/LunarRabbit|gameart/i.test(location.href))){window.lunarEngine(cfg);clearInterval(t);}'
       : 'if(window.SETH_UI_ADAPTER_SRC&&!window.__scarabHudAdapterLoaded){try{(0,eval)(window.SETH_UI_ADAPTER_SRC);window.__scarabHudAdapterLoaded=true}catch(e){console.warn("[ScarabHeart HUD]",e&&e.message)}}if(window.THOR_ENGINE_SRC&&!window.__thorEngineLoaded){try{(0,eval)(window.THOR_ENGINE_SRC);window.__thorEngineLoaded=true}catch(e){console.warn("[ScarabHeart Thor]",e&&e.message)}}if(typeof window.thorEngine==="function"&&/\\/Web\\/SlotGame\\d/i.test(new URL(window.__SCARAB_ORIGINAL_URL||location.href).pathname)){window.thorEngine(cfg);clearInterval(t);}') +
     '}catch(e){console.warn("[ScarabHeart provider]",e&&e.message)}if(n>240)clearInterval(t)},500)})();<\/script>';
-  const nav = provider === 'rsg' && /\/Lobby2?\//i.test(new URL(originalHref).pathname) ? '<script src="/provider-rsg-nav.js"></script>' : '';
+  // RSG lobby must remain interactive: the player selects the game.
+  // Never auto-launch hard-coded game id 129 from lobby navigation.
+  const nav = '';
   return boot + engine + start + nav;
 }
 
