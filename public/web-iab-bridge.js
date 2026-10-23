@@ -26,6 +26,9 @@
   var rsgSessionId = '';
   var rsgSeenLobby = false;
   var rsgAtLobby = false;
+  function rsgPageChange(page) {
+    try { window.dispatchEvent(new CustomEvent('scarab:rsg-page',{detail:{page:page}})); } catch (_) {}
+  }
 
   function syncRsgFramePage() {
     if (currentKind !== 'rsg') return;
@@ -44,8 +47,14 @@
         var remote = local.searchParams.get('url');
         if (remote) effectivePath = new URL(remote).pathname;
       }
-      rsgAtLobby = /^\/Lobby2?\/Index(?:\/|$)/i.test(effectivePath);
-      if (rsgAtLobby) rsgSeenLobby = true;
+      if (/^\/Lobby2?\/Index(?:\/|$)/i.test(effectivePath)) {
+        rsgAtLobby = true;
+        rsgSeenLobby = true;
+        rsgPageChange('lobby');
+      } else if (/^\/Web\/SlotGame\d+(?:\/|$)/i.test(effectivePath)) {
+        rsgAtLobby = false;
+        rsgPageChange('game');
+      }
     } catch (_) {}
   }
 
@@ -53,11 +62,12 @@
     if (currentKind !== 'rsg') return false;
     syncRsgFramePage();
     // Pressing Return while already at the original RSG lobby exits the platform.
-    if (rsgAtLobby || !rsgSeenLobby || !rsgSessionId) return false;
+    if (rsgAtLobby || !rsgSessionId) return false;
     var ui = elements();
     if (!ui.frame) return false;
     frameLoaded = false;
     setLoading('正在返回 RSG 選遊戲畫面…', false);
+    rsgPageChange('loading');
     ui.frame.src = '/__game/' + rsgSessionId + '/__rsg-return';
     return true;
   }
@@ -151,6 +161,7 @@
     rsgSessionId = '';
     rsgSeenLobby = false;
     rsgAtLobby = false;
+    rsgPageChange('loading');
     var label = kind === 'qt' ? '月兔' : kind === 'rsg' ? 'RSG平台' : 'ATG';
     currentRoomSessionId = String(payload && payload.cfg && payload.cfg.ROOM_SESSION_ID || '');
     try {
@@ -221,6 +232,7 @@
     rsgSessionId = '';
     rsgSeenLobby = false;
     rsgAtLobby = false;
+    rsgPageChange('closed');
     if (ui.frame) {
       ui.frame.onload = null;
       ui.frame.src = 'about:blank';
@@ -245,6 +257,18 @@
     var ui = elements();
     if (!activeGameSource(event.source)) return;
     var data = event.data;
+    if (data && data.__scarabProviderPage === true && data.provider === 'rsg' && currentKind === 'rsg') {
+      syncRsgFramePage();
+      if (data.page === 'lobby') {
+        rsgAtLobby = true;
+        rsgSeenLobby = true;
+        rsgPageChange('lobby');
+      } else if (data.page === 'game') {
+        rsgAtLobby = false;
+        rsgPageChange('game');
+      }
+      return;
+    }
     var messageRoomSessionId = data && data.roomSessionId != null ? String(data.roomSessionId) : '';
     // Old game documents are allowed to finish loading, but they are never
     // allowed to control the current room selection.
