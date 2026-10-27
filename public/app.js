@@ -475,6 +475,7 @@
   }
 
   function logout(silent) {
+    if(window.parent!==window)try{window.parent.postMessage({type:'sc:trial:logout'},'*')}catch(_){}
     gameOpenSerial++;
     boardLoadSerial++;
     stopRecommendationProbe();
@@ -1510,7 +1511,7 @@
         window.__trialBusy=false;
       }
     });
-    window.parent.postMessage({type:'sc:trial:ready'},'https://scarabheart.com');
+    window.parent.postMessage({type:'sc:trial:ready'},'*');
   }
 
   $('p').addEventListener('keydown', event => { if (event.key === 'Enter') login(); });
