@@ -1488,7 +1488,7 @@
   document.querySelectorAll('.board-tab').forEach(button => {
     button.onclick = () => { activeBoard = button.dataset.k; renderBoard(); };
   });
-  $('loginBtn').onclick = login;
+  $('loginBtn').onclick = () => login(); // prevent click Event being mistaken for trial credentials
   // The official site may host this app in an iframe for a test session.
   // Messages are accepted only from the exact official site origin.
   if(window.parent!==window){
