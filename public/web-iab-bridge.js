@@ -26,6 +26,14 @@
   var rsgSessionId = '';
   var rsgSeenLobby = false;
   var rsgAtLobby = false;
+  // Inform the embedding official website only when the REAL provider game
+  // overlay opens or closes. No tokens or credentials are included.
+  function notifyTrialGameWindow(opened) {
+    if (window.parent === window) return;
+    try {
+      window.parent.postMessage({ type: opened ? 'sc:trial:game-open' : 'sc:trial:game-close' }, '*');
+    } catch (_) {}
+  }
   function rsgPageChange(page) {
     try { window.dispatchEvent(new CustomEvent('scarab:rsg-page',{detail:{page:page}})); } catch (_) {}
   }
@@ -189,6 +197,7 @@
     var openId = ++currentOpenId;
     setLoading('正在連線 ' + label + ' 遊戲…', false);
     ui.view.classList.remove('hide');
+    notifyTrialGameWindow(true);
     document.documentElement.style.overflow = 'hidden';
     document.body.style.overflow = 'hidden';
     var encoded = base64url(payload || {});
@@ -243,6 +252,7 @@
       ui.frame.src = 'about:blank';
     }
     if (ui.view) ui.view.classList.add('hide');
+    notifyTrialGameWindow(false);
     roomPickVisual('hide');
     if (ui.loading) ui.loading.classList.remove('done');
     document.documentElement.style.overflow = '';
