@@ -425,10 +425,12 @@
     });
   }
 
-  async function login() {
+  async function login(trialCredentials = null) {
     const button = $('loginBtn');
-    const account = $('u').value.trim();
-    const password = $('p').value;
+    // Shared trial credentials stay in JS memory; never write them to the
+    // browser's account/password inputs or form autofill state.
+    const account = trialCredentials ? String(trialCredentials.user || '').trim() : $('u').value.trim();
+    const password = trialCredentials ? String(trialCredentials.pass || '') : $('p').value;
     $('err').style.color = '';
     $('err').textContent = '';
     if (!account || !password) {
@@ -457,8 +459,7 @@
       session = { base, token, account, password, platform: validatedPlatform, game: '', accessSessionId: access.data.sessionId };
       startAccessWatch();
       startPresence(access.data.sessionId);
-      if ($('r').checked) localStorage.setItem('scarab_login', JSON.stringify({ account }));
-      else localStorage.removeItem('scarab_login');
+      try { localStorage.removeItem('scarab_login'); } catch (_) {}
       showGameCenter();
       refreshMember();
       if (window.SethEyeAPI && SethEyeAPI.bindLogin) {
@@ -469,6 +470,7 @@
       session = null;
       $('err').textContent = error && error.message ? error.message : '登入失敗，請稍後重試';
     } finally {
+      $('p').value='';
       button.disabled = false;
       button.textContent = '登入聖甲之心';
     }
@@ -1486,7 +1488,7 @@
   document.querySelectorAll('.board-tab').forEach(button => {
     button.onclick = () => { activeBoard = button.dataset.k; renderBoard(); };
   });
-  $('loginBtn').onclick = login;
+  $('loginBtn').onclick = () => login(); // prevent click Event being mistaken for trial credentials
   // The official site may host this app in an iframe for a test session.
   // Messages are accepted only from the exact official site origin.
   if(window.parent!==window){
@@ -1497,10 +1499,7 @@
       if(!data || data.type!=='sc:trial:begin' || window.__trialBusy)return;
       window.__trialBusy=true;
       try {
-        $('u').value=String(data.user||'');
-        $('p').value=String(data.pass||'');
-        $('r').checked=false;
-        await login();
+        await login({user:data.user,pass:data.pass});
         const valid=$('loginView').classList.contains('hide') &&
           !$('gameCenterView').classList.contains('hide');
         event.source.postMessage({type:valid?'sc:trial:ok':'sc:trial:error'},event.origin);
@@ -1561,13 +1560,8 @@
   // visualViewport.resize also fires on every mobile URL-bar / keyboard move,
   // even when the layout width is unchanged. Do NOT reset grid on that event.
 
-  try {
-    const saved = JSON.parse(localStorage.getItem('scarab_login') || 'null');
-    if (saved && saved.account) {
-      $('u').value = saved.account;
-      $('r').checked = true;
-    }
-  } catch (_) {}
+  // Avoid restoring a stored username on shared trial or regular login.
+  try { localStorage.removeItem('scarab_login'); } catch (_) {}
   renderGames();
   loadAnnouncement();
 })();
