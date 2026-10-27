@@ -1507,22 +1507,31 @@
   window.addEventListener('scarab:web-command', event => handleGameCommand(event && event.detail && event.detail.url));
 
   syncShellOrientation();
+  // Preserve the game-center scroll position when iOS/Android collapses the
+  // address bar or keyboard. Those HEIGHT-only viewport changes must never
+  // tear down the card-grid formatting context and push scrolling to top.
+  let lastLayoutWidth = document.documentElement.clientWidth || window.innerWidth;
+  let lastLayoutPortrait = window.innerHeight >= window.innerWidth;
   window.addEventListener('resize', () => {
+    const width = document.documentElement.clientWidth || window.innerWidth;
+    const portrait = window.innerHeight >= window.innerWidth;
+    if (Math.abs(width - lastLayoutWidth) <= 2 && portrait === lastLayoutPortrait) return;
+    lastLayoutWidth = width;
+    lastLayoutPortrait = portrait;
     syncShellOrientation();
     if (!$('gameCenterView').classList.contains('hide') || !$('moreGamesView').classList.contains('hide')) {
       requestAnimationFrame(resetShellLayout);
     }
   }, { passive: true });
   window.addEventListener('orientationchange', () => {
+    lastLayoutWidth = document.documentElement.clientWidth || window.innerWidth;
+    lastLayoutPortrait = window.innerHeight >= window.innerWidth;
     setTimeout(resetShellLayout, 120);
     setTimeout(resetShellLayout, 360);
     setTimeout(resetShellLayout, 700);
   }, { passive: true });
-  if (window.visualViewport) {
-    window.visualViewport.addEventListener('resize', () => {
-      if (!$('gameCenterView').classList.contains('hide') || !$('moreGamesView').classList.contains('hide')) requestAnimationFrame(resetShellLayout);
-    }, { passive: true });
-  }
+  // visualViewport.resize also fires on every mobile URL-bar / keyboard move,
+  // even when the layout width is unchanged. Do NOT reset grid on that event.
 
   try {
     const saved = JSON.parse(localStorage.getItem('scarab_login') || 'null');
