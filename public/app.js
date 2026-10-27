@@ -475,6 +475,7 @@
   }
 
   function logout(silent) {
+    if(window.parent!==window)try{window.parent.postMessage({type:'sc:trial:logout'},'*')}catch(_){}
     gameOpenSerial++;
     boardLoadSerial++;
     stopRecommendationProbe();
@@ -1486,6 +1487,33 @@
     button.onclick = () => { activeBoard = button.dataset.k; renderBoard(); };
   });
   $('loginBtn').onclick = login;
+  // The official site may host this app in an iframe for a test session.
+  // Messages are accepted only from the exact official site origin.
+  if(window.parent!==window){
+    const allowedHosts=new Set(['https://scarabheart.com','https://www.scarabheart.com']);
+    window.addEventListener('message',async event=>{
+      if(event.source!==window.parent || !allowedHosts.has(event.origin))return;
+      const data=event.data;
+      if(!data || data.type!=='sc:trial:begin' || window.__trialBusy)return;
+      window.__trialBusy=true;
+      try {
+        $('u').value=String(data.user||'');
+        $('p').value=String(data.pass||'');
+        $('r').checked=false;
+        await login();
+        const valid=$('loginView').classList.contains('hide') &&
+          !$('gameCenterView').classList.contains('hide');
+        event.source.postMessage({type:valid?'sc:trial:ok':'sc:trial:error'},event.origin);
+      }catch(_){
+        event.source.postMessage({type:'sc:trial:error'},event.origin);
+      }finally{
+        $('p').value='';
+        window.__trialBusy=false;
+      }
+    });
+    window.parent.postMessage({type:'sc:trial:ready'},'*');
+  }
+
   $('p').addEventListener('keydown', event => { if (event.key === 'Enter') login(); });
   $('gcLogout').onclick = logout;
   $('moreGamesBtn').onclick = showMoreGames;
