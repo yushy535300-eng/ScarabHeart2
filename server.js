@@ -112,43 +112,9 @@ const adminForm = express.urlencoded({ extended: true, limit: '1mb' });
 const accessJson = express.json({ limit: '256kb' });
 function adminToken(req){const h=String(req.headers['x-admin-token']||'');if(h)return h;const c=String(req.headers.cookie||'');const m=c.match(/(?:^|;\s*)scarab_admin_token=([^;]+)/);return m?decodeURIComponent(m[1]):'';}
 function requireAdmin(req,res,next){const t=adminToken(req);if(!t||!adminSessions.has(t))return res.status(401).json({error:'管理員登入已失效'});next();}
+require('./server/agent-admin').registerAgentAdmin(app,{getPool,adminSessions,adminForm,ensureWhitelist:()=>listWhitelist()});
 // Read-only audit routes reuse this site's existing admin session; no cross-site session is accepted.
 registerAdminAuditReader(app,requireAdmin,{getPool});
-function adminRedirect(res,msg=''){res.redirect(303,'/admin'+(msg?'?msg='+encodeURIComponent(msg):''));}
-app.get('/admin',async(req,res)=>{res.set('Cache-Control','no-store, no-cache, must-revalidate');const t=adminToken(req),logged=!!t&&adminSessions.has(t);if(!logged)return res.type('html').send(adminPage(false));let items=[],dbError='';try{items=await listWhitelist();}catch(e){dbError=String(e&&e.message||'讀取失敗');}res.type('html').send(adminPage(true,'',items,String(req.query.msg||''),dbError));});
-app.post('/api/admin/login',adminForm,(req,res)=>{const expected=String(process.env.ADMIN_PASSWORD||'').trim(),supplied=String(req.body&&req.body.password||'').trim();if(!expected)return res.status(503).type('html').send(adminPage(false,'Render 尚未設定 ADMIN_PASSWORD'));if(supplied!==expected)return res.status(401).type('html').send(adminPage(false,'管理員密碼錯誤'));const token=crypto.randomUUID();adminSessions.add(token);res.set('Set-Cookie',`scarab_admin_token=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=28800${process.env.NODE_ENV==='production'?'; Secure':''}`);adminRedirect(res);});
-app.post('/api/admin/logout-form',(req,res)=>{const t=adminToken(req);if(t)adminSessions.delete(t);res.set('Set-Cookie',`scarab_admin_token=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${process.env.NODE_ENV==='production'?'; Secure':''}`);adminRedirect(res);});
-app.post('/api/admin/whitelist-form',adminForm,requireAdmin,async(req,res)=>{
-  try{
-    const username=String(req.body&&req.body.username||'').trim();
-    const platform=String(req.body&&req.body.platform||'TZ').trim().toUpperCase();
-    const daysRaw=String(req.body&&req.body.days||'permanent').trim();
-    const permanent=daysRaw==='permanent';
-    const days=permanent?null:Math.max(1,Number(daysRaw)||30);
-    const note=String(req.body&&req.body.note||'').trim();
-    if(!username)return adminRedirect(res,'請輸入平台帳號');
-    await upsertWhitelist({username,platform,days,permanent,note});
-    adminRedirect(res,`${platform}｜${username} 已新增／更新授權`);
-  }catch(e){adminRedirect(res,`新增失敗：${String(e&&e.message||e)}`);}
-});
-app.post('/api/admin/whitelist/:id/toggle-form',adminForm,requireAdmin,async(req,res)=>{
-  try{
-    await setWhitelistEnabled(req.params.id,String(req.body&&req.body.enabled||'')==='1');
-    adminRedirect(res,'授權狀態已更新');
-  }catch(e){adminRedirect(res,`操作失敗：${String(e&&e.message||e)}`);}
-});
-app.post('/api/admin/whitelist/:id/extend-form',adminForm,requireAdmin,async(req,res)=>{
-  try{
-    await extendWhitelist(req.params.id,30);
-    adminRedirect(res,'已延長 30 天');
-  }catch(e){adminRedirect(res,`操作失敗：${String(e&&e.message||e)}`);}
-});
-app.post('/api/admin/whitelist/:id/delete-form',adminForm,requireAdmin,async(req,res)=>{
-  try{
-    await deleteWhitelist(req.params.id);
-    adminRedirect(res,'授權已刪除');
-  }catch(e){adminRedirect(res,`操作失敗：${String(e&&e.message||e)}`);}
-});
 app.post('/api/access/resolve',accessJson,async(req,res)=>{try{const username=String(req.body&&req.body.username||'').trim();const resolved=await resolveWhitelistPlatform(getPool(),username);if(!resolved.allowed)return res.status(resolved.reason==='database_unavailable'?503:403).json({success:false,reason:resolved.reason});res.json({success:true,platform:resolved.platform});}catch(_){res.status(503).json({success:false,reason:'database_unavailable'});}});
 app.post('/api/access/login',accessJson,async(req,res)=>{try{const username=String(req.body&&req.body.username||'').trim(),claimedPlatform=String(req.body&&req.body.platform||'').trim().toUpperCase();if(!username||!['','TZ','OFA'].includes(claimedPlatform))return res.status(400).json({success:false,reason:'invalid_request'});const resolved=await resolveWhitelistPlatform(getPool(),username);if(!resolved.allowed)return res.status(resolved.reason==='database_unavailable'?503:403).json({success:false,reason:resolved.reason});if(claimedPlatform&&claimedPlatform!==resolved.platform)return res.status(403).json({success:false,reason:'platform_mismatch'});const platform=resolved.platform;const access=await authorizeWhitelist(username,platform);if(!access.allowed)return res.status(403).json({success:false,reason:access.reason});const sessionId=crypto.randomUUID();accessSessions.set(sessionId,{username,platform,createdAt:Date.now()});res.json({success:true,sessionId,platform});}catch(_){res.status(503).json({success:false,reason:'database_unavailable'});}});
 app.get('/api/access/check', async (req, res) => {
