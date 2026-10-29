@@ -23,6 +23,9 @@ const smallCookie=await login('small-super-password');assert.equal((await call(s
 await pool.query("INSERT INTO tz_whitelist(username,platform,note) VALUES('after-migration','TZ','-')");const {classifyLegacyOnce}=require('./server/agent-classification');assert.equal(await classifyLegacyOnce(pool),null);const unchanged=(await pool.query("SELECT * FROM tz_whitelist WHERE username='after-migration'")).rows[0];assert.equal(unchanged.agent_id,null);
 assert.equal((await call(agent,'agent/member',{id:member.id,op:'details',note:'咪咪'})).status,401);
 const currentAgent=await login('agent-an-new-password');assert.equal((await call(currentAgent,'agent/member',{id:member.id,op:'details',note:'咪咪'})).status,200);assert.equal(String((await call(currentAgent,'agent/data')).data.whitelist[0].agent_id),String(an.id));
+assert.equal((await call(currentAgent,'agent/password',{current_password:'wrong',new_password:'2',confirm_password:'2'})).status,400);
+assert.equal((await call(currentAgent,'agent/password',{current_password:'agent-an-new-password',new_password:'small-super-password',confirm_password:'small-super-password'})).status,400);
+const selfResponse=await fetch(base+'/api/admin/agent/password',{method:'POST',headers:{cookie:currentAgent,'Content-Type':'application/json'},body:JSON.stringify({current_password:'agent-an-new-password',new_password:'2',confirm_password:'2'})});assert.equal(selfResponse.status,200,await selfResponse.text());const ownCookie=selfResponse.headers.get('set-cookie').split(';')[0];assert.equal((await call(currentAgent,'agent/data')).status,401);assert.equal((await call(ownCookie,'agent/data')).data.identity.role,'agent');await login('2');
 assert.equal((await call(office,'agent/delete',{id:an.id,target_id:mi.id})).status,403);
 assert.equal((await call(root,'agent/delete',{id:small.id})).status,400);
 assert.equal((await call(root,'agent/delete',{id:three.id})).status,400);
@@ -31,9 +34,11 @@ const beforeDelete=(await pool.query('SELECT * FROM tz_whitelist WHERE id=$1',[m
 assert.equal((await call(root,'agent/delete',{id:an.id,target_id:mi.id})).status,200);
 const afterDelete=(await pool.query('SELECT * FROM tz_whitelist WHERE id=$1',[member.id])).rows[0];
 for(const key of ['username','platform','enabled','expires_at','note'])assert.deepEqual(afterDelete[key],beforeDelete[key]);assert.equal(String(afterDelete.agent_id),String(mi.id));
-assert.equal((await call(currentAgent,'agent/data')).status,401);assert(!(await call(root,'agent/data')).data.agents.some(a=>String(a.id)===String(an.id)));
+assert.equal((await call(ownCookie,'agent/data')).status,401);assert(!(await call(root,'agent/data')).data.agents.some(a=>String(a.id)===String(an.id)));
 assert.equal((await call(root,'agent/manage',{...an,password:'revive-password',permissions:perms})).status,400);
 const emptyAgent=(await call(root,'agent/data')).data.agents.find(a=>a.name==='新增代理');assert.equal((await call(root,'agent/delete',{id:emptyAgent.id})).status,200);
 assert.equal((await call(other,'agent/online?agent='+small.id)).status,403);
 const audit=(await call(root,'agent/audit')).data.rows;assert(audit.length>3);assert(!JSON.stringify(audit).includes('password_hash'));assert(!JSON.stringify(audit).includes('agent-an-new-password'));
+for(const [cookie,currentPassword,newPassword,expectedRole]of [[office,'office-three-password','office-changed','office'],[smallCookie,'small-super-password','small-changed','root']]){const response=await fetch(base+'/api/admin/agent/password',{method:'POST',headers:{cookie,'Content-Type':'application/json'},body:JSON.stringify({current_password:currentPassword,new_password:newPassword,confirm_password:newPassword})});assert.equal(response.status,200,await response.text());const updated=response.headers.get('set-cookie').split(';')[0];assert.equal((await call(updated,'agent/data')).data.identity.role,expectedRole);assert.equal((await call(cookie,'agent/data')).status,401);}
+
 });

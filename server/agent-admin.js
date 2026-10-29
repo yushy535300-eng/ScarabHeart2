@@ -42,6 +42,17 @@ const pool=await db();await require('./user-presence').ensureUserPresence(pool);
 const rows=(await pool.query(`SELECT DISTINCT p.app_id,UPPER(p.platform) AS platform,LOWER(p.username_key) AS username FROM autobac_user_presence p JOIN tz_whitelist w ON UPPER(w.platform)=UPPER(p.platform) AND LOWER(w.username)=LOWER(p.username_key) WHERE w.enabled=TRUE AND (w.expires_at IS NULL OR w.expires_at>NOW()) AND w.agent_id=$1 AND p.last_seen_at>NOW()-INTERVAL '25 seconds'`,[mine?.id||0])).rows;
 res.json({ownAgentId:mine?.id,applications:['scarab-heart','autobac','baccarat-helper'].map(appId=>({appId,onlineAccounts:rows.filter(r=>r.app_id===appId).length}))});
 }));
+ app.post('/api/admin/agent/password',require('express').json(),wrap(managed(async(req,res)=>{
+const a=req.agentIdentity;if(!a.id)return res.status(400).json({error:'此總管理密碼請到 Render 設定中修改'});
+const b=req.body,p=String(b.new_password||'');if(!p)throw Error('請輸入新密碼');if(p!==String(b.confirm_password||''))throw Error('兩次輸入的新密碼不一致');
+const pool=await db(),stored=(await pool.query('SELECT * FROM scarab_agents WHERE id=$1',[a.id])).rows[0];
+if(!stored||!stored.enabled||stored.deleted_at||!await verify(String(b.current_password||''),stored.password_hash))return res.status(400).json({error:'目前密碼不正確'});
+if(p.trim()===String(process.env.ADMIN_PASSWORD||'').trim())throw Error('此密碼已使用，請更換');
+const others=(await pool.query('SELECT id,password_hash FROM scarab_agents WHERE password_hash IS NOT NULL AND id<>$1',[a.id])).rows;for(const x of others)if(await verify(p,x.password_hash))throw Error('此密碼已使用，請更換');
+const hash=await hashPassword(p),client=await pool.connect();let saved;try{await client.query('BEGIN');saved=(await client.query('UPDATE scarab_agents SET password_hash=$1,version=version+1 WHERE id=$2 AND version=$3 AND enabled=TRUE AND deleted_at IS NULL RETURNING id,role,name,version',[hash,a.id,stored.version])).rows[0];if(!saved)throw Error('帳號設定已變更，請重新登入後再試');await audit(client,a,'自行修改密碼',a.id,null,{name:a.name,passwordReset:true});await client.query('COMMIT');}catch(err){await client.query('ROLLBACK');throw err;}finally{client.release();}
+for(const [token,session]of sessions)if(String(session.id)===String(a.id)){sessions.delete(token);adminSessions.delete(token);}
+const token=crypto.randomUUID();sessions.set(token,{...saved,until:Date.now()+28800000});adminSessions.add(token);res.cookie('scarab_admin_token',token,{httpOnly:true,sameSite:'lax',secure:req.secure||req.headers['x-forwarded-proto']==='https',maxAge:28800000});res.json({ok:true});
+})));
  app.post('/api/admin/agent/delete',require('express').json(),wrap(managed(async(req,res)=>{
 const a=req.agentIdentity,b=req.body;if(a.role!=='root'&&!(a.role==='office'&&can(a,'deleteAgents')))return res.status(403).json({error:'未開放刪除代理權限'});
 const pool=await db(),client=await pool.connect();try{await client.query('BEGIN');const source=(await client.query("SELECT * FROM scarab_agents WHERE id=$1 AND deleted_at IS NULL FOR UPDATE",[b.id])).rows[0];if(!source||source.role!=='agent'||source.superadmin)throw Error('此管理身分不可刪除');if(a.role!=='root'&&String(source.parent_id)!==String(a.id))throw Error('無權刪除此代理');
