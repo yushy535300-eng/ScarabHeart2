@@ -41,4 +41,12 @@ assert.equal((await call(other,'agent/online?agent='+small.id)).status,403);
 const audit=(await call(root,'agent/audit')).data.rows;assert(audit.length>3);assert(!JSON.stringify(audit).includes('password_hash'));assert(!JSON.stringify(audit).includes('agent-an-new-password'));
 for(const [cookie,currentPassword,newPassword,expectedRole]of [[office,'office-three-password','office-changed','office'],[smallCookie,'small-super-password','small-changed','root']]){const response=await fetch(base+'/api/admin/agent/password',{method:'POST',headers:{cookie,'Content-Type':'application/json'},body:JSON.stringify({current_password:currentPassword,new_password:newPassword,confirm_password:newPassword})});assert.equal(response.status,200,await response.text());const updated=response.headers.get('set-cookie').split(';')[0];assert.equal((await call(updated,'agent/data')).data.identity.role,expectedRole);assert.equal((await call(cookie,'agent/data')).status,401);}
 
+assert.equal((await call(other,'agent/member',{id:member.id,op:'delete',confirm_username:member.username})).status,400);
+assert.equal((await call(root,'agent/member',{id:member.id,op:'delete',confirm_username:'wrong-account'})).status,400);
+assert((await call(root,'agent/data')).data.whitelist.some(w=>String(w.id)===String(member.id)));
+assert.equal((await call(root,'agent/member',{id:member.id,op:'delete',confirm_username:member.username})).status,200);
+assert(!(await call(root,'agent/data')).data.whitelist.some(w=>String(w.id)===String(member.id)));
+assert.equal((await pool.query('SELECT id FROM tz_whitelist WHERE id=$1',[member.id])).rows.length,0);
+assert((await call(root,'agent/audit')).data.rows.some(row=>row.action==='刪除會員'&&row.before_data.username===member.username));
+
 });
