@@ -14,9 +14,9 @@
       "purpose": "any"
     },
     {
-      "src": "/admin-management-icon.png",
+      "src": "/admin-management-icon-512.webp",
       "sizes": "512x512",
-      "type": "image/png",
+      "type": "image/webp",
       "purpose": "any"
     }
   ]
