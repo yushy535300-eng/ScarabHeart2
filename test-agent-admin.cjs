@@ -23,5 +23,17 @@ const smallCookie=await login('small-super-password');assert.equal((await call(s
 await pool.query("INSERT INTO tz_whitelist(username,platform,note) VALUES('after-migration','TZ','-')");const {classifyLegacyOnce}=require('./server/agent-classification');assert.equal(await classifyLegacyOnce(pool),null);const unchanged=(await pool.query("SELECT * FROM tz_whitelist WHERE username='after-migration'")).rows[0];assert.equal(unchanged.agent_id,null);
 assert.equal((await call(agent,'agent/member',{id:member.id,op:'details',note:'咪咪'})).status,401);
 const currentAgent=await login('agent-an-new-password');assert.equal((await call(currentAgent,'agent/member',{id:member.id,op:'details',note:'咪咪'})).status,200);assert.equal(String((await call(currentAgent,'agent/data')).data.whitelist[0].agent_id),String(an.id));
+assert.equal((await call(office,'agent/delete',{id:an.id,target_id:mi.id})).status,403);
+assert.equal((await call(root,'agent/delete',{id:small.id})).status,400);
+assert.equal((await call(root,'agent/delete',{id:three.id})).status,400);
+assert.equal((await call(root,'agent/delete',{id:an.id})).status,400);
+const beforeDelete=(await pool.query('SELECT * FROM tz_whitelist WHERE id=$1',[member.id])).rows[0];
+assert.equal((await call(root,'agent/delete',{id:an.id,target_id:mi.id})).status,200);
+const afterDelete=(await pool.query('SELECT * FROM tz_whitelist WHERE id=$1',[member.id])).rows[0];
+for(const key of ['username','platform','enabled','expires_at','note'])assert.deepEqual(afterDelete[key],beforeDelete[key]);assert.equal(String(afterDelete.agent_id),String(mi.id));
+assert.equal((await call(currentAgent,'agent/data')).status,401);assert(!(await call(root,'agent/data')).data.agents.some(a=>String(a.id)===String(an.id)));
+assert.equal((await call(root,'agent/manage',{...an,password:'revive-password',permissions:perms})).status,400);
+const emptyAgent=(await call(root,'agent/data')).data.agents.find(a=>a.name==='新增代理');assert.equal((await call(root,'agent/delete',{id:emptyAgent.id})).status,200);
+assert.equal((await call(other,'agent/online?agent='+small.id)).status,403);
 const audit=(await call(root,'agent/audit')).data.rows;assert(audit.length>3);assert(!JSON.stringify(audit).includes('password_hash'));assert(!JSON.stringify(audit).includes('agent-an-new-password'));
 });
