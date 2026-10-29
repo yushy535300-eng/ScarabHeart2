@@ -54,6 +54,8 @@ function ensureUserPresence(db) {
       running BOOLEAN NOT NULL DEFAULT FALSE,
       last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )`);
+    await db.query(`ALTER TABLE autobac_user_presence ADD COLUMN IF NOT EXISTS opened_at TIMESTAMPTZ NULL`);
+    await db.query(`ALTER TABLE autobac_user_presence ALTER COLUMN opened_at SET DEFAULT NOW()`);
     await db.query(`ALTER TABLE autobac_user_presence ADD COLUMN IF NOT EXISTS app_id VARCHAR(32) NOT NULL DEFAULT 'autobac'`);
     await db.query(`CREATE INDEX IF NOT EXISTS autobac_user_presence_lease
       ON autobac_user_presence (last_seen_at)`);
