@@ -1,0 +1,37 @@
+:root{color-scheme:dark;--gold:#e6c687;--line:rgba(220,185,111,.23)}
+html{min-height:100%;background:#070a0f}
+body.agent-admin{min-height:100svh;background:radial-gradient(ellipse at 15% 10%,#8d60251b,transparent 48%),radial-gradient(ellipse at 90% 70%,#18425426,transparent 48%),linear-gradient(135deg,#070a0f,#111820 55%,#080c11);color:#eeeae1}
+body.agent-admin:before{content:"";position:fixed;inset:0;pointer-events:none;background:linear-gradient(115deg,transparent 38%,#e1bb6f05 49%,transparent 60%),repeating-linear-gradient(120deg,transparent 0 139px,#e1bb6f06 140px,transparent 141px 280px);z-index:0}
+body.agent-admin:after{content:"";position:fixed;width:560px;height:560px;border:1px solid #dab36b0d;border-radius:50%;left:calc(50% - 280px);top:calc(48% - 280px);box-shadow:0 0 0 75px #dab36b04,0 0 0 150px #dab36b03;pointer-events:none;z-index:0;animation:halo-breathe 8s ease-in-out infinite}
+.agent-admin main{position:relative;z-index:1;padding-top:112px}
+.brand-corner{position:absolute;right:32px;top:23px;display:flex;align-items:center;gap:12px;z-index:2;user-select:none}
+.brand-corner img{object-fit:contain;filter:drop-shadow(0 3px 12px #d6ab5545)}
+.brand-corner strong{display:block;font-size:18px;letter-spacing:.19em;color:#ead5a5;font-weight:650}
+.brand-corner span{display:block;color:#aa9871;font-size:9px;letter-spacing:.29em;margin-top:5px}
+.agent-admin .card{border-color:#d0ad6230;background:linear-gradient(140deg,#18212ce8,#0d141ef5);box-shadow:0 12px 38px #0003,inset 0 1px #fff5df05}
+.agent-admin .login{position:relative;margin:clamp(22px,8vh,90px) auto 60px;max-width:470px;padding:36px;border-radius:22px;isolation:isolate;box-shadow:0 32px 85px #0007,0 0 55px #c6a15f08,inset 0 1px #efdab428;background:radial-gradient(ellipse at 10% 0,#c49a4720,transparent 58%),linear-gradient(145deg,#19212bea,#0d141ef5)}
+.agent-admin .login:before{content:"";position:absolute;top:-1px;height:1px;left:12%;right:12%;background:linear-gradient(90deg,transparent,#f1d7a4,transparent);box-shadow:0 0 18px #f0cd7f80;animation:gold-breathe 4s ease-in-out infinite}
+.agent-admin .login:after{content:"SCARAB HEART / ADMIN";display:block;position:absolute;bottom:-30px;left:0;width:100%;text-align:center;font-size:9px;letter-spacing:.24em;color:#958362}
+.agent-admin .login>img{width:60px;height:60px;filter:drop-shadow(0 8px 16px #0005);margin-bottom:17px}
+.agent-admin .login h1{font-size:25px;letter-spacing:.05em;color:#f0e5ce;font-weight:650;line-height:1.5}
+.agent-admin .login p.muted{font-size:13px;line-height:1.9;color:#9da9b6;margin:12px 0 24px}
+.agent-admin input:not([type=checkbox]),.agent-admin select{background:#0a111bc9;border-color:#a68b552f;color:#f4eddd;transition:border-color .18s,box-shadow .18s}
+.agent-admin input:focus-visible,.agent-admin select:focus-visible,.agent-admin button:focus-visible{outline:2px solid #e7c57b;outline-offset:3px}
+.agent-admin input:not([type=checkbox]):focus{border-color:#c6a56688;box-shadow:0 0 0 3px #d1af6410}
+.agent-admin .login input{height:52px;padding:0 17px;border-radius:11px;margin-top:0;font-size:14px}
+.agent-admin .login input::placeholder{color:#728092}
+.agent-admin button{transition:transform .18s,border-color .18s,box-shadow .18s}
+.agent-admin button.primary{position:relative;overflow:hidden;background:linear-gradient(115deg,#ae8546,#e9cd91 50%,#c09a57);border-color:#e7c98a;color:#241b0c;box-shadow:inset 0 1px #fff5ce80,0 5px 20px #b28d3d1a}
+.agent-admin button.primary:before{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(110deg,transparent 20%,#fff7dc3b 50%,transparent 80%);transform:translateX(-160%);animation:gold-sweep 7s ease-in-out infinite}
+.agent-admin .login button{height:50px;border-radius:11px;margin-top:18px;letter-spacing:.14em;font-size:15px}
+.agent-admin button:hover{border-color:#d6b773;box-shadow:0 5px 20px #0003}
+.agent-admin button:active{transform:translateY(1px)}
+.agent-admin .login p.bad:not(:empty){padding:10px 13px;background:#f0746310;border:1px solid #e984692b;border-radius:8px;font-size:13px;line-height:1.7;margin:18px 0 0;color:#f5a295}
+.agent-admin .login p.bad:empty{display:none}
+.agent-admin header h1{letter-spacing:.03em}.agent-admin .tabs{border-color:#d0ad6226}.agent-admin .tabs button.active{background:linear-gradient(115deg,#b08a4d,#e1c48a);border-color:#e0c184}.agent-admin .stats .card{background:radial-gradient(ellipse at 100% 0,#cfa95f12,transparent 70%),linear-gradient(145deg,#17212c,#0e1722)}.agent-admin th{color:#b4a584;background:#cbaa6205}.agent-admin td{border-color:#d5b66d14}.agent-admin tbody tr:hover{background:#d6b47006}.agent-admin dialog{border-color:#c9a65f55;box-shadow:0 30px 100px #0008;background:linear-gradient(145deg,#1a232d,#0d141e)}
+@keyframes halo-breathe{50%{opacity:.35;transform:scale(1.035)}}
+@keyframes gold-breathe{50%{opacity:.4}}
+@keyframes gold-sweep{0%,65%{transform:translateX(-160%)}85%,100%{transform:translateX(160%)}}
+@media(min-width:1600px){.brand-corner{right:calc((100vw - 1480px)/2 + 28px)}}
+@media(max-width:700px){.brand-corner{right:20px;top:18px;gap:9px}.brand-corner img{width:49px;height:44px}.brand-corner strong{font-size:14px}.brand-corner span{font-size:8px;letter-spacing:.2em}.agent-admin main{padding-top:94px}.agent-admin .login{margin:25px auto 60px;padding:28px 24px;border-radius:18px}.agent-admin .login h1{font-size:22px}.agent-admin .login>img{width:52px;height:52px;margin-bottom:13px}.agent-admin .login p.muted{font-size:12px}.agent-admin:after{max-width:90vw;max-height:90vw}}
+@media(prefers-reduced-motion:reduce){body.agent-admin:after,.agent-admin .login:before,.agent-admin button.primary:before{animation:none}.agent-admin button,.agent-admin input,.agent-admin select{transition:none}}
