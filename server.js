@@ -712,6 +712,9 @@ app.all('/slotFramework/*', express.raw({ type: '*/*', limit: '256kb' }), async 
 
 app.use((req, res, next) => {
   if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+  // A provider cookie belongs to embedded game requests, never the app entry.
+  // Reopening the site must work even while an old provider session is alive.
+  if (req.path === '/' || req.path === '/index.html') return next();
   const reserved = /^\/(?:__|api\/|admin(?:\/|$)|provider\/|provider-rsg-nav\.js$|media\/|logo\.png$|manifest\.webmanifest$|admin-|icon|healthz$)/i;
   // Our own entry scripts must never be proxied through the prior RSG
   // cookie. Otherwise a quick RSG exit/re-entry (or refresh) loads RSG's 404
