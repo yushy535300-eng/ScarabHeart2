@@ -88,6 +88,29 @@ $('onlineRoster').innerHTML=`<div class="roster-summary"><span><i class="dot gre
 const auditLabels={office_id:'辦公室',agent_id:'推廣代理',note:'備註',enabled:'啟用狀態',expires_at:'授權到期',username:'會員帳號',platform:'平台',name:'名稱',role:'管理層級',parent:'所屬辦公室',permissions:'權限',program_access:'程式權限',program_links:'代理連結',passwordReset:'重設密碼',op:'操作',days:'授權天數',agent_name:'代理名稱',targetAgent:'接收代理',memberCount:'原會員數',movedCount:'移轉會員數'};
 function auditValue(key,v){if(v==null)return key==='expires_at'?'永久':'—';if(['office_id','agent_id','parent'].includes(key))return agentName(v);if(typeof v==='boolean')return v?'是':'否';if(key==='permissions')return Object.entries(v).filter(([k,val])=>val).map(([k])=>labels[k]?.[0]||k).join('、')||'無';if(key==='expires_at')return date(v);return typeof v==='object'?JSON.stringify(v):String(v);}
 async function renderAudit(){const version=++requestVersion;$('content').innerHTML=pageHeading('audit','查看最近 200 筆會員、代理與權限變更。')+'<section class="panel" id="auditContent"><div class="loading-panel"><span class="spinner"></span><p>讀取操作紀錄…</p></div></section>';try{const r=await api('audit');if(tab!=='audit'||version!==requestVersion)return;$('auditContent').innerHTML=r.rows.map(x=>{const before=x.before_data||{},after=x.after_data||{},keys=[...new Set([...Object.keys(before),...Object.keys(after)])];return `<article class="audit-entry"><div class="audit-marker"></div><div class="audit-main"><div><strong>${e(x.action)}</strong><time>${e(new Date(x.created_at).toLocaleString('zh-TW',{timeZone:'Asia/Taipei'}))}</time></div><p>${e(x.actor)} <span>·</span> ${e(after.username||before.username||after.name||before.name||'資料 #'+x.target)}</p><details><summary>查看變更內容</summary><div class="audit-changes">${keys.filter(k=>auditLabels[k]).map(k=>`<div><span>${e(auditLabels[k])}</span><del>${e(auditValue(k,before[k]))}</del><b>→</b><strong>${e(auditValue(k,after[k]))}</strong></div>`).join('')}</div></details></div></article>`;}).join('')||'<div class="empty-state"><h3>尚無操作紀錄</h3></div>';}catch(err){if(tab==='audit')$('auditContent').innerHTML=`<div class="empty-state"><h3>讀取失敗</h3><p>${e(err.message)}</p></div>`;}}
+$('changeOwnLinks')?.addEventListener('click',()=>{
+  const own=data?.agents?.find(a=>String(a.id)===String(data.identity?.id));
+  if(!own)return toast('代理設定尚未載入，請重新整理後再試',true);
+  const shared=own.program_links?.shared||own.program_links?.['scarab-heart']||{};
+  const form=$('ownLinksForm');
+  form.reset();
+  form.elements.support.value=shared.support||'';
+  form.elements.register.value=shared.register||'';
+  errorIn('ownLinksDialog','');
+  document.body.classList.remove('menu-open');
+  $('menuToggle')?.setAttribute('aria-expanded','false');
+  $('ownLinksDialog').showModal();
+});
+if($('ownLinksForm'))$('ownLinksForm').onsubmit=async ev=>{
+  ev.preventDefault();
+  const form=ev.target,body=Object.fromEntries(new FormData(form));
+  if(!body.support||!body.register)return errorIn('ownLinksDialog','請填寫 LINE 客服及註冊連結');
+  if(await run(()=>api('my-links',body),form.querySelector('[type=submit]'),'ownLinksDialog')){
+    form.elements.current_password.value='';
+    close('ownLinksDialog');
+    toast('LINE 與註冊連結已更新，所有已開通程式同步使用');
+  }
+};
 $('changeOwnUsername')?.addEventListener('click',()=>{$('ownUsernameForm').reset();errorIn('ownUsernameDialog','');document.body.classList.remove('menu-open');$('menuToggle')?.setAttribute('aria-expanded','false');$('ownUsernameDialog').showModal();});
 if($('ownUsernameForm'))$('ownUsernameForm').onsubmit=async ev=>{
  ev.preventDefault();const form=ev.target,b=Object.fromEntries(new FormData(form)),button=form.querySelector('[type=submit]');
