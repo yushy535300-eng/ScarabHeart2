@@ -37,6 +37,30 @@ function registerAgentAdmin(app,{getPool,adminSessions,adminForm,ensureWhitelist
  else if(username&&usernameValid(username)){const pool=await db();const found=(await pool.query('SELECT * FROM scarab_agents WHERE enabled=TRUE AND deleted_at IS NULL AND LOWER(login_username)=$1 LIMIT 1',[username])).rows[0];
  if(found?.password_hash&&await verify(p,found.password_hash)){a=found;if(a.role==='agent'&&!a.superadmin){const parent=(await pool.query('SELECT enabled FROM scarab_agents WHERE id=$1',[a.parent_id])).rows[0];if(!parent?.enabled)a=null;}}}
  if(!a){limit.n++;limit.at=t;attempts.set(key,limit);return res.status(401).type('html').send(page(null,'帳號或密碼錯誤'));}
+ if(a.id&&a.totp_secret_enc&&String(req.body.totp_code||'').trim()){
+   // An enrolled agent can finish login directly from the always-visible 6-digit field.
+   // The server verifies the authenticator and atomically prevents replay.
+   let counter=null;
+   try{counter=totp.matchCounter(totp.decryptSecret(a.totp_secret_enc),req.body.totp_code,a.totp_last_counter);}catch{
+     return res.status(503).type('html').send(page(null,'安全驗證暫時無法使用，請聯繫管理員'));
+   }
+   if(counter!==null){
+     const pool=await db();
+     const verified=(await pool.query('UPDATE scarab_agents SET totp_last_counter=$1 WHERE id=$2 AND version=$3 AND enabled=TRUE AND deleted_at IS NULL AND totp_last_counter<$1 RETURNING id,role,name,version',[counter,a.id,a.version])).rows[0];
+     if(verified){
+       attempts.delete(key);
+       const token=crypto.randomUUID();
+       sessions.set(token,{id:verified.id,role:verified.role,name:verified.name,version:verified.version,until:t+28800000});
+       adminSessions.add(token);
+       res.cookie('scarab_admin_token',token,{httpOnly:true,sameSite:'lax',secure:req.secure||req.headers['x-forwarded-proto']==='https',maxAge:28800000});
+       return res.redirect(303,'/admin');
+     }
+   }
+   limit.n++;limit.at=t;attempts.set(key,limit);
+   if(limit.n>=15)return res.status(429).type('html').send(page(null,'嘗試次數過多，請稍後再試'));
+   // Continue to the challenge screen after an invalid or already-used code,
+   // never start a session just because the password matched.
+ }
  if(a.id){
   // The Render root identity (id missing) is deliberately exempt from TOTP.
   totp.encryptionKey();
@@ -46,7 +70,7 @@ function registerAgentAdmin(app,{getPool,adminSessions,adminForm,ensureWhitelist
   const step={id:a.id,version:a.version,expires:t+300000,tries:0,loginKey:key,setup:enroll,secret,username:a.login_username};
   if(enroll)step.qr=await totp.qrData(secret,a.login_username);
   pendingTotp.set(token,step);
-  return res.type('html').send(page(null,'',null,{setup:enroll,token,secret,qr:step.qr}));
+  return res.type('html').send(page(null,(!enroll&&String(req.body.totp_code||'').trim())?'驗證碼不正確或已使用，請輸入新的 6 位數驗證碼':'',null,{setup:enroll,token,secret,qr:step.qr}));
  }
  attempts.delete(key);const token=crypto.randomUUID();sessions.set(token,{id:a.id,role:a.role,name:a.name,version:a.version,until:t+28800000});adminSessions.add(token);res.cookie('scarab_admin_token',token,{httpOnly:true,sameSite:'lax',secure:req.secure||req.headers['x-forwarded-proto']==='https',maxAge:28800000});res.redirect(303,'/admin');
  }));
