@@ -3,6 +3,7 @@ const crypto=require('node:crypto');
 const {classifyLegacyOnce}=require('./agent-classification');
 const {promisify}=require('node:util');
 const scrypt=promisify(crypto.scrypt);
+const totp=require('./agent-totp');
 const PERMS={create:'新增白名單',toggle:'開通／停用／恢復',extend:'修改到期日',permanent:'永久授權',assign:'調整會員代理',records:'查看使用紀錄',online:'查看聖甲在線',agents:'新增／管理旗下代理',deleteAgents:'刪除旗下代理',deleteMembers:'刪除會員'};
 const ALL=Object.keys(PERMS);
 const {PROGRAMS,IDS,grants,validateGrants,validateLinks,sharedLinks,ensureProgramSchema,programAllowed,entryLinks}=require('./program-access.cjs');
@@ -14,14 +15,12 @@ const cookie=req=>String(req.headers['x-admin-token']||'')||decodeURIComponent((
 async function hashPassword(p){const salt=crypto.randomBytes(16).toString('hex');return salt+':'+(await scrypt(p,salt,64)).toString('hex');}
 async function verify(p,encoded){if(!encoded)return false;const [salt,hash]=encoded.split(':');const value=await scrypt(p,salt,64);return hash?.length===128&&crypto.timingSafeEqual(value,Buffer.from(hash,'hex'));}
 function registerAgentAdmin(app,{getPool,adminSessions,adminForm,ensureWhitelist}){
- const sessions=new Map(),attempts=new Map(),challengeSecret=crypto.randomBytes(32);let ready,manageQueue=Promise.resolve();
+ const sessions=new Map(),attempts=new Map(),pendingTotp=new Map();let ready,manageQueue=Promise.resolve();
  const normalizeUsername=v=>String(v||'').trim().toLowerCase();
  const usernameValid=v=>/^[a-z][a-z0-9_-]{2,39}$/.test(v);
- const challengeFor=(key)=>{const a=crypto.randomInt(2,10),b=crypto.randomInt(1,10),expires=Date.now()+300000,body=[a,b,expires,key].join(':');return {text:a+' + '+b+' = ?',token:Buffer.from(body).toString('base64url')+'.'+crypto.createHmac('sha256',challengeSecret).update(body).digest('hex')};};
- const verifyChallenge=(key,token,response)=>{try{const [payload,sig]=String(token||'').split('.');if(!payload||!sig)return false;const body=Buffer.from(payload,'base64url').toString(),expected=crypto.createHmac('sha256',challengeSecret).update(body).digest('hex');if(sig.length!==expected.length||!crypto.timingSafeEqual(Buffer.from(sig),Buffer.from(expected)))return false;const [a,b,expires,...parts]=body.split(':');return parts.join(':')===key&&Number(expires)>=Date.now()&&Number(response)===Number(a)+Number(b);}catch{return false;}};
 
  const managed=fn=>async(...args)=>{let release;const previous=manageQueue;manageQueue=new Promise(r=>release=r);await previous;try{return await fn(...args);}finally{release();}};
- async function db(){const pool=getPool();if(!pool)throw Error('授權資料庫尚未設定');if(!ready)ready=(async()=>{await ensureWhitelist();await pool.query(`CREATE TABLE IF NOT EXISTS scarab_agents(id BIGSERIAL PRIMARY KEY,name VARCHAR(80) NOT NULL,role VARCHAR(16) NOT NULL CHECK(role IN ('office','agent')),parent_id BIGINT REFERENCES scarab_agents(id),password_hash TEXT,permissions JSONB NOT NULL DEFAULT '{}',enabled BOOLEAN NOT NULL DEFAULT TRUE,version INTEGER NOT NULL DEFAULT 1,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),UNIQUE(parent_id,name));ALTER TABLE scarab_agents ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ NULL;ALTER TABLE scarab_agents ADD COLUMN IF NOT EXISTS superadmin BOOLEAN NOT NULL DEFAULT FALSE;CREATE UNIQUE INDEX IF NOT EXISTS scarab_office_name ON scarab_agents(name) WHERE role='office';ALTER TABLE tz_whitelist ADD COLUMN IF NOT EXISTS office_id BIGINT REFERENCES scarab_agents(id);ALTER TABLE tz_whitelist ADD COLUMN IF NOT EXISTS agent_id BIGINT REFERENCES scarab_agents(id);CREATE TABLE IF NOT EXISTS scarab_admin_audit(id BIGSERIAL PRIMARY KEY,actor TEXT NOT NULL,action TEXT NOT NULL,target TEXT,before_data JSONB,after_data JSONB,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`);const base=Object.fromEntries(ALL.map(p=>[p,p!=='permanent'&&p!=='deleteAgents'&&p!=='deleteMembers']));for(const name of ['三組部','電銷'])await pool.query(`INSERT INTO scarab_agents(name,role,permissions) VALUES($1,'office',$2) ON CONFLICT DO NOTHING`,[name,base]);const office=(await pool.query("SELECT id FROM scarab_agents WHERE role='office' AND name='三組部'")).rows[0];for(const name of ['小隻','小安','咪咪','鈞','帥哥偉','鴻','阿成'])await pool.query(`INSERT INTO scarab_agents(name,role,parent_id,permissions) VALUES($1,'agent',$2,$3) ON CONFLICT DO NOTHING`,[name,office.id,base]);await classifyLegacyOnce(pool);await ensureProgramSchema(pool);})();try{await ready;}catch(e){ready=null;throw e;}return pool;}
+ async function db(){const pool=getPool();if(!pool)throw Error('授權資料庫尚未設定');if(!ready)ready=(async()=>{await ensureWhitelist();await pool.query(`CREATE TABLE IF NOT EXISTS scarab_agents(id BIGSERIAL PRIMARY KEY,name VARCHAR(80) NOT NULL,role VARCHAR(16) NOT NULL CHECK(role IN ('office','agent')),parent_id BIGINT REFERENCES scarab_agents(id),password_hash TEXT,permissions JSONB NOT NULL DEFAULT '{}',enabled BOOLEAN NOT NULL DEFAULT TRUE,version INTEGER NOT NULL DEFAULT 1,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),UNIQUE(parent_id,name));ALTER TABLE scarab_agents ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ NULL;ALTER TABLE scarab_agents ADD COLUMN IF NOT EXISTS superadmin BOOLEAN NOT NULL DEFAULT FALSE;CREATE UNIQUE INDEX IF NOT EXISTS scarab_office_name ON scarab_agents(name) WHERE role='office';ALTER TABLE tz_whitelist ADD COLUMN IF NOT EXISTS office_id BIGINT REFERENCES scarab_agents(id);ALTER TABLE tz_whitelist ADD COLUMN IF NOT EXISTS agent_id BIGINT REFERENCES scarab_agents(id);CREATE TABLE IF NOT EXISTS scarab_admin_audit(id BIGSERIAL PRIMARY KEY,actor TEXT NOT NULL,action TEXT NOT NULL,target TEXT,before_data JSONB,after_data JSONB,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())`);const base=Object.fromEntries(ALL.map(p=>[p,p!=='permanent'&&p!=='deleteAgents'&&p!=='deleteMembers']));for(const name of ['三組部','電銷'])await pool.query(`INSERT INTO scarab_agents(name,role,permissions) VALUES($1,'office',$2) ON CONFLICT DO NOTHING`,[name,base]);const office=(await pool.query("SELECT id FROM scarab_agents WHERE role='office' AND name='三組部'")).rows[0];for(const name of ['小隻','小安','咪咪','鈞','帥哥偉','鴻','阿成'])await pool.query(`INSERT INTO scarab_agents(name,role,parent_id,permissions) VALUES($1,'agent',$2,$3) ON CONFLICT DO NOTHING`,[name,office.id,base]);await classifyLegacyOnce(pool);await ensureProgramSchema(pool);await pool.query('ALTER TABLE scarab_agents ADD COLUMN IF NOT EXISTS totp_secret_enc TEXT NULL;ALTER TABLE scarab_agents ADD COLUMN IF NOT EXISTS totp_last_counter BIGINT NOT NULL DEFAULT -1');})();try{await ready;}catch(e){ready=null;throw e;}return pool;}
  async function identity(req){const token=cookie(req),s=sessions.get(token);if(!s||s.until<Date.now()){sessions.delete(token);adminSessions.delete(token);return null;}if(s.role==='root')return s;const pool=await db();const a=(await pool.query('SELECT * FROM scarab_agents WHERE id=$1',[s.id])).rows[0];if(!a?.enabled||a.version!==s.version)return null;if(a.superadmin)return {...a,role:'root',agentId:a.id};if(a.role==='agent'){const p=(await pool.query('SELECT * FROM scarab_agents WHERE id=$1',[a.parent_id])).rows[0];if(!p?.enabled)return null;a.permissions=Object.fromEntries(ALL.map(k=>[k,a.permissions[k]===true&&p.permissions[k]===true]));}return a;}
  async function audit(pool,a,action,target,before,after){await pool.query('INSERT INTO scarab_admin_audit(actor,action,target,before_data,after_data) VALUES($1,$2,$3,$4,$5)',[a.name,action,String(target),before||null,after||null]);}
  const wrap=fn=>(req,res,next)=>Promise.resolve(fn(req,res,next)).catch(e=>res.status(400).json({error:e.code==='23505'?'名稱或會員已存在':e.message||'操作失敗'}));
@@ -31,16 +30,57 @@ function registerAgentAdmin(app,{getPool,adminSessions,adminForm,ensureWhitelist
  const key=crypto.createHash('sha256').update(String(req.ip||'')+'|'+username).digest('hex');
  if(attempts.size>5000)for(const [k,v]of attempts)if(t-v.at>900000)attempts.delete(k);
  let limit=attempts.get(key);if(!limit||t-limit.at>900000)limit={n:0,at:t};
- if(limit.n>=15)return res.status(429).type('html').send(page(null,'嘗試次數過多，請稍後再試',challengeFor(key)));
- const challengeNeeded=limit.n>=3;
- if(challengeNeeded&&!verifyChallenge(key,req.body.challenge_token,req.body.challenge_answer))return res.status(403).type('html').send(page(null,'請先完成安全驗證',challengeFor(key)));
+ if(limit.n>=15)return res.status(429).type('html').send(page(null,'嘗試次數過多，請稍後再試'));
  let a=null;const root=String(process.env.ADMIN_PASSWORD||'').trim(),rootUser=normalizeUsername(process.env.ADMIN_USERNAME);
  // Keep the original password-only root login until ADMIN_USERNAME has been configured in Render.
  if(root&&p.trim()===root&&(rootUser?username===rootUser:username===''))a={role:'root',name:'總管理'};
  else if(username&&usernameValid(username)){const pool=await db();const found=(await pool.query('SELECT * FROM scarab_agents WHERE enabled=TRUE AND deleted_at IS NULL AND LOWER(login_username)=$1 LIMIT 1',[username])).rows[0];
  if(found?.password_hash&&await verify(p,found.password_hash)){a=found;if(a.role==='agent'&&!a.superadmin){const parent=(await pool.query('SELECT enabled FROM scarab_agents WHERE id=$1',[a.parent_id])).rows[0];if(!parent?.enabled)a=null;}}}
- if(!a){limit.n++;limit.at=t;attempts.set(key,limit);return res.status(401).type('html').send(page(null,'帳號或密碼錯誤',limit.n>=3?challengeFor(key):null));}
+ if(!a){limit.n++;limit.at=t;attempts.set(key,limit);return res.status(401).type('html').send(page(null,'帳號或密碼錯誤'));}
+ if(a.id){
+  // The Render root identity (id missing) is deliberately exempt from TOTP.
+  totp.encryptionKey();
+  for(const [id,step]of pendingTotp)if(step.expires<t)pendingTotp.delete(id);
+  if(pendingTotp.size>4000)pendingTotp.clear();
+  const token=crypto.randomUUID(),enroll=!a.totp_secret_enc,secret=enroll?totp.newSecret():null;
+  const step={id:a.id,version:a.version,expires:t+300000,tries:0,loginKey:key,setup:enroll,secret,username:a.login_username};
+  if(enroll)step.qr=await totp.qrData(secret,a.login_username);
+  pendingTotp.set(token,step);
+  return res.type('html').send(page(null,'',null,{setup:enroll,token,secret,qr:step.qr}));
+ }
  attempts.delete(key);const token=crypto.randomUUID();sessions.set(token,{id:a.id,role:a.role,name:a.name,version:a.version,until:t+28800000});adminSessions.add(token);res.cookie('scarab_admin_token',token,{httpOnly:true,sameSite:'lax',secure:req.secure||req.headers['x-forwarded-proto']==='https',maxAge:28800000});res.redirect(303,'/admin');
+ }));
+ app.post('/api/admin/totp-verify',adminForm,wrap(async(req,res)=>{
+  const token=String(req.body.pending_token||''),step=pendingTotp.get(token),now=Date.now();
+  if(!step||step.expires<now||step.tries>=6){pendingTotp.delete(token);return res.status(403).type('html').send(page(null,'驗證已逾時或嘗試次數過多，請重新登入'));}
+  const key=step.loginKey,limit=attempts.get(key);
+  if(limit?.n>=15){pendingTotp.delete(token);return res.status(429).type('html').send(page(null,'嘗試次數過多，請稍後再試'));}
+  const pool=await db(),a=(await pool.query('SELECT * FROM scarab_agents WHERE id=$1',[step.id])).rows[0];
+  if(!a?.enabled||a.deleted_at||a.version!==step.version||!a.password_hash){pendingTotp.delete(token);return res.status(403).type('html').send(page(null,'帳號狀態已變更，請重新登入'));}
+  if(a.role==='agent'&&!a.superadmin){const parent=(await pool.query('SELECT enabled,deleted_at FROM scarab_agents WHERE id=$1',[a.parent_id])).rows[0];if(!parent?.enabled||parent.deleted_at){pendingTotp.delete(token);return res.status(403).type('html').send(page(null,'代理權限已停用'));}
+  }
+  let counter=null,secret;
+  try{secret=step.setup?step.secret:totp.decryptSecret(a.totp_secret_enc);counter=totp.matchCounter(secret,req.body.totp_code,step.setup?-1:a.totp_last_counter);}catch{return res.status(503).type('html').send(page(null,'驗證服務暫時無法使用，請聯絡管理員'));}
+  const bad=async()=>{
+   step.tries++;let attempted=attempts.get(key);if(!attempted||now-attempted.at>900000)attempted={n:0,at:now};attempted.n++;attempts.set(key,attempted);
+   if(step.tries>=6||attempted.n>=15){pendingTotp.delete(token);return res.status(403).type('html').send(page(null,'驗證次數過多，請重新登入'));}
+   return res.status(403).type('html').send(page(null,'驗證碼不正確或已使用，請輸入新的 6 位數驗證碼',null,{setup:step.setup,token,secret:step.secret,qr:step.qr}));
+  };
+  if(counter==null)return bad();
+  let authenticated;
+  if(step.setup){
+   if(a.totp_secret_enc){pendingTotp.delete(token);return res.status(403).type('html').send(page(null,'此帳號已完成綁定，請重新登入'));}
+   const encrypted=totp.encryptSecret(secret);
+   authenticated=(await pool.query('UPDATE scarab_agents SET totp_secret_enc=$1,totp_last_counter=$2,version=version+1 WHERE id=$3 AND version=$4 AND enabled=TRUE AND deleted_at IS NULL AND totp_secret_enc IS NULL RETURNING id,role,name,version',[encrypted,counter,a.id,a.version])).rows[0];
+   if(authenticated)await audit(pool,a,'綁定 Google Authenticator',a.id,null,{enabled:true});
+  }else{
+   authenticated=(await pool.query('UPDATE scarab_agents SET totp_last_counter=$1 WHERE id=$2 AND version=$3 AND enabled=TRUE AND deleted_at IS NULL AND totp_last_counter<$1 RETURNING id,role,name,version',[counter,a.id,a.version])).rows[0];
+  }
+  if(!authenticated){pendingTotp.delete(token);return res.status(403).type('html').send(page(null,'驗證狀態已改變，請重新登入'));}
+  pendingTotp.delete(token);attempts.delete(key);const sessionToken=crypto.randomUUID();
+  sessions.set(sessionToken,{id:authenticated.id,role:authenticated.role,name:authenticated.name,version:authenticated.version,until:now+28800000});adminSessions.add(sessionToken);
+  res.cookie('scarab_admin_token',sessionToken,{httpOnly:true,sameSite:'lax',secure:req.secure||req.headers['x-forwarded-proto']==='https',maxAge:28800000});
+  res.redirect(303,'/admin');
  }));
  app.post('/api/admin/logout-form',(req,res)=>{const t=cookie(req);sessions.delete(t);adminSessions.delete(t);res.clearCookie('scarab_admin_token',{path:'/'});res.redirect(303,'/admin');});
  app.get(['/admin','/admin/'],wrap(async(req,res)=>{const a=await identity(req);res.type('html').send(page(a));}));
