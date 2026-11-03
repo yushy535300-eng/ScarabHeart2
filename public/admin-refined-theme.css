@@ -57,3 +57,17 @@ table{font-size:13px}th{font-size:11px;font-weight:600;color:#8b9683;background:
 .agent-entry-copy{padding:3px 4px!important;min-height:22px!important;font-size:10px!important;line-height:1.1!important;border:1px solid #d4ddc8!important;border-radius:5px!important;color:#506545!important;background:#fff!important;white-space:nowrap;flex-shrink:0}
 .agent-entry-copy:hover{border-color:#b59c55!important;color:#806221!important;background:#fff9e8!important}
 @media(max-width:650px){.agent-entry-links{gap:4px}.agent-entry-item{gap:2px;padding:3px 2px}.agent-entry-label img{width:15px;height:15px}.agent-entry-label span,.agent-entry-copy{font-size:9px!important}.agent-entry-copy{padding:3px!important}}
+
+/* Agent self-service actions: one Settings menu under Online Members. */
+.sidebar nav .nav-settings{min-width:0}
+.sidebar nav .nav-settings-toggle{width:100%;min-height:47px;font-size:14px;cursor:pointer;list-style:none;user-select:none}
+.sidebar nav .nav-settings-toggle::-webkit-details-marker{display:none}
+.sidebar nav .nav-settings-toggle::marker{content:""}
+.sidebar nav .nav-settings-toggle svg:last-child{width:15px;height:15px;flex-shrink:0;margin-left:auto;transition:transform .2s ease}
+.sidebar nav .nav-settings[open] .nav-settings-toggle{background:linear-gradient(100deg,#c4a46b29,#c4a46b0b);border-color:#c4a46b25;color:#f1d79d}
+.sidebar nav .nav-settings[open] .nav-settings-toggle svg{color:#dec183}
+.sidebar nav .nav-settings[open] .nav-settings-toggle svg:last-child{transform:rotate(180deg)}
+.sidebar nav .nav-settings-actions{display:flex;flex-direction:column;gap:2px;margin:6px 0 4px 24px;padding:3px 0 3px 11px;border-left:1px solid #c4a46b4d}
+.sidebar nav .nav-settings-actions button{display:block;width:100%;min-height:36px;padding:9px 10px;border:1px solid transparent;border-radius:7px;background:transparent;color:#c3cbbf;text-align:left;font-size:12px;line-height:1.5;cursor:pointer;transition:background .18s,color .18s,border-color .18s}
+.sidebar nav .nav-settings-actions button:hover,.sidebar nav .nav-settings-actions button:focus-visible{background:#d4bb7e16;border-color:#d4bb7e27;color:#f1d79d}
+.sidebar nav .nav-settings-toggle:focus-visible{outline:2px solid #d9b56c;outline-offset:2px}
