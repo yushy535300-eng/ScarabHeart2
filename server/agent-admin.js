@@ -119,6 +119,44 @@ const applications=[];for(const id of IDS){if(!programCan(a,id))continue;const k
   await audit(pool,admin,'重置 Google Authenticator',id,{enabled:!!agent.totp_secret_enc},{enabled:false});
   res.json({ok:true});
  })));
+ app.post('/api/admin/agent/my-links',require('express').json({limit:'16kb'}),wrap(managed(async(req,res)=>{
+  // An agent may change only their own shared contact URLs. Their account,
+  // membership, program grants and other agents' records are not editable here.
+  const acting=req.agentIdentity;
+  if(!acting?.id)return res.status(403).json({error:'此管理身分沒有個人代理入口'});
+  const body=req.body||{};
+  const candidate=validateLinks({shared:{support:body.support,register:body.register}});
+  if(!candidate.shared.support||!candidate.shared.register)
+    return res.status(400).json({error:'請填寫有效的 LINE 客服與註冊網址'});
+  if(!body.current_password||typeof body.current_password!=='string')
+    return res.status(400).json({error:'請輸入目前登入密碼確認'});
+  const pool=await db(),client=await pool.connect();
+  try{
+    await client.query('BEGIN');
+    const stored=(await client.query("SELECT * FROM scarab_agents WHERE id=$1 AND role='agent' AND enabled=TRUE AND deleted_at IS NULL FOR UPDATE",[acting.id])).rows[0];
+    if(!stored||!stored.password_hash){
+      await client.query('ROLLBACK');
+      return res.status(403).json({error:'此帳號無法設定代理連結'});
+    }
+    if(!await verify(body.current_password,stored.password_hash)){
+      await client.query('ROLLBACK');
+      return res.status(403).json({error:'目前密碼不正確'});
+    }
+    const oldLinks=sharedLinks(stored);
+    if(oldLinks.support===candidate.shared.support&&oldLinks.register===candidate.shared.register){
+      await client.query('COMMIT');
+      return res.json({ok:true,unchanged:true,links:candidate.shared});
+    }
+    // Save the single shared contact pair, not a separate pair for each product.
+    await client.query('UPDATE scarab_agents SET program_links=$1 WHERE id=$2',[candidate,stored.id]);
+    await audit(client,acting,'代理自行修改客服及註冊網址',stored.id,{links:oldLinks},{links:candidate.shared});
+    await client.query('COMMIT');
+    return res.json({ok:true,links:candidate.shared});
+  }catch(error){
+    await client.query('ROLLBACK').catch(()=>{});
+    throw error;
+  }finally{client.release();}
+ })));
  app.post('/api/admin/agent/username',require('express').json(),wrap(managed(async(req,res)=>{
  const a=req.agentIdentity;
  if(!a.id)return res.status(403).json({error:'最高管理員帳號請在 Render 的 ADMIN_USERNAME 設定'});
