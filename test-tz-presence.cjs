@@ -43,6 +43,8 @@ test('active whitelist resolution preserves OFA routing and presence follows the
       queries.push([sql, values]);
       if (/SELECT UPPER\(platform\) AS platform/i.test(sql)) return { rows: [{ platform: 'OFA' }] };
       if (/SELECT 1\s+FROM tz_whitelist/i.test(sql)) return { rows: [{ '?column?': 1 }], rowCount: 1 };
+      if (/CREATE TABLE|ALTER TABLE|CREATE UNIQUE INDEX/i.test(sql)) return {rows:[]};
+      if (/SELECT \* FROM tz_whitelist/i.test(sql)) return {rows:[{username:'anonymous-account',platform:'OFA',enabled:true,program_access:null}]};
       throw new Error('unexpected query');
     }
   };
@@ -56,8 +58,8 @@ test('active whitelist resolution preserves OFA routing and presence follows the
   const originalAccessCheckWouldAccept = sessionId => sessions.has(sessionId);
   assert.equal(originalAccessCheckWouldAccept('opaque-scarab-session'), true);
   assert.deepEqual(await readCurrentAccessIdentity(db, sessions, 'opaque-scarab-session'), { username: 'anonymous-account', platform: 'OFA' });
-  assert.match(queries.at(-1)[0], /enabled=TRUE/);
-  assert.match(queries.at(-1)[0], /expires_at IS NULL OR expires_at>NOW\(\)/);
+  assert(queries.some(([sql])=>/enabled=TRUE/.test(sql)));
+  assert(queries.some(([sql])=>/expires_at IS NULL OR expires_at>NOW\(\)/.test(sql)));
 
   // Simulate the original cleanup deleting the map entry. Presence must then
   // reject it immediately rather than retaining a separate session lifetime.

@@ -1,5 +1,6 @@
 'use strict';
 const { Pool } = require('pg');
+const {checkProgram}=require('./server/program-access.cjs');
 
 let pool = null;
 let initialized = false;
@@ -70,7 +71,7 @@ async function ensureWhitelistTables(){
 }
 
 async function authorizeWhitelist(usernameRaw, platformRaw='TZ'){
-  if(!whitelistEnabled()) return { allowed:true, reason:'whitelist_disabled' };
+
   const db = getPool();
   if(!db) return { allowed:false, reason:'database_unavailable' };
   await ensureWhitelistTables();
@@ -91,6 +92,7 @@ async function authorizeWhitelist(usernameRaw, platformRaw='TZ'){
   if(!row.enabled) return { allowed:false, reason:'disabled' };
   if(row.expires_at && new Date(row.expires_at).getTime() <= Date.now())
     return { allowed:false, reason:'expired' };
+  if(!await checkProgram(db,username,platform,'scarab-heart')) return {allowed:false,reason:'program_disabled'};
   return { allowed:true, reason:'ok' };
 }
 
