@@ -105,6 +105,20 @@ if(a.role==='root'&&req.query.own==='1'){const mine=(await pool.query("SELECT id
 const rows=(await pool.query(`SELECT DISTINCT p.app_id,p.platform,p.username_key,w.agent_id,w.program_access FROM autobac_user_presence p JOIN tz_whitelist w ON UPPER(w.platform)=UPPER(p.platform) AND LOWER(w.username)=LOWER(p.username_key) WHERE w.enabled=TRUE AND (w.expires_at IS NULL OR w.expires_at>NOW()) AND p.last_seen_at>NOW()-INTERVAL '25 seconds' AND ${scope}`,params)).rows;
 const applications=[];for(const id of IDS){if(!programCan(a,id))continue;const keys=new Set();for(const row of rows)if(row.app_id===id&&await programAllowed(pool,row,id))keys.add(String(row.platform).toUpperCase()+':'+String(row.username_key).toLowerCase());applications.push({appId:id,onlineAccounts:keys.size});}res.json({applications});
 }));
+ app.post('/api/admin/agent/totp-reset',require('express').json(),wrap(managed(async(req,res)=>{
+  const admin=req.agentIdentity;
+  if(admin.role!=='root')return res.status(403).json({error:'只有最高管理員可以重置驗證器'});
+  const id=Number(req.body?.id);
+  if(!Number.isSafeInteger(id)||id<=0)return res.status(400).json({error:'代理資料錯誤'});
+  const pool=await db(),agent=(await pool.query('SELECT id,name,totp_secret_enc FROM scarab_agents WHERE id=$1 AND deleted_at IS NULL',[id])).rows[0];
+  if(!agent)return res.status(404).json({error:'找不到代理'});
+  const updated=(await pool.query('UPDATE scarab_agents SET totp_secret_enc=NULL,totp_last_counter=-1,version=version+1 WHERE id=$1 AND deleted_at IS NULL RETURNING id',[id])).rows[0];
+  if(!updated)return res.status(404).json({error:'代理已變更'});
+  for(const [token,s]of sessions)if(String(s.id)===String(id)){sessions.delete(token);adminSessions.delete(token);}
+  for(const [token,p]of pendingTotp)if(String(p.id)===String(id))pendingTotp.delete(token);
+  await audit(pool,admin,'重置 Google Authenticator',id,{enabled:!!agent.totp_secret_enc},{enabled:false});
+  res.json({ok:true});
+ })));
  app.post('/api/admin/agent/username',require('express').json(),wrap(managed(async(req,res)=>{
  const a=req.agentIdentity;
  if(!a.id)return res.status(403).json({error:'最高管理員帳號請在 Render 的 ADMIN_USERNAME 設定'});
