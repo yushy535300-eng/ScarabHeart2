@@ -847,7 +847,37 @@ body.scarab-portrait #gameCenterView .game-card {
 .more-games-cta{animation:scarabMoreGamesGlow 3.2s ease-in-out infinite}
 @media(prefers-reduced-motion:reduce){.more-games-cta{animation:none}}
 </style>
-<script src="/agent-context.js?v=1" defer></script></head>
+<script src="/agent-context.js?v=1" defer></script><style id="scarab-login-desktop-fit-20261104">
+@media(min-width:921px){
+ body:has(#loginView:not(.hide)){height:100dvh;overflow:hidden}
+ #loginView.login-page:not(.hide){height:100dvh;min-height:0;overflow:hidden;grid-template-columns:minmax(0,1.3fr) minmax(380px,.8fr)}
+ #loginView .hero{height:100dvh;min-height:0;padding:clamp(12px,3vh,38px) 30px}
+ #loginView .hero-logo{width:min(410px,49vh,75%)}
+ #loginView .hero-kicker{margin-top:-10px}
+ #loginView .login-side{height:100dvh;min-height:0;padding:clamp(10px,2.2vh,25px) clamp(22px,4vw,60px);overflow:hidden}
+ #loginView .login-card{width:min(420px,100%);max-height:calc(100dvh - 20px);display:flex;flex-direction:column;justify-content:center}
+ #loginView .online-row{margin-bottom:clamp(8px,2vh,20px)}
+ #loginView .login-sub{margin-bottom:clamp(8px,1.2vh,13px)}
+ #loginView .announce{padding:7px;margin-bottom:clamp(6px,1.2vh,12px)}
+ #loginView .announce-img{max-height:clamp(105px,22vh,205px);object-fit:contain}
+ #loginView .field{margin-bottom:clamp(5px,1vh,10px)}
+ #loginView .login-options{margin:4px 0}
+ #loginView .primary{min-height:clamp(38px,5.4vh,51px)}
+ #loginView .quick-links{margin-top:clamp(5px,1vh,10px)}
+ #loginView .quick-links button{min-height:clamp(32px,4.6vh,46px)}
+ #loginView .secure{margin-top:clamp(5px,1vh,11px)}
+}
+#loginView .login-contact-actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:9px;flex:0 0 auto}
+#loginView .login-contact{min-width:0;min-height:38px;padding:7px 9px;display:flex;align-items:center;justify-content:center;gap:7px;border-radius:10px;text-decoration:none;font-size:12px;font-weight:800;letter-spacing:.02em;transition:transform .18s,box-shadow .18s,filter .18s}
+#loginView .login-contact:hover{transform:translateY(-1px);filter:brightness(1.09)}
+#loginView .login-contact:focus-visible{outline:2px solid #52e4ff;outline-offset:2px}
+#loginView .login-contact-line{background:#06c755;color:#fff;box-shadow:0 5px 17px #06c75522}
+#loginView .contact-dot{font-size:8px;font-weight:950;border:1.5px solid #fff;border-radius:50%;width:25px;height:21px;display:grid;place-items:center}
+#loginView .login-contact-register{color:#f2cb70;border:1px solid #856c38;background:linear-gradient(125deg,#122338,#091422);box-shadow:inset 0 1px #ffffff12}
+@media(max-width:920px){#loginView .login-contact-actions{gap:7px;margin-top:7px}#loginView .login-contact{min-height:34px;padding:6px 7px;font-size:11px}}
+@media(max-width:700px) and (max-height:780px){#loginView .login-contact-actions{margin-top:4px}#loginView .login-contact{min-height:29px;padding:4px 6px;font-size:10px}}
+</style>
+</head>
 <body>
   <main id="loginView" class="login-page">
     <section class="hero" aria-label="聖甲之心">
@@ -863,6 +893,7 @@ body.scarab-portrait #gameCenterView .game-card {
         <div class="field"><label for="u">帳號</label><div class="input-wrap"><input id="u" type="text" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="請輸入帳號"><span class="input-icon">●</span></div></div>
         <div class="field"><label for="p">密碼</label><div class="input-wrap"><input id="p" type="password" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="請輸入密碼"><button id="rfEye" class="input-icon eye" type="button" aria-label="顯示密碼">◉</button></div></div>
         <div class="login-options"><span aria-hidden="true"></span><span>加密連線</span></div><button id="loginBtn" class="primary" type="button">登入聖甲之心</button><div id="err" class="err" role="alert"></div><p class="login-presence-note" role="status">登入後僅同步匿名化的在線狀態；不記錄捲動、IP、密碼或遊戲網址。</p>
+        <div class="login-contact-actions" aria-label="客服與帳號註冊"><a id="loginLineSupport" class="login-contact login-contact-line" href="https://line.me/R/ti/p/%40116cfqfk" target="_self"><span class="contact-dot" aria-hidden="true">LINE</span><span>LINE 客服</span></a><a id="loginRegister" class="login-contact login-contact-register" href="https://shy9453.tz6868.cc/login?id=register" target="_self"><span aria-hidden="true">✧</span><span>註冊帳號</span></a></div>
         <div class="quick-links"><button id="usageBtn" type="button">使用說明</button><button id="featureBtn" type="button">功能介紹</button><button id="statusBtn" type="button">系統狀態</button></div><div class="secure">SECURE CONNECTION · <span class="seth-ver">v2.53</span></div>
       </div>
     </section>
