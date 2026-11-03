@@ -161,7 +161,7 @@
   }
 
   function accessReasonText(reason) {
-    const map = { not_whitelisted:'此帳號目前無使用資格', disabled:'此帳號授權已停用', expired:'此帳號授權已到期', database_unavailable:'授權服務暫時無法使用', session_invalid:'授權工作階段已失效，請重新登入', platform_ambiguous:'此帳號需要由管理員確認登入設定', platform_mismatch:'帳號登入設定已變更，請重新登入' };
+    const map = { program_disabled:'此程式尚未開通，請聯繫所屬代理', not_whitelisted:'此帳號目前無使用資格', disabled:'此帳號授權已停用', expired:'此帳號授權已到期', database_unavailable:'授權服務暫時無法使用', session_invalid:'授權工作階段已失效，請重新登入', platform_ambiguous:'此帳號需要由管理員確認登入設定', platform_mismatch:'帳號登入設定已變更，請重新登入' };
     return map[String(reason||'')] || '白名單驗證失敗';
   }
   async function localAccess(path, body) {

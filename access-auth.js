@@ -1,5 +1,6 @@
 'use strict';
 
+const {checkProgram}=require('./server/program-access.cjs');
 const PLATFORM_VALUES = new Set(['TZ', 'OFA']);
 
 function cleanUsername(value) {
@@ -32,7 +33,7 @@ async function resolveWhitelistPlatform(db, usernameRaw) {
   const platforms = [...new Set((result.rows || [])
     .map(row => cleanPlatform(row && row.platform))
     .filter(Boolean))];
-  if (platforms.length === 1) return { allowed: true, reason: 'ok', platform: platforms[0] };
+  if (platforms.length === 1) {if(!await checkProgram(db,username,platforms[0],'scarab-heart'))return {allowed:false,reason:'program_disabled'};return { allowed: true, reason: 'ok', platform: platforms[0] };}
   if (platforms.length > 1) return { allowed: false, reason: 'platform_ambiguous' };
   return { allowed: false, reason: 'not_whitelisted' };
 }
@@ -65,6 +66,7 @@ async function readCurrentAccessIdentity(db, accessSessions, sessionIdRaw) {
     [username, platform]
   );
   if (!result || !(result.rowCount > 0 || (Array.isArray(result.rows) && result.rows.length > 0))) return null;
+  if(!await checkProgram(db,username,platform,'scarab-heart'))return null;
   return { username, platform };
 }
 

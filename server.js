@@ -113,6 +113,7 @@ const accessJson = express.json({ limit: '256kb' });
 function adminToken(req){const h=String(req.headers['x-admin-token']||'');if(h)return h;const c=String(req.headers.cookie||'');const m=c.match(/(?:^|;\s*)scarab_admin_token=([^;]+)/);return m?decodeURIComponent(m[1]):'';}
 function requireAdmin(req,res,next){const t=adminToken(req);if(!t||!adminSessions.has(t))return res.status(401).json({error:'管理員登入已失效'});next();}
 require('./server/agent-admin').registerAgentAdmin(app,{getPool,adminSessions,adminForm,ensureWhitelist:()=>listWhitelist()});
+require('./server/program-access.cjs').registerAgentContext(app,{getPool,ensureWhitelist:()=>listWhitelist(),appId:'scarab-heart'});
 // Read-only audit routes reuse this site's existing admin session; no cross-site session is accepted.
 registerAdminAuditReader(app,requireAdmin,{getPool});
 app.post('/api/access/resolve',accessJson,async(req,res)=>{try{const username=String(req.body&&req.body.username||'').trim();const resolved=await resolveWhitelistPlatform(getPool(),username);if(!resolved.allowed)return res.status(resolved.reason==='database_unavailable'?503:403).json({success:false,reason:resolved.reason});res.json({success:true,platform:resolved.platform});}catch(_){res.status(503).json({success:false,reason:'database_unavailable'});}});
