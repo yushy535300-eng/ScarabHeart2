@@ -65,6 +65,32 @@ if(a.role==='root'&&req.query.own==='1'){const mine=(await pool.query("SELECT id
 const rows=(await pool.query(`SELECT DISTINCT p.app_id,p.platform,p.username_key,w.agent_id,w.program_access FROM autobac_user_presence p JOIN tz_whitelist w ON UPPER(w.platform)=UPPER(p.platform) AND LOWER(w.username)=LOWER(p.username_key) WHERE w.enabled=TRUE AND (w.expires_at IS NULL OR w.expires_at>NOW()) AND p.last_seen_at>NOW()-INTERVAL '25 seconds' AND ${scope}`,params)).rows;
 const applications=[];for(const id of IDS){if(!programCan(a,id))continue;const keys=new Set();for(const row of rows)if(row.app_id===id&&await programAllowed(pool,row,id))keys.add(String(row.platform).toUpperCase()+':'+String(row.username_key).toLowerCase());applications.push({appId:id,onlineAccounts:keys.size});}res.json({applications});
 }));
+ app.post('/api/admin/agent/username',require('express').json(),wrap(managed(async(req,res)=>{
+ const a=req.agentIdentity;
+ if(!a.id)return res.status(403).json({error:'最高管理員帳號請在 Render 的 ADMIN_USERNAME 設定'});
+ const b=req.body||{},username=normalizeUsername(b.new_username);
+ if(!usernameValid(username))return res.status(400).json({error:'登入帳號需 3～40 字，以英文開頭，僅能使用英文字母、數字、底線及減號'});
+ if(username===normalizeUsername(process.env.ADMIN_USERNAME))return res.status(409).json({error:'此登入帳號已保留給最高管理員'});
+ const pool=await db();
+ const stored=(await pool.query('SELECT * FROM scarab_agents WHERE id=$1',[a.id])).rows[0];
+ if(!stored?.enabled||stored.deleted_at||!stored.password_hash)return res.status(403).json({error:'登入帳號目前不可修改'});
+ if(!await verify(String(b.current_password||''),stored.password_hash))return res.status(403).json({error:'目前密碼不正確'});
+ if(await verify(username,stored.password_hash))return res.status(400).json({error:'登入帳號不得與密碼相同'});
+ if(username===normalizeUsername(stored.login_username))return res.json({ok:true,unchanged:true,login_username:username});
+ const client=await pool.connect();
+ try{
+  await client.query('BEGIN');
+  const other=(await client.query('SELECT id FROM scarab_agents WHERE LOWER(login_username)=$1 AND id<>$2 LIMIT 1',[username,a.id])).rows[0];
+  if(other){await client.query('ROLLBACK');return res.status(409).json({error:'此登入帳號已被使用，請換一個'});}
+  const saved=(await client.query('UPDATE scarab_agents SET login_username=$1,version=version+1 WHERE id=$2 AND version=$3 AND enabled=TRUE AND deleted_at IS NULL RETURNING id',[username,a.id,stored.version])).rows[0];
+  if(!saved)throw Error('帳號資料已變更，請重新登入後再試');
+  await audit(client,a,'修改自己的登入帳號',a.id,{login_username:stored.login_username},{login_username:username});
+  await client.query('COMMIT');
+ }catch(e){await client.query('ROLLBACK').catch(()=>{});if(e.code==='23505')return res.status(409).json({error:'此登入帳號已被使用，請換一個'});throw e;}finally{client.release();}
+ for(const [token,session]of sessions)if(String(session.id)===String(a.id)){sessions.delete(token);adminSessions.delete(token);}
+ res.clearCookie('scarab_admin_token',{path:'/'});
+ return res.json({ok:true,login_username:username,relogin:true});
+ })));
  app.post('/api/admin/agent/password',require('express').json(),wrap(managed(async(req,res)=>{
 const a=req.agentIdentity;if(!a.id)return res.status(400).json({error:'此總管理密碼請到 Render 設定中修改'});
 const b=req.body,p=String(b.new_password||'');if(!p)throw Error('請輸入新密碼');if(p!==String(b.confirm_password||''))throw Error('兩次輸入的新密碼不一致');
