@@ -109,6 +109,8 @@ test('default local origin (without public-origin injection) authenticates a cur
   await eventually(() => calls.some(([sql]) => /INSERT INTO autobac_user_presence/.test(sql)));
   const insert = calls.find(([sql]) => /INSERT INTO autobac_user_presence/.test(sql));
   assert.deepEqual(insert[1], ['00000000-0000-4000-8000-000000000042', 'OFA', 'anonymous-account', 'scarab-heart']);
+  assert.deepEqual(calls.find(([sql])=>/INSERT INTO scarab_member_usage_sessions/.test(sql))[1],insert[1]);
+  await eventually(()=>calls.some(([sql])=>/UPDATE scarab_member_usage_sessions SET last_seen_at=NOW/.test(sql)));
   socket.send(JSON.stringify({ type: 'state', running: true }));
   await eventually(() => calls.some(([sql]) => /SET running=\$1/.test(sql)));
   const state = calls.find(([sql]) => /SET running=\$1/.test(sql));
@@ -116,6 +118,8 @@ test('default local origin (without public-origin injection) authenticates a cur
   socket.close();
   await once(socket, 'close');
   await eventually(() => calls.some(([sql, values]) => sql === 'DELETE FROM autobac_user_presence WHERE connection_id=$1' && values[0] === '00000000-0000-4000-8000-000000000042'));
+  assert(calls.some(([sql])=>/UPDATE scarab_member_usage_sessions SET ended_at=last_seen_at/.test(sql)));
+  assert(!calls.some(([sql])=>/DELETE FROM scarab_member_usage_sessions/.test(sql)));
 });
 
 test('presence rejects cross-origin upgrades without making database calls', async t => {

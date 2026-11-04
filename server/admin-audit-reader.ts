@@ -1,7 +1,7 @@
 import type { Express, RequestHandler, Request, Response } from 'express';
 
 export type AuditDatabase = { query: (text: string, values?: unknown[]) => Promise<{ rows?: any[] }> };
-export type AuditKind = 'usage' | 'settings' | 'acknowledgements';
+export type AuditKind = 'usage' | 'settings' | 'acknowledgements' | 'activity';
 
 type AuditAccount = { id: number | string; platform: string; username: string };
 type AuditRead = {
@@ -62,11 +62,11 @@ async function hasRelation(db: AuditDatabase, name: string): Promise<boolean> {
   return !!result.rows?.[0]?.relation;
 }
 
-function relationFor(kind: Exclude<AuditKind, 'usage'>): string {
+function relationFor(kind: Exclude<AuditKind, 'usage' | 'activity'>): string {
   return kind === 'settings' ? 'autobac_dg_settings_records' : 'autobac_risk_acknowledgements';
 }
 
-function rowsForKind(kind: Exclude<AuditKind, 'usage'>, table: string): string {
+function rowsForKind(kind: Exclude<AuditKind, 'usage' | 'activity'>, table: string): string {
   return kind === 'settings'
     ? `SELECT id, event_id, event_type, statement_version, snapshot, snapshot_sha256, recorded_at
         FROM ${table} WHERE platform=$1 AND username_key=$2
@@ -123,6 +123,16 @@ export async function readAdminAuditRecords(
   if (!account) return null;
   const identity = [String(account.platform).toUpperCase(), String(account.username).toLowerCase()];
 
+  if (kind === 'activity') {
+    if (!await hasRelation(db,'scarab_member_usage_sessions')) return {account,total:0,page:1,pages:1,rows:[],unavailable:true};
+    const total=Number((await db.query('SELECT COUNT(*)::int AS total FROM scarab_member_usage_sessions WHERE platform=$1 AND username_key=$2',identity)).rows?.[0]?.total || 0);
+    const pages=Math.max(1,Math.ceil(total/PAGE_SIZE)),page=Math.min(requestedPage,pages);
+    const rows=(await db.query(`SELECT *,GREATEST(0,EXTRACT(EPOCH FROM(last_seen_at-started_at))) AS duration_seconds,
+      (ended_at IS NULL AND last_seen_at>NOW()-INTERVAL '25 seconds') AS active
+      FROM scarab_member_usage_sessions WHERE platform=$1 AND username_key=$2
+      ORDER BY started_at DESC,connection_id DESC LIMIT ${PAGE_SIZE} OFFSET $3`,[...identity,(page-1)*PAGE_SIZE])).rows || [];
+    return {account,total,page,pages,rows,unavailable:false};
+  }
   if (kind === 'usage') {
     const [usageAvailable, settingsAvailable] = await Promise.all([
       hasRelation(db, 'autobac_dg_usage_records'),
@@ -283,19 +293,24 @@ function renderAcknowledgementCard(row: any): string {
   return `<article class="record"><div class="meta"><time>${escapeAdminAuditText(adminAuditTime(row.recorded_at))}</time><span class="badge">${escapeAdminAuditText(stringValue(row.game_platform))} · 已勾選</span></div><details><summary>查看當時聲明</summary><pre>${escapeAdminAuditText(stringValue(row.statement_text))}</pre><small>聲明版本：${escapeAdminAuditText(stringValue(row.statement_version))}</small><small>SHA-256：${escapeAdminAuditText(stringValue(row.statement_sha256))}</small></details></article>`;
 }
 
+function renderActivityCard(row: any): string {
+  const names: Record<string,string>={'scarab-heart':'聖甲之心','baccarat-helper':'多桌百家',autobac:'自動下注'};
+  return `<article class="record"><div class="meta"><strong>${escapeAdminAuditText(names[row.app_id] || row.app_id)}</strong><span class="badge">${row.active?'使用中':'已結束'}</span></div><dl><dt>上次使用時間</dt><dd>${escapeAdminAuditText(adminAuditTime(row.started_at))}</dd><dt>${row.active?'最近連線':'最後連線'}</dt><dd>${escapeAdminAuditText(adminAuditTime(row.last_seen_at))}</dd><dt>${row.active?'已使用多久':'該次使用多久'}</dt><dd>${escapeAdminAuditText(formatElapsed(Math.floor(Number(row.duration_seconds)*1000)))}</dd></dl><small>依實際連線起訖計算；中斷後以最後一次確認連線的時間結算。</small></article>`;
+}
+
 /** All dynamic data is escaped before it enters this HTML-only administrator page. */
 export function adminAuditDetailsPage(data: AuditRead, kind: AuditKind): string {
   const root = `/api/admin/whitelist/${encodeURIComponent(String(data.account.id))}`;
   const current = `${root}/${kind === 'usage' ? 'records' : kind}`;
-  const title = kind === 'usage' ? '使用紀錄' : kind === 'settings' ? '使用設定' : '免責確認';
+  const title = kind === 'activity' ? '程式使用紀錄' : kind === 'usage' ? '自動下注使用紀錄' : kind === 'settings' ? '自動下注設定' : '風險聲明';
   const content = data.unavailable
-    ? `<div class="empty">${kind === 'usage' ? '此站尚未啟用使用回傳審核；不以空白、0 分鐘或 0 損益補造。' : '此站尚未啟用此類審核紀錄；不以空白或 0 補造。'}</div>`
-    : data.rows.map(row => kind === 'usage' ? renderUsageCard(row) : kind === 'settings' ? renderSettingsCard(row) : renderAcknowledgementCard(row)).join('')
+    ? `<div class="empty">${kind === 'activity' ? '尚無程式連線時長紀錄；功能更新後的使用才會開始保存。' : kind === 'usage' ? '尚無自動下注使用回傳。' : '此站尚未啟用此類審核紀錄；不以空白或 0 補造。'}</div>`
+    : data.rows.map(row => kind === 'activity' ? renderActivityCard(row) : kind === 'usage' ? renderUsageCard(row) : kind === 'settings' ? renderSettingsCard(row) : renderAcknowledgementCard(row)).join('')
       || '<div class="empty">尚無紀錄；部署前的操作不會補造。</div>';
-  const hint = '資料來源：AutoBac DG 客戶端回報，非官方報表；待結算／歸屬不明不算入輸贏。缺資料標示未回傳，不補造。';
+  const hint = kind === 'activity' ? '顯示各程式的開啟時間、最後連線與該次使用時長；台北時間。' : '資料來源：AutoBac DG 客戶端回報，非官方報表；待結算／歸屬不明不算入輸贏。缺資料標示未回傳，不補造。';
   return `<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><title>${title}</title><style>
 *{box-sizing:border-box}body{margin:0;background:#080e13;color:#ecf0ed;font:14px system-ui,-apple-system,"Noto Sans TC",sans-serif}main{max-width:760px;margin:auto;padding:24px 16px}a{color:#a7d4c0;text-decoration:none}h1{font-size:22px;margin:18px 0 6px}.account{color:#a3afa9;overflow-wrap:anywhere}.tabs{display:flex;gap:8px;margin:20px 0 12px;flex-wrap:wrap}.tabs a{padding:11px 16px;border:1px solid #354640;border-radius:9px}.tabs a[aria-current=page]{background:#234137;color:#fff}.hint{color:#91a098;line-height:1.7;font-size:12px;margin-bottom:18px}.record{padding:16px;border:1px solid #2d4039;background:#111c20;border-radius:12px;margin-bottom:10px;min-width:0}.meta{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;color:#9aaba1;font-size:12px}.badge{color:#b8e3c7}.warn{color:#f0b45f}.summary{font-weight:700;font-size:15px;margin:10px 0;line-height:1.6;overflow-wrap:anywhere}.limits{font-size:12px;color:#bdc8c0;line-height:1.7;overflow-wrap:anywhere}details{margin-top:12px}summary{cursor:pointer;color:#a7d4c0;padding:7px 0}dl{display:grid;grid-template-columns:minmax(80px,120px) minmax(0,1fr);gap:8px;margin:10px 0;line-height:1.6}dt{color:#9aaba1}dd{margin:0;overflow-wrap:anywhere}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:13px system-ui;line-height:1.7}small{display:block;color:#99aaa1;overflow-wrap:anywhere;line-height:1.7}.bad{color:#ff9ca4}.empty{padding:28px 12px;color:#91a098;text-align:center}.pages{display:flex;justify-content:center;align-items:center;gap:18px;margin:22px 0}.pages a{padding:10px}.back{display:inline-block;padding:8px 0}.version{display:inline-block;margin-left:8px;padding:3px 7px;border:1px solid #496153;border-radius:99px;color:#b8e3c7;font-size:10px;font-weight:700;vertical-align:middle}@media(max-width:400px){main{padding:16px 12px}.record{padding:13px}}
-</style></head><body><main><a class="back" href="/admin">← 返回白名單</a><h1>${title}<span class="version">v3.2.20</span></h1><div class="account">${escapeAdminAuditText(data.account.platform)} · ${escapeAdminAuditText(data.account.username)}</div><nav class="tabs" aria-label="紀錄種類"><a href="${root}/records"${kind !== 'acknowledgements' ? ' aria-current="page"' : ''}>使用／設定</a><a href="${root}/acknowledgements"${kind === 'acknowledgements' ? ' aria-current="page"' : ''}>免責確認</a></nav><p class="hint">共 ${data.unavailable ? '待同步' : escapeAdminAuditText(data.total)} 筆 · 台北時間。詳細內容按一下展開。<br>${hint}</p>${content}<nav class="pages" aria-label="紀錄分頁">${data.page > 1 ? `<a href="${current}?page=${data.page - 1}">上一頁</a>` : ''}<span>${escapeAdminAuditText(data.page)} / ${escapeAdminAuditText(data.pages)}</span>${data.page < data.pages ? `<a href="${current}?page=${data.page + 1}">下一頁</a>` : ''}</nav></main></body></html>`;
+</style></head><body><main><a class="back" href="/admin">← 返回白名單</a><h1>${title}<span class="version">v3.2.20</span></h1><div class="account">${escapeAdminAuditText(data.account.platform)} · ${escapeAdminAuditText(data.account.username)}</div><nav class="tabs" aria-label="紀錄種類"><a href="${root}/activity"${kind === 'activity' ? ' aria-current="page"' : ''}>程式使用紀錄</a><a href="${root}/records"${kind === 'usage' ? ' aria-current="page"' : ''}>自動下注紀錄</a><a href="${root}/settings"${kind === 'settings' ? ' aria-current="page"' : ''}>自動下注設定</a><a href="${root}/acknowledgements"${kind === 'acknowledgements' ? ' aria-current="page"' : ''}>風險聲明</a></nav><p class="hint">共 ${data.unavailable ? '待同步' : escapeAdminAuditText(data.total)} 筆 · 台北時間。詳細內容按一下展開。<br>${hint}</p>${content}<nav class="pages" aria-label="紀錄分頁">${data.page > 1 ? `<a href="${current}?page=${data.page - 1}">上一頁</a>` : ''}<span>${escapeAdminAuditText(data.page)} / ${escapeAdminAuditText(data.pages)}</span>${data.page < data.pages ? `<a href="${current}?page=${data.page + 1}">下一頁</a>` : ''}</nav></main></body></html>`;
 }
 
 export async function sendAdminAuditPage(req: Request, res: Response, kind: AuditKind, deps: AdminAuditReaderDeps) {
@@ -317,6 +332,7 @@ export async function sendAdminAuditPage(req: Request, res: Response, kind: Audi
 
 /** Other sites call this with their own existing requireAdmin guard; sessions never cross sites. */
 export function registerAdminAuditReader(app: Express, requireAdmin: RequestHandler, deps: AdminAuditReaderDeps) {
+  app.get('/api/admin/whitelist/:id/activity', requireAdmin, (req,res)=>void sendAdminAuditPage(req,res,'activity',deps));
   app.get(['/api/admin/whitelist/:id/records', '/api/admin/whitelist/:id/usage'], requireAdmin,
     (req, res) => void sendAdminAuditPage(req, res, 'usage', deps));
   app.get('/api/admin/whitelist/:id/settings', requireAdmin,
