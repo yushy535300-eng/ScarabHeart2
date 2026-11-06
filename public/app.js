@@ -131,12 +131,6 @@
   }
 
   async function postJson(url, body, token, signal) {
-    const ofaLogin=url==='https://www.ofa1188.net/api/v1/login';
-    if(ofaLogin){
-      if(!window.ScarabOfaVerification)throw new Error('OFA 驗證元件尚未載入，請重新整理');
-      body={...body,cf_turnstile_token:await window.ScarabOfaVerification.requestToken()};
-    }
-
     const headers = { Accept: 'application/json', 'Content-Type': 'application/json' };
     if (token) headers.Authorization = 'Bearer ' + token;
     let response;
@@ -157,7 +151,6 @@
     const text = await response.text();
     let data = null;
     try { data = JSON.parse(text); } catch (_) {}
-    if (ofaLogin && response.status===429) throw new Error(window.ScarabOfaVerification.rateLimited(response.headers.get('Retry-After')));
     if (!response.ok) {
       const e = new Error((data && data.message) || ('伺服器回應 HTTP ' + response.status));
       e.status = response.status;
