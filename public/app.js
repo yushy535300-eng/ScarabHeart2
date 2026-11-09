@@ -119,13 +119,15 @@
   document.querySelectorAll('.seth-ver').forEach(el => { el.textContent = APP_VERSION; });
 
   function deviceId() {
-    let value = localStorage.getItem('scarab_device_id');
-    if (!value) {
-      value = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
-        const n = Math.floor(Math.random() * 16);
-        return (c === 'x' ? n : (n & 3) | 8).toString(16);
-      });
-      localStorage.setItem('scarab_device_id', value);
+    // TZ/OFA login uses a stable 32-character hexadecimal device identifier.
+    // Replace legacy 36-character UUIDs without borrowing another user's ID.
+    let value = '';
+    try { value = localStorage.getItem('scarab_device_id') || ''; } catch (_) {}
+    if (!/^[a-f0-9]{32}$/i.test(value)) {
+      const bytes = new Uint8Array(16);
+      crypto.getRandomValues(bytes);
+      value = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+      try { localStorage.setItem('scarab_device_id', value); } catch (_) {}
     }
     return value;
   }
