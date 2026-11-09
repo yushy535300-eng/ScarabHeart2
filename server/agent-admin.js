@@ -149,7 +149,7 @@ const applications=[];for(const id of IDS){if(!programCan(a,id))continue;const k
   const acting=req.agentIdentity;
   if(!acting?.id)return res.status(403).json({error:'此管理身分沒有個人代理入口'});
   const body=req.body||{};
-  const candidate=validateLinks({shared:{support:body.support,register:body.register}});
+  const candidate=validateLinks({shared:{support:body.support,register:body.register,threadsBaccarat:body.threadsBaccarat,threadsAutobac:body.threadsAutobac}});
   if(!candidate.shared.support||!candidate.shared.register)
     return res.status(400).json({error:'請填寫有效的 LINE 客服與註冊網址'});
   if(!body.current_password||typeof body.current_password!=='string')
@@ -167,7 +167,7 @@ const applications=[];for(const id of IDS){if(!programCan(a,id))continue;const k
       return res.status(403).json({error:'目前密碼不正確'});
     }
     const oldLinks=sharedLinks(stored);
-    if(oldLinks.support===candidate.shared.support&&oldLinks.register===candidate.shared.register){
+    if(['support','register','threadsBaccarat','threadsAutobac'].every(k=>(oldLinks[k]||'')===(candidate.shared[k]||''))){
       await client.query('COMMIT');
       return res.json({ok:true,unchanged:true,links:candidate.shared});
     }
