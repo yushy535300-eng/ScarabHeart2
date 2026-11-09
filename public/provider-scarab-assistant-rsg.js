@@ -158,11 +158,23 @@
     min.addEventListener('click',function(e){e.stopPropagation();minimized=!minimized;root.classList.toggle('sh-collapsed',minimized);min.textContent=minimized?'+':'−';});
     bar.addEventListener('pointerdown',function(e){
       if(e.target.closest('button'))return;
-      drag={id:e.pointerId,x:e.clientX-root.getBoundingClientRect().left,y:e.clientY-root.getBoundingClientRect().top};
+      var r=root.getBoundingClientRect(),p=root.offsetParent,pr=p&&p.getBoundingClientRect();
+      var factor=p&&p.offsetWidth&&pr&&pr.width?pr.width/p.offsetWidth:1;
+      drag={id:e.pointerId,x:e.clientX,y:e.clientY,left:root.offsetLeft,top:root.offsetTop,factor:Number.isFinite(factor)&&factor>0?factor:1};
       try{bar.setPointerCapture(e.pointerId)}catch(_){}
       e.preventDefault();
     });
-    bar.addEventListener('pointermove',function(e){if(!drag||drag.id!==e.pointerId)return;var x=Math.max(0,Math.min(innerWidth-root.offsetWidth,e.clientX-drag.x)),y=Math.max(0,Math.min(innerHeight-root.offsetHeight,e.clientY-drag.y));root.style.left=x+'px';root.style.top=y+'px';});
+    bar.addEventListener('pointermove',function(e){
+      if(!drag||drag.id!==e.pointerId)return;
+      root.style.left=(drag.left+(e.clientX-drag.x)/drag.factor)+'px';
+      root.style.top=(drag.top+(e.clientY-drag.y)/drag.factor)+'px';
+      // Clamp against the visible viewport without mixing screen and parent coordinates.
+      var r=root.getBoundingClientRect(),tx=r.width>innerWidth?0:Math.max(0,Math.min(r.left,innerWidth-r.width));
+      var ty=r.height>innerHeight?0:Math.max(0,Math.min(r.top,innerHeight-r.height));
+      root.style.left=(root.offsetLeft+(tx-r.left)/drag.factor)+'px';
+      root.style.top=(root.offsetTop+(ty-r.top)/drag.factor)+'px';
+      e.preventDefault();
+    });
     ['pointerup','pointercancel','lostpointercapture'].forEach(function(n){bar.addEventListener(n,function(){drag=null;});});
     root.querySelectorAll('.sh-speeds button').forEach(function(btn){btn.addEventListener('click',function(){changeSpeed(Number(btn.dataset.sp))});});
     root.querySelector('.sh-signal').addEventListener('click',toggleInfo);
